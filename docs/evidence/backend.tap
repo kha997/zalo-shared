@@ -1,0 +1,13 @@
+✔ transactional authenticated inbox and durable dispatch (8060.101937ms)
+✔ configuration rejects live provider and public HTTP (5.944817ms)
+✔ ambiguous delivery is quarantined without automatic retry (598.477959ms)
+✔ audit prohibits update, delete and truncate even for ordinary owner SQL (498.230928ms)
+✔ serves only enumerated public build files, never arbitrary paths (2228.652088ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19067.622003

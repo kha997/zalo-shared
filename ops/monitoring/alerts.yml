@@ -1,0 +1,18 @@
+groups:
+  - name: zalo-shared-pilot
+    rules:
+      - alert: ZaloSharedUnknownDelivery
+        expr: sum(zs_outbox_jobs{job="zalo-shared",status="unknown"}) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: Delivery outcome requires operator reconciliation
+          description: Stop automatic dispatch investigation; never automatically resend unknown jobs.
+      - alert: ZaloSharedMetricsUnavailable
+        expr: up{job="zalo-shared"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: API metrics cannot be scraped
+          description: Check API, database, collector network and token; scrape success is not provider readiness.

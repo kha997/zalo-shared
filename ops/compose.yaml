@@ -1,0 +1,70 @@
+name: zalo-shared
+x-runtime: &runtime
+  build:
+    context: ..
+    dockerfile: ops/Dockerfile
+  init: true
+  restart: unless-stopped
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  environment: &environment
+    NODE_ENV: production
+    HOST: 0.0.0.0
+    PORT: '3100'
+    PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN in external env file}
+    DATABASE_URL: ${DATABASE_URL:?Set runtime DATABASE_URL in external env file}
+    APP_DATABASE_ROLE: zs_app
+    METRICS_TOKEN: ${METRICS_TOKEN:?Set METRICS_TOKEN in external env file}
+    PROVIDER_MODE: disabled
+    MOCK_ENABLED: 'false'
+  depends_on:
+    postgres:
+      condition: service_healthy
+services:
+  postgres:
+    image: postgres:17-bookworm@sha256:858bb5e98eed02eb8cafbcdc007f9a65d1b613972028944a8ec2133ccaf80d27
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set owner POSTGRES_PASSWORD}
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?Set separate runtime password}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-runtime-role.sh:/docker-entrypoint-initdb.d/10-runtime-role.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [private]
+  app:
+    <<: *runtime
+    ports: ['127.0.0.1:3100:3100']
+    networks: [private]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3100/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+  migrate:
+    <<: *runtime
+    restart: 'no'
+    profiles: [maintenance]
+    environment:
+      <<: *environment
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?Set owner URL for maintenance only}
+    command: [node_modules/.bin/tsx, server/migrate.ts]
+    networks: [private]
+  worker:
+    <<: *runtime
+    command: [node_modules/.bin/tsx, server/worker.ts]
+    profiles: [dispatch]
+    networks: [private]
+networks:
+  private:
+    internal: true
+volumes:
+  postgres-data:
