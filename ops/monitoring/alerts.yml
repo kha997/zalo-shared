@@ -16,3 +16,11 @@ groups:
         annotations:
           summary: API metrics cannot be scraped
           description: Check API, database, collector network and token; scrape success is not provider readiness.
+      - alert: ZaloSharedPendingBacklog
+        expr: zs_outbox_oldest_pending_seconds{job="zalo-shared"} > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Outbound queue is not draining
+          description: Check provider state and worker ownership; never blindly resend uncertain work.

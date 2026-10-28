@@ -51,12 +51,13 @@ const userCounts = (process.env.LOAD_USERS ?? "4,10,25,50")
   .map(Number);
 if (
   !userCounts.length ||
-  userCounts.some((n) => ![4, 10, 25, 50].includes(n)) ||
+  userCounts.some((n) => ![4, 10, 25, 50, 100, 200, 500].includes(n)) ||
   new Set(userCounts).size !== userCounts.length
 )
   throw new Error(
-    "LOAD_USERS must be unique comma-separated counts from 4,10,25,50",
+    "LOAD_USERS must be unique comma-separated counts from 4,10,25,50,100,200,500",
   );
+const capacityProbe = process.env.LOAD_PROFILE === "capacity";
 const output: unknown[] = [];
 for (const count of userCounts) {
   const run = randomUUID();
@@ -239,9 +240,11 @@ if (process.env.METRICS_TOKEN) {
 console.log(JSON.stringify({ mockDispatchDrain }));
 await mkdir("docs/evidence", { recursive: true });
 await writeFile(
-  process.env.LOAD_PROFILE === "sustained"
-    ? "docs/evidence/qa-load-sustained.json"
-    : "docs/evidence/qa-load.json",
+  capacityProbe
+    ? "docs/evidence/qa-load-capacity.json"
+    : process.env.LOAD_PROFILE === "sustained"
+      ? "docs/evidence/qa-load-sustained.json"
+      : "docs/evidence/qa-load.json",
   JSON.stringify(
     {
       recordedAt: new Date().toISOString(),
@@ -260,6 +263,9 @@ await writeFile(
       },
       measurements: output,
       mockDispatchDrain,
+      latencyTargetPolicy: capacityProbe
+        ? "Upper-range capacity observation; latency exceedance reported, not a claim this range meets target. Functional integrity/drain failures still fail."
+        : "Enforced: p95<=2000ms, zero errors.",
       limitations:
         "HTTP API concurrency; no browser rendering, physical workstations, real Zalo transport, soak, horizontal scaling or production capacity established. Setup excluded; request latencies include login hashing. All users start together; each runs serial requests.",
     },
@@ -271,7 +277,7 @@ if (
   mockDispatchDrain.status.startsWith("FAIL") ||
   output.some(
     (r: any) =>
-      !r.engineeringTargetMet ||
+      (!capacityProbe && !r.engineeringTargetMet) ||
       r.errors.length ||
       r.uniqueMessages !== r.namedConcurrentUsers * rounds,
   )

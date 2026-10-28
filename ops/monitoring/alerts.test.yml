@@ -1,0 +1,64 @@
+rule_files:
+  - alerts.yml
+evaluation_interval: 15s
+tests:
+  - interval: 15s
+    input_series:
+      - series: 'zs_outbox_jobs{job="zalo-shared",status="unknown"}'
+        values: "1x8"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ZaloSharedUnknownDelivery
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: Delivery outcome requires operator reconciliation
+              description: Stop automatic dispatch investigation; never automatically resend unknown jobs.
+  - interval: 15s
+    input_series:
+      - series: 'up{job="zalo-shared",instance="app:3100"}'
+        values: "0x8"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ZaloSharedMetricsUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: zalo-shared
+              instance: app:3100
+            exp_annotations:
+              summary: API metrics cannot be scraped
+              description: Check API, database, collector network and token; scrape success is not provider readiness.
+  - interval: 1m
+    input_series:
+      - series: 'zs_outbox_oldest_pending_seconds{job="zalo-shared"}'
+        values: "90x8"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: ZaloSharedPendingBacklog
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: zalo-shared
+            exp_annotations:
+              summary: Outbound queue is not draining
+              description: Check provider state and worker ownership; never blindly resend uncertain work.
+  - interval: 15s
+    input_series:
+      - series: 'zs_outbox_jobs{job="zalo-shared",status="unknown"}'
+        values: "0x8"
+      - series: 'up{job="zalo-shared"}'
+        values: "1x8"
+      - series: 'zs_outbox_oldest_pending_seconds{job="zalo-shared"}'
+        values: "0x8"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ZaloSharedUnknownDelivery
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: ZaloSharedMetricsUnavailable
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: ZaloSharedPendingBacklog
+        exp_alerts: []

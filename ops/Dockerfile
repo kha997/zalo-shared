@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
-# Registry digests verified by actual pulls on 2026-10-27; recheck advisories before deployment.
+# Builder digest verified by actual pull. Runtime discovery is pinned by CI and must be committed by digest before release.
+ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs24-debian13:nonroot
 FROM node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -11,12 +12,12 @@ COPY client ./client
 COPY server ./server
 RUN npm run build && npm prune --omit=dev --ignore-scripts
 
-FROM node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df
+FROM ${RUNTIME_IMAGE}
 ENV NODE_ENV=production
 WORKDIR /app
-COPY --from=build --chown=node:node /app/node_modules ./node_modules
-COPY --from=build --chown=node:node /app/dist ./dist
-COPY --from=build --chown=node:node /app/package.json /app/package-lock.json ./
-USER node
+COPY --from=build --chown=65532:65532 /app/node_modules ./node_modules
+COPY --from=build --chown=65532:65532 /app/dist ./dist
+COPY --from=build --chown=65532:65532 /app/package.json /app/package-lock.json ./
+USER 65532:65532
 EXPOSE 3100
-CMD ["node", "dist/server/main.js"]
+CMD ["dist/server/main.js"]

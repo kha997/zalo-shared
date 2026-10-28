@@ -32,7 +32,7 @@ jobs:
       TEST_DATABASE_URL: postgresql://ci:ci-isolated-only@127.0.0.1:5432/zalo_test
       PUBLIC_ORIGIN: http://127.0.0.1:3100
       CHROMIUM_PATH: bundled
-      LOGIN_RATE_LIMIT: "500"
+      LOGIN_RATE_LIMIT: "3000"
       PROVIDER_MODE: mock
       MOCK_ENABLED: "true"
       METRICS_TOKEN: ci-isolated-metrics-only
@@ -70,6 +70,7 @@ jobs:
           npm run test:e2e
           LOAD_USERS=4,10,25,50 LOAD_ROUNDS=3 npm run test:load | tee docs/evidence/ci-load.log
           LOAD_USERS=50 LOAD_ROUNDS=50 LOAD_PROFILE=sustained npm run test:load | tee docs/evidence/ci-load-sustained.log
+          LOAD_USERS=100,200,500 LOAD_ROUNDS=3 LOAD_PROFILE=capacity npm run test:load | tee docs/evidence/ci-load-capacity.log
       - name: Unclean PostgreSQL restart preserves committed data
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
@@ -92,19 +93,25 @@ jobs:
           docker exec "$PG_CONTAINER" bash -c 'apt-get update -qq && apt-get install -y --no-install-recommends age >/tmp/age-install.log'
           docker cp ops "$PG_CONTAINER":/tmp/zalo-ops
           docker exec "$PG_CONTAINER" bash /tmp/zalo-ops/ci-backup-drill.sh | tee docs/evidence/ci-backup-restore.log
+      - name: Private monitoring configuration and alert rule tests
+        run: bash ops/check-monitoring.sh | tee docs/evidence/monitoring-validation.log
       - name: Nonroot container build and private health smoke
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
         run: |
-          docker build -f ops/Dockerfile -t zalo-shared:ci .
+          runtime_image=$(awk -F= '/^ARG RUNTIME_IMAGE=/{print $2}' ops/Dockerfile)
+          docker pull "$runtime_image"
+          runtime_base=$(docker image inspect --format '{{index .RepoDigests 0}}' "$runtime_image")
+          printf '%s\n' "$runtime_base" | tee docs/evidence/runtime-base-digest.txt
+          docker build --build-arg RUNTIME_IMAGE="$runtime_base" -f ops/Dockerfile -t zalo-shared:ci .
           bash ops/scan-image.sh zalo-shared:ci
           docker run -d --name zalo-ci-smoke --network "container:$PG_CONTAINER" --read-only --tmpfs /tmp:rw,nosuid,size=64m --cap-drop ALL --security-opt no-new-privileges:true -e DATABASE_URL -e PROVIDER_MODE=disabled -e MOCK_ENABLED=false -e PUBLIC_ORIGIN=http://127.0.0.1:3100 zalo-shared:ci
           trap 'docker rm -f zalo-ci-smoke' EXIT
           for attempt in {1..30}; do
-            if docker exec zalo-ci-smoke node -e 'fetch("http://127.0.0.1:3100/health/ready").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))'; then break; fi
+            if docker exec zalo-ci-smoke /nodejs/bin/node -e 'fetch("http://127.0.0.1:3100/health/ready").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))'; then break; fi
             sleep 1
           done
-          docker exec zalo-ci-smoke node -e 'if(process.getuid()===0)process.exit(1);fetch("http://127.0.0.1:3100/health/ready").then(r=>{if(!r.ok)process.exit(1);console.log("nonroot/private readiness PASS")})'
+          docker exec zalo-ci-smoke /nodejs/bin/node -e 'if(process.getuid()===0)process.exit(1);fetch("http://127.0.0.1:3100/health/ready").then(r=>{if(!r.ok)process.exit(1);console.log("nonroot/private readiness PASS")})'
       - name: Preserve synthetic validation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
