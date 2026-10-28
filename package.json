@@ -9,16 +9,18 @@
   "scripts": {
     "dev": "tsx watch server/main.ts",
     "dev:client": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && npm run build:server",
     "typecheck": "tsc --noEmit",
-    "start": "tsx server/main.ts",
+    "start": "node dist/server/main.js",
     "worker": "tsx server/worker.ts",
     "migrate": "tsx server/migrate.ts",
     "seed": "tsx server/seed.ts",
     "test": "node --import tsx --test --test-isolation=none --test-concurrency=1 tests/backend/*.test.ts tests/transport/*.test.ts",
     "test:e2e": "playwright test",
     "test:load": "tsx tests/load/run.ts",
-    "test:transport": "node --import tsx --test --test-isolation=none tests/transport/*.test.ts"
+    "test:transport": "node --import tsx --test --test-isolation=none tests/transport/*.test.ts",
+    "build:server": "tsc -p tsconfig.server.json",
+    "start:worker": "node dist/server/worker.js"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

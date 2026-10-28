@@ -15,3 +15,5 @@ Assets: staff passwords/session material, private contact/message/media bytes, p
 | Resource exhaustion | Input limits, login throttling, bounded queries and measured load. Pilot monitoring/retention/storage budgets still require owner targets. |
 
 Do not place real account or customer data in this synthetic pilot until live security and recovery gates in RUNBOOK are accepted. No external telemetry, public hosting or infrastructure spending is configured.
+
+Image audit: CI uses the official Trivy0.76.1 Linux64 release with SHA256c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0 verified against GitHub release asset metadata. The scanner reads a saved image archive, without access to Docker's privileged socket. Full high/critical findings are retained; fixable high/critical findings fail CI. Unfixed findings require explicit assessment before production; a passing scan is not a guarantee of absence of vulnerabilities.

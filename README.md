@@ -4,6 +4,8 @@ Inbox tập trung cho một tài khoản Zalo cá nhân và nhiều nhân viên,
 
 > **Trạng thái: đang phát triển và kiểm chứng trên provider giả lập. Chưa PRODUCTION-READY.** Chưa kết nối Zalo thật, chưa chứng minh điện thoại chính hoạt động đồng thời. Không triển khai production hoặc sử dụng dữ liệu khách hàng.
 
+[Bằng chứng CI đã kiểm chứng](docs/READINESS.md): 38/38 kiểm thử và 6 trường hợp trình duyệt đạt trên revision giả lập đã ghi nhận; tải HTTP đến 50 tài khoản, chưa phải Zalo thật.
+
 ## Đã triển khai
 
 - UI tiếng Việt: đăng nhập, inbox, tìm kiếm/lọc, phân công, soạn tin và đính kèm, trạng thái gửi, quản trị nhân viên và audit.

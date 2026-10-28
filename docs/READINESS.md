@@ -1,33 +1,44 @@
 # Readiness and evidence
 
-**NOT PRODUCTION-READY.** No production deployment, real Zalo account, customer data or public application endpoint has been used. GitHub repository is public; only original application code and summarized research, never runtime secrets or unlicensed candidate snapshots, are committed.
+**NOT PRODUCTION-READY. No live Zalo login, production deployment, real customer data or public application endpoint has been used.** The repository is public; runtime credentials and unlicensed upstream application snapshots are excluded.
 
-| Gate | Current evidence |
+## Validated simulator revision
+
+Source commit [`a74268c95e8eda5536d5f6429cf21cb62fa2b698`](https://github.com/kha997/zalo-shared/commit/a74268c95e8eda5536d5f6429cf21cb62fa2b698), [hosted CI run40687394289](https://github.com/kha997/zalo-shared/actions/runs/40687394289). Results below come from raw assertion output, not merely the job icon. Machine-readable summary: [ci-validated-results.json](evidence/ci-validated-results.json).
+
+| Gate | Demonstrated outcome |
 |---|---|
-| Architecture independent review | Completed; original control-plane tradeoff recorded |
-| Initial code security review | Completed; identified audit privilege bypass, authorization race and lost-response idempotency defects; remediation underway |
-| Dependency install | Executed on Node 24.19.0; lockfile generated |
-| Typecheck | Passed once after fixing QA fixture typing; final rerun required after remediation |
-| Real PostgreSQL API/worker tests | Latest completed local run: 20/20 backend+offline transport assertions passed; new security/batch regressions await CI |
-| Four independent Chromium users | Previous local run: 3 browser/security tests passed, 1 explicit skip; 4 distinct Chromium users; pagination changes require rerun; no physical workstation proof |
-| Load 4/10/25/50 | Harness written, runtime pending; no capacity claim |
-| Encrypted backup and fresh restore | Executed locally: encrypted archive, counts/content fingerprints match, sessions0, dispatchable0, attachment1, runtime CONNECT false |
-| Dependency advisory audit | Vulnerable @fastify/static removed; completed local npm audit reported 0 vulnerabilities; CI rechecks lockfile |
-| Container/CI | Authored; build/run and remote pipeline evidence pending |
-| Live personal Zalo transport | Offline injectable candidate + encrypted vault: 12 tests passed. NOT wired into app/worker; no SDK/authentication executed. Integration and approved test account remain required |
-| Phone coexistence/media/invalidation/reconnect soak | UNPROVEN, requires approved account owner/phone/test peer |
-| Production approval | Not granted and not requested yet |
+| Typecheck and production client build | PASS |
+| PostgreSQL, concurrency, security, worker crash and offline transport/vault tests | **38/38 PASS**, zero failures/skips in this suite |
+| Chromium actual application sessions | **6 browser/security/history cases PASS**, including 4 distinct concurrent staff contexts; 1 explicit placeholder skip for cases covered by isolated PG tests |
+| Short API load4/10/25/50 named users | PASS; p95≈40/57/177/248ms, zero request errors; 267 unique logical sends/retries verified |
+| 50 users×50 rounds | PASS; 10,050 measured HTTP requests, 2,500 unique logical sends/retries, p95≈86ms; 12.03s measured request window |
+| Mock dispatch after loads | PASS; pending/processing0, unknown0, failed0; final queue drain wait9.13s after larger run |
+| SIGKILL after simulator acceptance | PASS; original accepted part retained once, interrupted delivery quarantined unknown without resend |
+| Unclean PostgreSQL restart | PASS; committed table-content fingerprints match before/after |
+| Encrypted fresh restore | PASS; content fingerprints/counts verified before quarantine; sessions0 and dispatchable0 asserted; runtime audit mutation/trigger privileges and restore CONNECT denied |
+| Nonroot/private/read-only image smoke | PASS on validated revision |
+| Dependency advisory audit | PASS, npm audit0 findings in hosted run |
+| Independent scoped code review | Seven P2 findings and follow-up history cases repaired; final scoped review19/19 offline tests, no remaining P0/P1/P2 within its scope, conditional integration gate now evidenced by hosted CI |
+| Runtime image scan | CI gate: checksum-pinned official Trivy release, full HIGH/CRITICAL report; fixable findings fail. See latest CI artifact before claiming a clean image. |
 
-Tracking: [implementation #1](https://github.com/kha997/zalo-shared/issues/1), [live readiness #2](https://github.com/kha997/zalo-shared/issues/2).
+These are **simulator/application results**, not proof of four physical workstations, real Zalo delivery/phone coexistence, maximum user capacity, long-term soak, or real-provider throughput. The longer workload was only12seconds of measured HTTP traffic plus dispatch drain; it is not a production soak. Exact runner CPU/memory metadata is in `qa-load*.json` CI artifacts.
 
-No gate is satisfied by a comment, schema, mock assertion or test file alone. Runtime evidence records command/version/source/workload and observed outcome. Development branch and PR are reviewable artifacts, not production deployment.
+## Current packaging and audit gates
 
-Execution note: new local commands requiring additional network permission stalled before execution and were aborted, producing no test evidence. Connected GitHub source operations remain available. CI is being used for repeatable PG/browser/load/container evidence; no CI pass is claimed before reading its results.
+Runtime packaging is being hardened to compiled JavaScript plus production dependencies, removing build/test tools from the final image. Its CI rerun and image scan are required before accepting that packaging revision. Latest results are available on [Actions](https://github.com/kha997/zalo-shared/actions/workflows/ci.yml); artifacts are retained14days. Unfixed HIGH/CRITICAL findings, if any, remain an explicit production-risk decision rather than a claim of zero vulnerabilities.
 
-## First hosted CI baseline (not accepted as a green suite)
+## Open live/operating gates
 
-Commit `29c9c7422ce5719e9c39986934edd08ef3c24857`, [run40681629226](https://github.com/kha997/zalo-shared/actions/runs/40681629226): raw unit output26 passed/2 failed (microsecond history cursor and per-job worker sleep). The workflow incorrectly reported success because the implicit bash shell did not retain the failed upstream exit status through tee. The next revision explicitly sets bash with pipefail; a successful job icon alone is not evidence. See `docs/evidence/ci-first-results.json`.
+- Offline injectable Zalo transport+AES-GCM vault exists and passed12tests, but is **not wired into app/worker and imports no live SDK**. Provider authentication, real media, durable inbound integration, key rotation and takeover fencing still need implementation/validation.
+- A legitimate, dedicated test account/phone/test peer and Owner approval are required before any real login. Never HANU production; never send cookies/passwords through chat.
+- Real phone coexistence, delivery/media, invalidation, missed history, reconnect/fencing and7–14day low-volume soak remain UNPROVEN. Platform terms/account-ban risk cannot be removed by tests.
+- No maximum staff count or capacity ceiling is established. There is no product seat cap; additional infrastructure/longer workload tests are required before broader promises.
+- Four physical workstations, external audit immutability, chosen retention/storage budgets, larger-data restore RPO/RTO and optional unread-filter UX remain separate operating/product decisions.
+- Production approval is not granted or implied.
 
-The same baseline produced actual four-context browser/security assertions, short 4/10/25/50-user API loads (p95≈67/80/207/415ms, no request errors), encrypted restore and nonroot/private container smoke. These positive results do not override the two failed unit cases and do not establish provider delivery or maximum capacity.
+## Traceability
 
-Remediation adds canonical bounded5MiB decoding, precision-preserving SQL cursors and message timestamps, paged/gap-aware chronological history, stale-session401 fencing, faster connected queue draining, explicit runtime/restore assertions and enforceable API latency targets. Additional tests cover an in-flight revoke barrier and real worker SIGKILL after simulator acceptance. Hosted rerun also includes a50-user×50-round workload, queue-drain verification and unclean PostgreSQL restart fingerprints. Final results pending; live SDK remains unwired and disabled.
+The first baseline [`29c9c7`](https://github.com/kha997/zalo-shared/commit/29c9c7422ce5719e9c39986934edd08ef3c24857) had26passed/2failed units despite a green job because tee hid the upstream failure. This was corrected with an explicit bash/pipefail default. The validated run above reports38passed/0failed in raw logs. Historical reports remain as dated snapshots; read the latest evidence before interpreting earlier pending/failure notes.
+
+Tracking: [implementation#1](https://github.com/kha997/zalo-shared/issues/1), [live readiness#2](https://github.com/kha997/zalo-shared/issues/2), [draft PR#3](https://github.com/kha997/zalo-shared/pull/3).
