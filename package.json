@@ -15,7 +15,7 @@
     "worker": "tsx server/worker.ts",
     "migrate": "tsx server/migrate.ts",
     "seed": "tsx server/seed.ts",
-    "test": "node --import tsx --test --test-isolation=none tests/backend/*.test.ts tests/transport/*.test.ts",
+    "test": "node --import tsx --test --test-isolation=none --test-concurrency=1 tests/backend/*.test.ts tests/transport/*.test.ts",
     "test:e2e": "playwright test",
     "test:load": "tsx tests/load/run.ts",
     "test:transport": "node --import tsx --test --test-isolation=none tests/transport/*.test.ts"

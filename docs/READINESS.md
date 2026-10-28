@@ -23,3 +23,11 @@ Tracking: [implementation #1](https://github.com/kha997/zalo-shared/issues/1), [
 No gate is satisfied by a comment, schema, mock assertion or test file alone. Runtime evidence records command/version/source/workload and observed outcome. Development branch and PR are reviewable artifacts, not production deployment.
 
 Execution note: new local commands requiring additional network permission stalled before execution and were aborted, producing no test evidence. Connected GitHub source operations remain available. CI is being used for repeatable PG/browser/load/container evidence; no CI pass is claimed before reading its results.
+
+## First hosted CI baseline (not accepted as a green suite)
+
+Commit `29c9c7422ce5719e9c39986934edd08ef3c24857`, [run40681629226](https://github.com/kha997/zalo-shared/actions/runs/40681629226): raw unit output26 passed/2 failed (microsecond history cursor and per-job worker sleep). The workflow incorrectly reported success because the implicit bash shell did not retain the failed upstream exit status through tee. The next revision explicitly sets bash with pipefail; a successful job icon alone is not evidence. See `docs/evidence/ci-first-results.json`.
+
+The same baseline produced actual four-context browser/security assertions, short 4/10/25/50-user API loads (p95≈67/80/207/415ms, no request errors), encrypted restore and nonroot/private container smoke. These positive results do not override the two failed unit cases and do not establish provider delivery or maximum capacity.
+
+Remediation adds canonical bounded5MiB decoding, precision-preserving SQL cursors and message timestamps, paged/gap-aware chronological history, stale-session401 fencing, faster connected queue draining, explicit runtime/restore assertions and enforceable API latency targets. Additional tests cover an in-flight revoke barrier and real worker SIGKILL after simulator acceptance. Hosted rerun also includes a50-user×50-round workload, queue-drain verification and unclean PostgreSQL restart fingerprints. Final results pending; live SDK remains unwired and disabled.

@@ -1,0 +1,27 @@
+✔ canonical attachment encoding accepts the advertised 5 MiB maximum without a regex stack overflow (187.960916ms)
+✔ attachment decoding rejects malformed, noncanonical, empty and oversized payloads (85.587779ms)
+✔ authoritative microseconds repair concurrent send/receive insertion order (3.477999ms)
+✔ catch-up bridges over 50 arrivals after exhausted older history (1.49106ms)
+✔ large catch-up continues from bounded cursor without declaring continuity (11.313459ms)
+✔ an initially empty history adopts the first nonempty page cursor (0.761538ms)
+✔ a superseded session 401 cannot expire the current session (41.144826ms)
+✔ explicit injection creates one listener with safe options and stops reconnect timer (21.319547ms)
+✔ reconnect is bounded and stale message callback is ignored (103.737707ms)
+✔ duplicate/kick and explicit invalidation expire without retry or sending (43.315424ms)
+✔ a listener cannot be owned by two wrappers (1.089428ms)
+✔ send timeout is unknown and never resent; successful result retains provider ID (6.733357ms)
+✔ normalization keeps text and self origin, rejects malformed and treats media as unsupported metadata (0.644452ms)
+✔ stop during SDK creation fences late completion; errors never crash and sends are uncertain (1.529279ms)
+✔ SDK connected event gates delivery and disconnected+closed only schedules one retry (20.527192ms)
+✔ default waits for connected and stop fences a queued send before execution (2.006612ms)
+✔ late SDK errors after close or stop are consumed (2.189127ms)
+✔ vault roundtrip encrypted, 0600, overwrite, wrong key and tamper rejected (19.973836ms)
+✔ vault fresh nonce and concurrent replacement leave complete private envelope (9.023954ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 758.681009

@@ -2,6 +2,20 @@
 set -euo pipefail
 umask 077
 export PGUSER=ci PGDATABASE=zalo_test PGHOST=/var/run/postgresql
+psql -X -v ON_ERROR_STOP=1 <<'SQL'
+CREATE ROLE zs_ci_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
+GRANT USAGE ON SCHEMA public TO zs_ci_runtime;
+GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO zs_ci_runtime;
+GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO zs_ci_runtime;
+REVOKE UPDATE,DELETE,TRUNCATE ON audit FROM zs_ci_runtime;
+SQL
+psql -X -v ON_ERROR_STOP=1 --username=zs_ci_runtime <<'SQL'
+DO $$ BEGIN
+ BEGIN DELETE FROM audit; RAISE EXCEPTION 'runtime deleted audit'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ BEGIN TRUNCATE audit; RAISE EXCEPTION 'runtime truncated audit'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ BEGIN ALTER TABLE audit DISABLE TRIGGER audit_immutable; RAISE EXCEPTION 'runtime disabled trigger'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SQL
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 age-keygen -o "$work/identity" 2>/dev/null
@@ -13,7 +27,19 @@ bash /tmp/zalo-ops/restore.sh "$work/backup.age" zs_restore_ci
 restore_finished=$(date +%s)
 printf 'Restore elapsed seconds: %s\n' "$((restore_finished-restore_started))"
 psql -X -v ON_ERROR_STOP=1 --dbname=zs_restore_ci -At <<'SQL'
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM sessions) THEN RAISE EXCEPTION 'restored sessions remain'; END IF;
+ IF EXISTS(SELECT 1 FROM outbox WHERE status IN ('pending','processing')) THEN RAISE EXCEPTION 'restored jobs can dispatch'; END IF;
+ IF EXISTS(SELECT 1 FROM provider_state WHERE status<>'disconnected') THEN RAISE EXCEPTION 'provider not quarantined'; END IF;
+ IF has_database_privilege('zs_ci_runtime',current_database(),'CONNECT') THEN RAISE EXCEPTION 'runtime can connect to restore'; END IF;
+END $$;
 SELECT 'sessions',count(*) FROM sessions;
 SELECT 'dispatchable',count(*) FROM outbox WHERE status IN ('pending','processing');
 SELECT 'public_connect',coalesce(bool_or(acl.privilege_type='CONNECT' AND acl.grantee=0),false) FROM pg_database d CROSS JOIN LATERAL aclexplode(coalesce(d.datacl,acldefault('d',d.datdba))) acl WHERE d.datname=current_database();
 SQL
+if psql -X --username=zs_ci_runtime --dbname=zs_restore_ci -c 'SELECT 1' > "$work/denied.log" 2>&1; then
+ echo 'Runtime unexpectedly connected to restore' >&2
+ exit 1
+fi
+grep -q 'permission denied for database' "$work/denied.log"
+echo 'Restore quarantine and runtime audit privilege assertions PASS'

@@ -55,8 +55,10 @@ export class ApiError extends Error {
   }
 }
 let csrf = "";
+let authGeneration = 0;
 export function setCsrf(token: string) {
   csrf = token;
+  authGeneration++;
 }
 export async function api<T>(
   path: string,
@@ -67,6 +69,7 @@ export async function api<T>(
     signal?: AbortSignal;
   } = {},
 ): Promise<T> {
+  const generation = authGeneration;
   const method = options.method || "GET";
   const timeout = new AbortController();
   const timer = setTimeout(() => timeout.abort(), 30000);
@@ -90,7 +93,7 @@ export async function api<T>(
   } finally {
     clearTimeout(timer);
   }
-  if (response.status === 401 && path !== "/auth/login")
+  if (response.status === 401 && path !== "/auth/login" && generation === authGeneration)
     window.dispatchEvent(new Event("session-expired"));
   const value = await response.json();
   if (!response.ok)

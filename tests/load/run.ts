@@ -197,9 +197,51 @@ for (const count of userCounts) {
   output.push(result);
   console.log(JSON.stringify(result));
 }
+const mockDispatchDrain: {
+  status: string;
+  waitMs: number;
+  pending?: number;
+  unknown?: number;
+  failed?: number;
+} = { status: "UNPROVEN", waitMs: 0 };
+if (process.env.METRICS_TOKEN) {
+  const drainStart = performance.now();
+  while (performance.now() - drainStart < 60000) {
+    const response = await fetch(base + "/metrics", {
+      headers: { Authorization: `Bearer ${process.env.METRICS_TOKEN}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) throw new Error("Protected queue metrics unavailable");
+    const text = await response.text();
+    const counts: Record<string, number> = {};
+    for (const match of text.matchAll(
+      /^zs_outbox_jobs\{status="([a-z]+)"\} ([0-9]+)/gm,
+    ))
+      counts[match[1]] = Number(match[2]);
+    mockDispatchDrain.pending =
+      (counts.pending ?? 0) + (counts.processing ?? 0);
+    mockDispatchDrain.unknown = counts.unknown ?? 0;
+    mockDispatchDrain.failed = counts.failed ?? 0;
+    if (mockDispatchDrain.unknown || mockDispatchDrain.failed) {
+      mockDispatchDrain.status = "FAIL";
+      break;
+    }
+    if (!mockDispatchDrain.pending) {
+      mockDispatchDrain.status = "PASS";
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (mockDispatchDrain.status === "UNPROVEN")
+    mockDispatchDrain.status = "FAIL_TIMEOUT";
+  mockDispatchDrain.waitMs = performance.now() - drainStart;
+}
+console.log(JSON.stringify({ mockDispatchDrain }));
 await mkdir("docs/evidence", { recursive: true });
 await writeFile(
-  "docs/evidence/qa-load.json",
+  process.env.LOAD_PROFILE === "sustained"
+    ? "docs/evidence/qa-load-sustained.json"
+    : "docs/evidence/qa-load.json",
   JSON.stringify(
     {
       recordedAt: new Date().toISOString(),
@@ -217,6 +259,7 @@ await writeFile(
         appMode: "local simulator; configuration supplied by operator",
       },
       measurements: output,
+      mockDispatchDrain,
       limitations:
         "HTTP API concurrency; no browser rendering, physical workstations, real Zalo transport, soak, horizontal scaling or production capacity established. Setup excluded; request latencies include login hashing. All users start together; each runs serial requests.",
     },
@@ -225,9 +268,12 @@ await writeFile(
   ),
 );
 if (
+  mockDispatchDrain.status.startsWith("FAIL") ||
   output.some(
     (r: any) =>
-      r.errors.length || r.uniqueMessages !== r.namedConcurrentUsers * rounds,
+      !r.engineeringTargetMet ||
+      r.errors.length ||
+      r.uniqueMessages !== r.namedConcurrentUsers * rounds,
   )
 )
   process.exitCode = 1;

@@ -43,6 +43,15 @@ CREATE TRIGGER audit_immutable BEFORE UPDATE OR DELETE OR TRUNCATE ON audit FOR 
   await pool.query(
     "CREATE INDEX IF NOT EXISTS conversations_updated ON conversations(account_id,updated_at DESC,id)",
   );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS outbox_dispatch ON outbox(status,created_at,id)",
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS attachment_messages ON attachments(message_id,created_at,id)",
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS session_users ON sessions(user_id)",
+  );
   if (options.appRole) {
     if (!/^[a-z_][a-z0-9_]{0,62}$/.test(options.appRole))
       throw new Error("Invalid APP_DATABASE_ROLE");

@@ -142,8 +142,9 @@ async function main() {
   const provider = createMockProvider(pool);
   try {
     while (!stopping) {
-      await runWorkerOnce(pool, provider);
-      await new Promise((r) => setTimeout(r, 500));
+      const result = await runWorkerOnce(pool, provider);
+      // Back off only when idle/disconnected or another owner holds the lock.
+      if (!result.processed) await new Promise((r) => setTimeout(r, 500));
     }
   } finally {
     await pool.end();

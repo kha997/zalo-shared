@@ -8,6 +8,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ACCOUNT, audit, checkPassword, hashPassword } from "./db.js";
 import type { Config } from "./config.js";
 import { registerStaticAssets } from "./static.js";
+import { decodeAttachmentBase64 } from "./base64.js";
 import { resolve } from "node:path";
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
 const userFields = "id,name,email,role,active";
@@ -164,14 +165,21 @@ export async function buildApp({
     };
   }
   async function message(db: any, id: string) {
-    const r = (await db.query("SELECT * FROM messages WHERE id=$1", [id]))
-      .rows[0];
+    const r = (
+      await db.query(
+        `SELECT m.*,to_char(m.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_precise FROM messages m WHERE id=$1`,
+        [id],
+      )
+    ).rows[0];
     const a = (
       await db.query(
         "SELECT id,name,mime,octet_length(data) AS size FROM attachments WHERE message_id=$1 ORDER BY created_at,id",
         [id],
       )
     ).rows;
+    return messageView(r, a);
+  }
+  function messageView(r: any, a: any[]) {
     return {
       id: r.id,
       conversationId: r.conversation_id,
@@ -180,7 +188,8 @@ export async function buildApp({
       actorId: r.actor_id,
       status: r.status,
       providerId: r.provider_id,
-      createdAt: r.created_at.toISOString(),
+      createdAt:
+        r.created_at_precise ?? r.created_at.toISOString().replace("Z", "000Z"),
       attachments: a.map((x: any) => ({
         ...x,
         url: `/api/attachments/${x.id}`,
@@ -441,6 +450,13 @@ export async function buildApp({
       return { ok: true };
     }),
   );
+  app.get("/api/conversations/:id", async (req: any) =>
+    viewConversation(
+      pool,
+      await conversation(pool, req.params.id),
+      req.staff.id,
+    ),
+  );
   app.get("/api/conversations/:id/messages", async (req: any) => {
     await conversation(pool, req.params.id);
     const q = z
@@ -449,26 +465,25 @@ export async function buildApp({
         before: uuid.optional(),
       })
       .parse(req.query);
-    let cursor: any = null;
     if (q.before) {
-      cursor = (
-        await pool.query(
-          "SELECT created_at,id FROM messages WHERE id=$1 AND conversation_id=$2",
-          [q.before, req.params.id],
-        )
-      ).rows[0];
-      if (!cursor) fail(400, "Invalid cursor");
+      const cursor = await pool.query(
+        "SELECT id FROM messages WHERE id=$1 AND conversation_id=$2",
+        [q.before, req.params.id],
+      );
+      if (!cursor.rowCount) fail(400, "Invalid cursor");
     }
     const r = await pool.query(
-      `SELECT id FROM messages WHERE conversation_id=$1 ${cursor ? "AND (created_at,id)<($3::timestamptz,$4::uuid)" : ""} ORDER BY created_at DESC,id DESC LIMIT $2`,
-      cursor
-        ? [req.params.id, q.limit, cursor.created_at, cursor.id]
-        : [req.params.id, q.limit],
+      `SELECT m.*,to_char(m.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_precise,
+       coalesce((SELECT jsonb_agg(jsonb_build_object('id',a.id,'name',a.name,'mime',a.mime,'size',octet_length(a.data)) ORDER BY a.created_at,a.id) FROM attachments a WHERE a.message_id=m.id),'[]'::jsonb) AS attachment_rows
+       FROM messages m WHERE conversation_id=$1 ${q.before ? "AND (created_at,id)<(SELECT created_at,id FROM messages WHERE id=$3 AND conversation_id=$1)" : ""} ORDER BY created_at DESC,id DESC LIMIT $2`,
+      q.before
+        ? [req.params.id, q.limit + 1, q.before]
+        : [req.params.id, q.limit + 1],
     );
+    const page = r.rows.slice(0, q.limit);
     return {
-      items: await Promise.all(
-        r.rows.reverse().map((m) => message(pool, m.id)),
-      ),
+      nextCursor: r.rows.length > q.limit ? page[page.length - 1].id : null,
+      items: page.reverse().map((m) => messageView(m, m.attachment_rows)),
     };
   });
   app.post("/api/conversations/:id/messages", async (req: any) => {
@@ -546,15 +561,9 @@ export async function buildApp({
       })
       .strict()
       .parse(req.body);
-    if (
-      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-        b.dataBase64,
-      )
-    )
-      fail(400, "Invalid base64");
-    const bytes = Buffer.from(b.dataBase64, "base64");
-    if (!bytes.length || bytes.length > 5 * 1024 * 1024)
-      fail(400, "Attachment size rejected");
+    const bytes =
+      decodeAttachmentBase64(b.dataBase64) ??
+      fail(400, "Invalid base64 or attachment size");
     const valid =
       b.mime === "image/png"
         ? bytes

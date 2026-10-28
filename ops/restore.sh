@@ -32,6 +32,7 @@ UPDATE outbox SET status='unknown' WHERE status IN ('pending','processing');
 UPDATE messages SET status='unknown' WHERE direction='outbound' AND status IN ('pending','processing');
 UPDATE delivery_parts SET status='unknown' WHERE status IN ('pending','processing');
 UPDATE provider_state SET status='disconnected';
+INSERT INTO audit(action,target_id,metadata) VALUES('system.restore_quarantine',current_database(),'{"dispatchEnabled":false}');
 COMMIT;
 SQL
 echo 'Restored and quarantined. Keep dispatch disabled; verify media hashes, roles and audit before reconnect.'

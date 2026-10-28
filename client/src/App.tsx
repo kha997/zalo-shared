@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   api,
   ApiError,
@@ -14,6 +14,7 @@ import {
   type Provider,
   type Audit,
 } from "./api";
+import { mergeHistory, catchUpHistory, updateHistoryBoundary, type HistoryPage } from "./history";
 type ConversationPage = { items: Conversation[]; nextCursor: string | null };
 type Send = {
   conversationId: string;
@@ -56,12 +57,27 @@ export default function App() {
   const [selectedSnapshot, setSelectedSnapshot] = useState<Conversation | null>(null);
   const listController = useRef<AbortController | null>(null);
   const loadMoreRef = useRef<(() => Promise<void>) | null>(null);
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyGap, setHistoryGap] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const historyController = useRef<AbortController | null>(null);
+  const historyMoreRef = useRef<(() => Promise<void>) | null>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
   const timelineEnd = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    timelineEnd.current?.scrollIntoView({ block: "nearest" });
-  }, [messages.length, selected]);
-  const current = conversations.find((c) => c.id === selected) ||
-    (selectedSnapshot?.id === selected ? selectedSnapshot : undefined);
+  const scrollAnchor = useRef<{ top: number; height: number } | null>(null);
+  const followNewest = useRef(true);
+  useLayoutEffect(() => {
+    const node = timelineRef.current;
+    if (node && scrollAnchor.current) {
+      node.scrollTop = scrollAnchor.current.top + node.scrollHeight - scrollAnchor.current.height;
+      scrollAnchor.current = null;
+    } else if (followNewest.current) {
+      timelineEnd.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [messages, selected]);
+  const current = (selectedSnapshot?.id === selected ? selectedSnapshot : undefined) ||
+    conversations.find((c) => c.id === selected);
   const sendRef = useRef(send);
   sendRef.current = send;
   const selectedRef = useRef(selected);
@@ -114,6 +130,7 @@ export default function App() {
     setConversations([]);
     setSelectedSnapshot(null);
     listController.current?.abort();
+    historyController.current?.abort();
     setSelected(null);
     setDraft("");
     setFiles([]);
@@ -202,6 +219,77 @@ export default function App() {
     };
   }, [user?.id, search, filter, assigned, listRefresh]);
   useEffect(() => {
+    setMessages([]);
+    setHistoryCursor(null);
+    setHistoryError("");
+    setHistoryLoading(false);
+    setHistoryGap(false);
+    followNewest.current = true;
+    scrollAnchor.current = null;
+    if (!user || !selected) return;
+    const actor = user.id;
+    const controller = new AbortController();
+    historyController.current = controller;
+    let running = false;
+    let cursor: string | null = null;
+    let initialized = false;
+    let gapCursor: string | null = null;
+    let catchingUp = false;
+    let pendingKnown = new Set<string>();
+    const known = new Set<string>();
+    const valid = () => !controller.signal.aborted && selectedRef.current === selected && sessionRef.current === actor;
+    const fetchPage = async (before: string | null): Promise<HistoryPage> => {
+      const query = new URLSearchParams({ limit: "50", ...(before ? { before } : {}) });
+      const result = await api<HistoryPage>(`/conversations/${selected}/messages?${query}`, { signal: controller.signal });
+      if (!valid()) throw new DOMException("History selection changed", "AbortError");
+      return result;
+    };
+    const fetchHistory = async (older = false) => {
+      if (running || (older && (!cursor || catchingUp))) return;
+      running = true;
+      setHistoryLoading(true);
+      try {
+        const result = older
+          ? { ...await fetchPage(cursor), complete: true }
+          : await catchUpHistory(fetchPage, known, catchingUp ? gapCursor : null);
+        if (!valid()) return;
+        const boundary = updateHistoryBoundary({ initialized, cursor }, result, older);
+        cursor = boundary.cursor;
+        initialized = boundary.initialized;
+        setHistoryCursor(cursor);
+        if (older) {
+          for (const item of result.items) known.add(item.id);
+        } else {
+          for (const item of result.items) pendingKnown.add(item.id);
+          catchingUp = !result.complete;
+          gapCursor = catchingUp ? result.nextCursor : null;
+          setHistoryGap(catchingUp);
+          if (result.complete) {
+            for (const id of pendingKnown) known.add(id);
+            pendingKnown = new Set();
+          }
+        }
+        const node = timelineRef.current;
+        if (older && node) scrollAnchor.current = { top: node.scrollTop, height: node.scrollHeight };
+        setMessages((previous) => mergeHistory(previous, result.items));
+        setHistoryError("");
+      } catch (e) {
+        if (valid()) setHistoryError((e as Error).message);
+      } finally {
+        running = false;
+        if (valid()) setHistoryLoading(false);
+      }
+    };
+    historyMoreRef.current = () => fetchHistory(true);
+    void fetchHistory();
+    const timer = setInterval(() => void fetchHistory(), 2000);
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+      historyMoreRef.current = null;
+    };
+  }, [user?.id, selected, search, filter, assigned]);
+  useEffect(() => {
     if (!user) return;
     let alive = true;
     let running = false;
@@ -228,16 +316,10 @@ export default function App() {
         setProvider(ps);
         setNetwork(false);
         if (selected) {
-          const result = await api<{ items: Message[] }>(
-            `/conversations/${selected}/messages`,
-            { signal: controller.signal },
-          );
-          if (alive) {
-            setMessages(result.items);
-            const pending = sendRef.current;
-            if (pending && pending.conversationId === selected) {
-              /* POST retry is the only reliable lookup by idempotency key. */
-            }
+          const detail = await api<Conversation>(`/conversations/${selected}`, { signal: controller.signal });
+          if (alive && selectedRef.current === selected) {
+            setSelectedSnapshot(detail);
+            setConversations((items) => items.map((item) => item.id === detail.id ? detail : item));
           }
         }
         if (page === "audit" && user.role !== "agent") {
@@ -339,7 +421,7 @@ export default function App() {
       if (sessionRef.current !== actor) return;
       if (selectedRef.current === logical.conversationId)
         setMessages((ms) =>
-          ms.some((m) => m.id === result.id) ? ms : [...ms, result],
+          mergeHistory(ms, [result]),
         );
       delete draftsRef.current[logical.conversationId];
       setSend(null);
@@ -768,6 +850,11 @@ export default function App() {
                 </div>
                 <div
                   className="timeline"
+                  ref={timelineRef}
+                  onScroll={(event) => {
+                    const node = event.currentTarget;
+                    followNewest.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
+                  }}
                   aria-label="Tin nhắn"
                   aria-live="polite"
                 >
@@ -775,6 +862,10 @@ export default function App() {
                     <span>Cuộc trò chuyện với {current.contactName}</span>
                     <small>Lịch sử được chia sẻ trong đội ngũ</small>
                   </div>
+                  {historyCursor && <button type="button" className="load-more" disabled={historyLoading || historyGap} onClick={() => void historyMoreRef.current?.()}>Tải tin nhắn cũ</button>}
+                  {historyGap && <div className="notice warning" role="status">Đang tải bù tin nhắn bị gián đoạn; lịch sử chưa đầy đủ.</div>}
+                  {historyLoading && <div className="list-progress" role="status">Đang tải tin nhắn…</div>}
+                  {historyError && <div className="notice error" role="alert">Không tải được tin nhắn: {historyError}</div>}
                   {messages.map((m) => (
                     <article className={"message " + m.direction} key={m.id}>
                       <span className="avatar tiny">
@@ -820,7 +911,7 @@ export default function App() {
                       </div>
                     </article>
                   ))}
-                  {!messages.length && (
+                  {!messages.length && !historyLoading && !historyError && (
                     <div className="empty-small">
                       Chưa có tin nhắn trong hội thoại.
                     </div>

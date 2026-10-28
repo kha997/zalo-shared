@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { buildApp } from "../../server/app.js";
 import { seed } from "../../server/db.js";
 import { configFromEnv } from "../../server/config.js";
@@ -71,6 +71,48 @@ test("protected metrics include request duration and pending age without persona
     assert.match(metrics.body, /zs_http_duration_seconds_sum [0-9]/);
     assert.match(metrics.body, /zs_outbox_oldest_pending_seconds [0-9]/);
     assert.ok(!metrics.body.includes(token));
+  } finally {
+    await app.close();
+    await db.close();
+  }
+});
+
+test("advertised maximum attachment passes the full authenticated upload and private download routes", async () => {
+  const db = await isolatedDatabase();
+  const password = randomUUID();
+  await seed(db.pool, {
+    adminEmail: "large@example.test",
+    adminPassword: password,
+  });
+  const app = await buildApp({ pool: db.pool, config: configFromEnv({}) });
+  try {
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { email: "large@example.test", password },
+    });
+    const headers = {
+      cookie: String(login.headers["set-cookie"]).split(";")[0],
+      origin: "http://127.0.0.1:3100",
+      "x-csrf-token": login.json().csrfToken,
+    };
+    const bytes = Buffer.alloc(5 * 1024 * 1024, 0x61);
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/attachments",
+      headers,
+      payload: {
+        name: "synthetic-max.txt",
+        mime: "text/plain",
+        dataBase64: bytes.toString("base64"),
+      },
+    });
+    assert.equal(upload.statusCode, 200);
+    const download = await app.inject({ url: upload.json().url, headers });
+    assert.equal(download.statusCode, 200);
+    assert.equal(download.rawPayload.length, bytes.length);
+    const hash = (v: Buffer) => createHash("sha256").update(v).digest("hex");
+    assert.equal(hash(download.rawPayload), hash(bytes));
   } finally {
     await app.close();
     await db.close();
