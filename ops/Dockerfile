@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
-# Builder digest verified by actual pull. Runtime discovery is pinned by CI and must be committed by digest before release.
-ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs24-debian13:nonroot
+# Builder and runtime are pinned to immutable, CI-verified digests.
+ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs24-debian13@sha256:cb606325b7ec4af55462cb0b424a53b452a5b4a894ffe841fcf1048d216fb9f8
 FROM node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS build
 WORKDIR /app
 COPY package.json package-lock.json ./

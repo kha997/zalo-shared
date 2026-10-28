@@ -24,9 +24,21 @@ Source commit [`a74268c95e8eda5536d5f6429cf21cb62fa2b698`](https://github.com/kh
 
 These are **simulator/application results**, not proof of four physical workstations, real Zalo delivery/phone coexistence, maximum user capacity, long-term soak, or real-provider throughput. The longer workload was only12seconds of measured HTTP traffic plus dispatch drain; it is not a production soak. Exact runner CPU/memory metadata is in `qa-load*.json` CI artifacts.
 
-## Current packaging and audit gates
+## Latest runtime, monitoring and capacity evidence
 
-Runtime packaging is being hardened to compiled JavaScript plus production dependencies, removing build/test tools from the final image. Its CI rerun and image scan are required before accepting that packaging revision. Latest results are available on [Actions](https://github.com/kha997/zalo-shared/actions/workflows/ci.yml); artifacts are retained14days. Unfixed HIGH/CRITICAL findings, if any, remain an explicit production-risk decision rather than a claim of zero vulnerabilities.
+[Run40724950532](https://github.com/kha997/zalo-shared/actions/runs/40724950532), source9a77cbca, passed the complete CI job. [Machine-readable results](evidence/ci-distroless-results.json) preserve measurements. Compiled JavaScript runs as nonroot in a read-only distroless image; Trivy0.76.1 reported **0 HIGH/CRITICAL findings** at scan time. This is a dated advisory snapshot, not a guarantee of no vulnerabilities. The resolved runtime digest is now pinned in `ops/Dockerfile`; that pin requires its own subsequent CI run.
+
+The same run repeated38/38 units and6 browser cases (1 placeholder skip), crash/restart/restore checks, private image smoke and monitoring configuration/rule tests. Monitoring notification delivery has not been deployed or tested.
+
+| Concurrent API users | Rounds | Requests | p95 | Result against 2s target |
+|---|---:|---:|---:|---|
+| 4 / 10 / 25 / 50 | 3 each | 52 / 130 / 325 / 650 | 45 / 57 / 146 / 271ms | PASS |
+| 50 | 50 | 10,050 | 72ms | PASS |
+| 100 | 3 | 1,300 | 644ms | PASS in this short workload |
+| 200 | 3 | 2,600 | 1,001ms | PASS in this short workload |
+| 500 | 3 | 6,500 | 2,191ms | **FAIL latency target**; functional/integrity checks passed |
+
+All measured loads had zero request errors and verified idempotent retries. All three final mock queue drains passed with pending/processing0, unknown0 and failed0. These are API clients on a hosted runner, not500 browser staff seats or real-provider throughput. The500-user result establishes a failed latency observation, not a universal capacity ceiling. Artifacts expire after14days; the committed summary retains essential evidence.
 
 ## Open live/operating gates
 
@@ -43,6 +55,6 @@ The first baseline [`29c9c7`](https://github.com/kha997/zalo-shared/commit/29c9c
 
 Tracking: [implementation#1](https://github.com/kha997/zalo-shared/issues/1), [live readiness#2](https://github.com/kha997/zalo-shared/issues/2), [draft PR#3](https://github.com/kha997/zalo-shared/pull/3).
 
-Image scan evidence: [run40721532703](https://github.com/kha997/zalo-shared/actions/runs/40721532703), commit393e277, passed the functional/recovery/browser stages but failed the new image gate:83HIGH/CRITICAL package findings,25fixable. Baseline retained in `evidence/image-scan-baseline.json`. This is not a clean image. Remediation replaces the general-purpose Node runtime with official distroless Node24/Debian13 (no npm/shell/unused system tools); CI records and builds an immutable resolved base digest, which must be committed before release. Scan/rerun pending.
+Image scan evidence: [run40721532703](https://github.com/kha997/zalo-shared/actions/runs/40721532703), commit393e277, passed the functional/recovery/browser stages but failed the new image gate:83HIGH/CRITICAL package findings,25fixable. Baseline retained in `evidence/image-scan-baseline.json`. This is not a clean image. Remediation replaces the general-purpose Node runtime with official distroless Node24/Debian13 (no npm/shell/unused system tools); CI records and builds an immutable resolved base digest, which must be committed before release. Remediated in run40724950532: zero HIGH/CRITICAL findings at scan time; see latest evidence above.
 
 Additional capacity observation at100/200/500users is separate from the enforced50-user latency target. Integrity, idempotency and queue-drain errors always fail; upper-range latency exceedance is reported as a measured boundary, not concealed as a passed SLA. Monitoring CI checks rule semantics only; notification receiver/deployment remains an Owner operating gate.
