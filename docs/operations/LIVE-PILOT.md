@@ -6,13 +6,13 @@ Prepared 2026-10-28. **Runbook preparation only: live integration is not complet
 
 The current application is an original Fastify/React/PostgreSQL shared inbox with individual admin, supervisor and agent identities, durable application messages/outbox and a simulator. Staff use the application; they do not each start a Zalo session. One backend transport would own the personal account connection.
 
-An offline injectable Zalo transport and AES-GCM vault exist, but **are not wired into the application/worker**. No live SDK is imported; there is no enabled SDK login or QR path. Configuration currently accepts only `disabled` or `mock` provider modes and rejects live mode. Recorded simulator, browser-context and HTTP load results do not establish real delivery, four physical workstations or owner-phone coexistence.
+An offline injectable Zalo transport, AES-GCM vault and gated session facade exist, but **are not wired into the application/worker**. Exact SDK2.2.0 is development-only: guarded tests import the actual ESM/CJS package and models without login; session tests inject fake login. The facade denies access before vault/import unless explicitly authorized. There is no enabled application SDK login or QR path. Configuration currently accepts only `disabled` or `mock` provider modes and rejects live mode. Recorded simulator, browser-context and HTTP load results do not establish real delivery, four physical workstations or owner-phone coexistence.
 
 ## Engineering work before owner participation
 
 These tasks can proceed without account credentials or a QR login:
 
-1. Select and review an exact SDK revision/version, license and notices; pin dependency/lockfile, inspect install scripts and advisories, and record reproducible build evidence. Prior research pins do not automatically select the new implementation's dependency.
+1. Select and review an exact SDK revision/version, license and notices; pin dependency/lockfile, inspect install scripts and advisories, and record reproducible build evidence. The development baseline now pins npm2.2.0 with artifact/license evidence; registry gitHead differs from the historical research source. Hosted advisory/signature verification and future production promotion remain separate gates.
 2. Implement an explicit, disabled-by-default live configuration path with private deployment boundaries, fail-closed startup and no automatic authentication. Keep ordinary application staff excluded from account/session operations; add secret redaction, vault recovery and key-rotation procedures.
 3. Bridge the worker to the injectable transport with actual text/media inputs, attachment-level progress and honest confirmed/unknown outcomes. Preserve request-key idempotency after reassignment. Never automatically resend an ambiguous accepted send.
 4. Wire inbound events to a durable transaction: scoped provider-ID deduplication, message/conversation update and audit before local acceptance. Reconcile self-echoes to original sends; attribute native-phone sends to native/shared identity rather than inventing a staff actor. Do not assume history/backfill is available.

@@ -48,10 +48,15 @@ jobs:
         with:
           node-version: "24.19.0"
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - run: mkdir -p docs/evidence && npm audit --audit-level=high --json | tee docs/evidence/ci-audit.json
+      - name: Verify registry signatures and provenance
+        timeout-minutes: 2
+        run: npm audit signatures --json | tee docs/evidence/ci-sdk-signatures.log
       - run: npm run build
       - run: npm test | tee docs/evidence/ci-tests.log
+      - name: Actual SDK offline contract guards
+        run: npm run test:sdk | tee docs/evidence/ci-sdk-contracts.log
       - run: npx playwright install --with-deps chromium
       - run: npm run migrate && npm run seed
       - name: Browser and measured load integration
@@ -111,7 +116,7 @@ jobs:
             if docker exec zalo-ci-smoke /nodejs/bin/node -e 'fetch("http://127.0.0.1:3100/health/ready").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))'; then break; fi
             sleep 1
           done
-          docker exec zalo-ci-smoke /nodejs/bin/node -e 'if(process.getuid()===0)process.exit(1);fetch("http://127.0.0.1:3100/health/ready").then(r=>{if(!r.ok)process.exit(1);console.log("nonroot/private readiness PASS")})'
+          docker exec zalo-ci-smoke /nodejs/bin/node -e 'if(process.getuid()===0||require("node:fs").existsSync("/app/node_modules/zca-js"))process.exit(1);fetch("http://127.0.0.1:3100/health/ready").then(r=>{if(!r.ok)process.exit(1);console.log("nonroot/private/SDK-free readiness PASS")})'
       - name: Preserve synthetic validation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

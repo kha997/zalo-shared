@@ -33,7 +33,7 @@ Inbox tập trung cho một tài khoản Zalo cá nhân và nhiều nhân viên,
 Yêu cầu Node.js >=24, PostgreSQL 17. Không dùng database hay tài khoản thật.
 
 ```sh
-npm ci
+npm ci --ignore-scripts
 # Đặt DATABASE_URL, MIGRATION_DATABASE_URL, PUBLIC_ORIGIN và ADMIN_EMAIL/ADMIN_PASSWORD
 # trong môi trường riêng; không commit hoặc in giá trị lên log.
 npm run migrate
@@ -58,3 +58,9 @@ Browser/load yêu cầu app và mock worker đang chạy, `TEST_ADMIN_EMAIL`/`TE
 Không suy ra khả năng Zalo thật từ simulator, số browser profile từ số workstation vật lý, hay khả năng mở rộng không giới hạn từ một load run. Kết quả gửi không xác định cần đối soát; không thể hứa exactly-once với provider không hỗ trợ idempotency. PostgreSQL lock không ngăn được process cũ bị treo tiếp tục gửi ra provider sau failover; live failover cần fencing vận hành. Điều khoản và nguy cơ khóa tài khoản Zalo vẫn tồn tại.
 
 Các snapshot source upstream không rõ giấy phép không được đưa vào repo này. Báo cáo nghiên cứu giữ URL/revision nguồn; file/harness lịch sử tại môi trường nghiên cứu không phải ứng dụng build được trong repo này. Code sản phẩm mới được viết độc lập. Chưa chọn giấy phép phân phối cho sản phẩm.
+
+## SDK offline
+
+SDK `zca-js@2.2.0` được khóa bằng version và integrity trong **devDependencies**, chưa được đưa vào runtime production. [Artifact audit](docs/review/sdk-artifact-audit.md) ghi rõ commit phát hành khác snapshot nghiên cứu; [inventory dependency](docs/evidence/sdk-dependency-inventory.json) và [license notices](THIRD_PARTY_NOTICES.md) giữ bằng chứng phiên bản/giấy phép.
+
+`npm run test:sdk` kiểm tra import ESM/CommonJS và model thật trong môi trường chặn mạng, ghi file và tiến trình con. Không gọi login/QR. Lớp session facade mặc định từ chối trước khi đọc vault hoặc nạp SDK, có kiểm thử login giả lập, timeout, cookie refresh và chống ghi đè phiên cũ. Chưa nối facade vào app/worker; thử tài khoản thật vẫn cần phê duyệt riêng.

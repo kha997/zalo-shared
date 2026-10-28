@@ -20,7 +20,8 @@
     "test:load": "tsx tests/load/run.ts",
     "test:transport": "node --import tsx --test --test-isolation=none tests/transport/*.test.ts",
     "build:server": "tsc -p tsconfig.server.json",
-    "start:worker": "node dist/server/worker.js"
+    "start:worker": "node dist/server/worker.js",
+    "test:sdk": "node --permission --allow-fs-read=./node_modules --allow-fs-read=./package.json --allow-fs-read=./tests/fixtures/sdk-offline-probe.mjs --allow-fs-read=./adapters/zalo/transport.ts tests/fixtures/sdk-offline-probe.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
@@ -42,6 +43,7 @@
     "prettier": "^3.9.10",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
-    "vite": "^7.1.0"
+    "vite": "^7.1.0",
+    "zca-js": "2.2.0"
   }
 }
