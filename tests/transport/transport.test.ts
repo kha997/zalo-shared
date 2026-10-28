@@ -245,3 +245,34 @@ test("late SDK errors after close or stop are consumed", async () => {
   x.transport.stop();
   assert.doesNotThrow(() => x.listener.emit("error", new Error("later")));
 });
+
+test("zca-js 2.2.0 send envelope canonicalizes safe numeric IDs and rejects precision loss", async () => {
+  // Pinned src/apis/sendMessage.ts:16-23 declares msgId:number inside message.
+  for (const [id, expected] of [
+    [123456789, { status: "sent", providerId: "123456789" }],
+    [
+      Number.MAX_SAFE_INTEGER,
+      { status: "sent", providerId: String(Number.MAX_SAFE_INTEGER) },
+    ],
+    ["00123", { status: "sent", providerId: "00123" }],
+    ["", { status: "unknown" }],
+    [Number.MAX_SAFE_INTEGER + 1, { status: "unknown" }],
+    [1.5, { status: "unknown" }],
+    [NaN, { status: "unknown" }],
+    [Infinity, { status: "unknown" }],
+  ] as const) {
+    const listener = new Listener();
+    const transport = createZaloTransport({
+      approvedSdk: {
+        createApi: async () => ({
+          listener,
+          sendMessage: async () => ({ message: { msgId: id }, attachment: [] }),
+        }),
+      },
+    });
+    await transport.start();
+    listener.emit("connected");
+    assert.deepEqual(await transport.sendText("peer", "hi"), expected);
+    transport.stop();
+  }
+});

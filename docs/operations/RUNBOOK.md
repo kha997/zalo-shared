@@ -1,6 +1,6 @@
 # Private synthetic pilot operations
 
-This is original application code. Owner licensing remains unresolved; no upstream application license is asserted. No live Zalo connector exists. Production acceptance remains closed. PostgreSQL digest was verified by an actual root pull; Node 24.19.0 image digest was also verified by actual pull and pinned in both stages. Digests are not a current security baseline; refresh, scan and record registry digests before deployment. CI action commit identifiers require registry/source verification before relying on supply-chain provenance.
+This is original application code. Owner licensing remains unresolved; no upstream application license is asserted. No live Zalo connector exists. Production acceptance remains closed. PostgreSQL digest was verified by an actual root pull; The Node24.19.0 builder and distroless Node24 runtime are pinned separately by immutable digest, with the runtime digest taken from the successful CI image scan/smoke. Digests are not a current security baseline; refresh, scan and record registry digests before deployment. CI action commit identifiers require registry/source verification before relying on supply-chain provenance.
 
 ## Start and stop
 
@@ -43,4 +43,4 @@ Before any live deployment: owner-approved separate test account/device; platfor
 
 Runtime image uses compiled JavaScript and production dependencies only. tsx/TypeScript/Vite/Playwright remain build/test tools and are removed before the final image is copied. Local `npm start` requires `npm run build`; local development retains `npm run dev`. Image scanning records all high/critical findings and fails on fixable ones; unfixed findings remain an explicit production-risk gate.
 
-The minimal runtime is official distroless Node24/Debian13, numeric UID65532, without shell/npm/system package tools. Compose commands supply only the compiled script path because the base image entrypoint is Node. Health probes and docker-exec diagnostics use `/nodejs/bin/node`. CI records and builds the immutable resolved runtime digest; pin that digest in Dockerfile before release.
+The minimal runtime is official distroless Node24/Debian13, numeric UID65532, without shell/npm/system package tools. Compose commands supply only the compiled script path because the base image entrypoint is Node. Health probes and docker-exec diagnostics use `/nodejs/bin/node`. Dockerfile pins the CI-verified immutable runtime digest; CI records and rebuilds that exact base.

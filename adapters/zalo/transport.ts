@@ -223,8 +223,16 @@ export function createZaloTransport(options: Options) {
             (result): Delivery => {
               if (record(result)?.cancelled) return { status: "failed" };
               const id = record(record(result)?.message)?.msgId;
-              return typeof id === "string" && id
-                ? { status: "sent", providerId: id }
+              // zca-js 2.2.0 SendMessageResult declares msgId:number. Reject
+              // unsafe numbers: converting after precision loss cannot recover the ID.
+              const providerId =
+                typeof id === "string" && id.length > 0
+                  ? id
+                  : typeof id === "number" && Number.isSafeInteger(id)
+                    ? String(id)
+                    : null;
+              return providerId !== null
+                ? { status: "sent", providerId }
                 : { status: "unknown" };
             },
             (): Delivery => ({ status: "unknown" }),

@@ -25,6 +25,8 @@ Inbox tập trung cho một tài khoản Zalo cá nhân và nhiều nhân viên,
 - [Review kiến trúc độc lập](docs/review/architecture-review.md)
 - [Review bảo mật code vòng đầu](docs/review/security-code-review.md)
 - [Tài liệu vận hành](docs/operations/RUNBOOK.md)
+- [Chuẩn bị pilot Zalo thật và phần kỹ thuật còn thiếu](docs/operations/LIVE-PILOT.md)
+- [Dự toán chi phí kiến trúc hiện tại](docs/operations/COSTS.md)
 
 ## Chạy local
 

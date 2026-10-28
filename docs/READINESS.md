@@ -26,7 +26,7 @@ These are **simulator/application results**, not proof of four physical workstat
 
 ## Latest runtime, monitoring and capacity evidence
 
-[Run40724950532](https://github.com/kha997/zalo-shared/actions/runs/40724950532), source9a77cbca, passed the complete CI job. [Machine-readable results](evidence/ci-distroless-results.json) preserve measurements. Compiled JavaScript runs as nonroot in a read-only distroless image; Trivy0.76.1 reported **0 HIGH/CRITICAL findings** at scan time. This is a dated advisory snapshot, not a guarantee of no vulnerabilities. The resolved runtime digest is now pinned in `ops/Dockerfile`; that pin requires its own subsequent CI run.
+[Run40724950532](https://github.com/kha997/zalo-shared/actions/runs/40724950532), source9a77cbca, passed the complete CI job. [Machine-readable results](evidence/ci-distroless-results.json) preserve measurements. Compiled JavaScript runs as nonroot in a read-only distroless image; Trivy0.76.1 reported **0 HIGH/CRITICAL findings** at scan time. This is a dated advisory snapshot, not a guarantee of no vulnerabilities. The resolved runtime digest is now pinned in `ops/Dockerfile`; [Pin-validation run40726830070](https://github.com/kha997/zalo-shared/actions/runs/40726830070) also passed the entire job, including38/38 units,6 browser cases, recovery, image smoke and another0 HIGH/CRITICAL scan; see [retained results](evidence/ci-pinned-results.json).
 
 The same run repeated38/38 units and6 browser cases (1 placeholder skip), crash/restart/restore checks, private image smoke and monitoring configuration/rule tests. Monitoring notification delivery has not been deployed or tested.
 
@@ -37,6 +37,8 @@ The same run repeated38/38 units and6 browser cases (1 placeholder skip), crash/
 | 100 | 3 | 1,300 | 644ms | PASS in this short workload |
 | 200 | 3 | 2,600 | 1,001ms | PASS in this short workload |
 | 500 | 3 | 6,500 | 2,191ms | **FAIL latency target**; functional/integrity checks passed |
+
+The pinned rerun illustrates runner variability:100/200/500-user p95≈1105/2072/3334ms, so **200 and500users failed the2s latency target in that run**. Its strict4–50-user profiles still passed;50×50rounds measured10,050requests, p95≈101ms. The earlier200-user success is not a reliable capacity guarantee.
 
 All measured loads had zero request errors and verified idempotent retries. All three final mock queue drains passed with pending/processing0, unknown0 and failed0. These are API clients on a hosted runner, not500 browser staff seats or real-provider throughput. The500-user result establishes a failed latency observation, not a universal capacity ceiling. Artifacts expire after14days; the committed summary retains essential evidence.
 
@@ -58,3 +60,7 @@ Tracking: [implementation#1](https://github.com/kha997/zalo-shared/issues/1), [l
 Image scan evidence: [run40721532703](https://github.com/kha997/zalo-shared/actions/runs/40721532703), commit393e277, passed the functional/recovery/browser stages but failed the new image gate:83HIGH/CRITICAL package findings,25fixable. Baseline retained in `evidence/image-scan-baseline.json`. This is not a clean image. Remediation replaces the general-purpose Node runtime with official distroless Node24/Debian13 (no npm/shell/unused system tools); CI records and builds an immutable resolved base digest, which must be committed before release. Remediated in run40724950532: zero HIGH/CRITICAL findings at scan time; see latest evidence above.
 
 Additional capacity observation at100/200/500users is separate from the enforced50-user latency target. Integrity, idempotency and queue-drain errors always fail; upper-range latency exceedance is reported as a measured boundary, not concealed as a passed SLA. Monitoring CI checks rule semantics only; notification receiver/deployment remains an Owner operating gate.
+
+## SDK contract follow-up
+
+A source-backed follow-up found that the research SDK declares outbound message IDs as numbers while the candidate accepted only strings. The candidate now preserves string IDs, canonicalizes safe integer IDs and holds unsafe numeric precision as unknown. Its regression test first failed, then passed. Independent scoped review found no P0/P1/P2 in that change and reproduced13/13 transport/vault tests; coordinating verification passed20/20 offline tests and the full local build. This follow-up requires its own hosted CI; it does not wire a live connector. See [SDK contract audit](review/sdk-contract-review.md), [current pilot handoff](operations/LIVE-PILOT.md) and [current-architecture cost assumptions](operations/COSTS.md).
