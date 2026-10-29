@@ -1,4 +1,5 @@
 import type pg from "pg";
+import type { OwnerToken } from "./connector-ownership.js";
 import { createHash } from "node:crypto";
 import { ACCOUNT, audit } from "./db.js";
 export interface ProviderEvent {
@@ -105,6 +106,7 @@ async function project(db: pg.PoolClient, e: any) {
 export async function ingestProviderEvent(
   pool: pg.Pool,
   event: ProviderEvent,
+  context?: { owner: OwnerToken },
 ): Promise<{
   eventId: string;
   messageId: string | null;
@@ -113,6 +115,21 @@ export async function ingestProviderEvent(
   conflict: boolean;
 }> {
   validate(event);
+  if (context) {
+    const owner = context.owner;
+    if (
+      !owner ||
+      owner.accountId !== ACCOUNT ||
+      typeof owner.ownerId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        owner.ownerId,
+      ) ||
+      typeof owner.epoch !== "string" ||
+      !/^(0|[1-9][0-9]{0,18})$/.test(owner.epoch) ||
+      BigInt(owner.epoch) > 9223372036854775807n
+    )
+      throw new Error("Connector ownership unavailable");
+  }
   const semantic = createHash("sha256")
     .update(
       JSON.stringify([
@@ -127,6 +144,20 @@ export async function ingestProviderEvent(
   const db = await pool.connect();
   try {
     await db.query("BEGIN");
+    if (context) {
+      const owner = context.owner;
+      if (
+        !owner ||
+        owner.accountId !== ACCOUNT ||
+        !(
+          await db.query(
+            "SELECT account_id FROM connector_ownership WHERE account_id=$1 AND owner_id=$2 AND epoch=$3 AND phase IN ('reserved','active') FOR SHARE",
+            [ACCOUNT, owner.ownerId, owner.epoch],
+          )
+        ).rowCount
+      )
+        throw new Error("Connector ownership unavailable");
+    }
     const cid = (
       await db.query(
         `INSERT INTO conversations(account_id,contact_id,contact_name,provider_thread_type,provider_thread_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(account_id,contact_id) DO UPDATE SET provider_thread_type=EXCLUDED.provider_thread_type,provider_thread_id=EXCLUDED.provider_thread_id RETURNING id`,

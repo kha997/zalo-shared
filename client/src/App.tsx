@@ -872,6 +872,8 @@ export default function App() {
                         {initials(
                           m.direction === "inbound"
                             ? current.contactName
+                            : m.actorId === null
+                              ? "Zalo / thiết bị khác"
                             : users.find((u) => u.id === m.actorId)?.name ||
                                 "Đội ngũ",
                         )}
@@ -880,6 +882,8 @@ export default function App() {
                         <div className="message-author">
                           {m.direction === "inbound"
                             ? current.contactName
+                            : m.actorId === null
+                              ? "Zalo / thiết bị khác"
                             : users.find((u) => u.id === m.actorId)?.name ||
                               "Đội ngũ"}
                         </div>

@@ -26,6 +26,7 @@ export interface TextTransport {
 export function createSdkProvider(
   pool: pg.Pool,
   transport: TextTransport,
+  ownership?: { readonly admitted: boolean; assertCurrent(): Promise<void> },
 ): Provider {
   let prepared:
     | {
@@ -38,6 +39,15 @@ export function createSdkProvider(
     | undefined;
   return {
     async connected(db) {
+      if (ownership) {
+        if (!ownership.admitted) return false;
+        try {
+          await ownership.assertCurrent();
+        } catch {
+          return false;
+        }
+        if (!ownership.admitted) return false;
+      }
       const state = (
         await (db ?? pool).query(
           "SELECT status,reconciliation_required FROM provider_state WHERE account_id=$1",
@@ -45,6 +55,7 @@ export function createSdkProvider(
         )
       ).rows[0];
       return (
+        (!ownership || ownership.admitted) &&
         transport.status === "connected" &&
         state?.status === "connected" &&
         state.reconciliation_required === false
@@ -153,6 +164,14 @@ export function createSdkProvider(
       if (!(await this.connected(db))) throw new ProviderNotDispatchedError();
       if (part === 0 && !prepared.text.trim() && prepared.media.size > 0)
         return null;
+      if (ownership) {
+        try {
+          await ownership.assertCurrent();
+        } catch {
+          throw new ProviderNotDispatchedError();
+        }
+        if (!ownership.admitted) throw new ProviderNotDispatchedError();
+      }
       const input = prepared.media.get(part);
       const result =
         part === 0
@@ -166,6 +185,17 @@ export function createSdkProvider(
               prepared.peer,
               prepared.type,
             );
+      // Revocation cannot cancel an SDK call already entered. A late confirmation
+      // cannot establish durable acceptance after ownership/session loss.
+      if (ownership) {
+        try {
+          await ownership.assertCurrent();
+        } catch {
+          throw new Error("Provider execution uncertain");
+        }
+        if (!ownership.admitted)
+          throw new Error("Provider execution uncertain");
+      }
       if (result.status === "failed") throw new ProviderNotDispatchedError();
       if (result.status !== "sent")
         throw new Error("Provider execution uncertain");

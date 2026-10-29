@@ -1,4 +1,5 @@
 SELECT 'attachments', count(*) FROM attachments
+UNION ALL SELECT 'connector_ownership', count(*) FROM connector_ownership
 UNION ALL SELECT 'audit', count(*) FROM audit
 UNION ALL SELECT 'conversations', count(*) FROM conversations
 UNION ALL SELECT 'delivery_parts', count(*) FROM delivery_parts

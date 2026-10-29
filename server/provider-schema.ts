@@ -18,4 +18,13 @@ CREATE TABLE IF NOT EXISTS provider_events(
  UNIQUE(account_id,thread_type,thread_id,direction,provider_id)
 );
 CREATE INDEX IF NOT EXISTS provider_events_held ON provider_events(conversation_id,state);
+CREATE TABLE IF NOT EXISTS connector_ownership(
+ account_id uuid PRIMARY KEY, epoch bigint NOT NULL DEFAULT 0 CHECK(epoch>=0),
+ phase text NOT NULL DEFAULT 'idle' CHECK(phase IN ('idle','reserved','active','uncertain')),
+ owner_id uuid, owner_label varchar(128), reserved_at timestamptz, heartbeat_at timestamptz,
+ uncertain_at timestamptz, fault_code varchar(64),
+ last_fenced_owner_id uuid, last_fenced_epoch bigint, last_fenced_at timestamptz,
+ CHECK((phase='idle')=(owner_id IS NULL))
+);
+INSERT INTO connector_ownership(account_id) SELECT account_id FROM provider_state ON CONFLICT DO NOTHING;
 `;

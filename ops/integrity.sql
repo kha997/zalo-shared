@@ -1,5 +1,6 @@
 -- Per-row SHA256 keeps large media bytes out of the aggregate; output contains only table digests.
 SELECT 'attachments', encode(sha256(convert_to(coalesce(string_agg(encode(sha256(convert_to(row_to_json(t)::text,'UTF8')),'hex'), E'\n' ORDER BY id),''),'UTF8')),'hex') FROM attachments t
+UNION ALL SELECT 'connector_ownership', encode(sha256(convert_to(coalesce(string_agg(encode(sha256(convert_to(row_to_json(t)::text,'UTF8')),'hex'), E'\n' ORDER BY account_id),''),'UTF8')),'hex') FROM connector_ownership t
 UNION ALL SELECT 'audit', encode(sha256(convert_to(coalesce(string_agg(encode(sha256(convert_to(row_to_json(t)::text,'UTF8')),'hex'), E'\n' ORDER BY id),''),'UTF8')),'hex') FROM audit t
 UNION ALL SELECT 'conversations', encode(sha256(convert_to(coalesce(string_agg(encode(sha256(convert_to(row_to_json(t)::text,'UTF8')),'hex'), E'\n' ORDER BY id),''),'UTF8')),'hex') FROM conversations t
 UNION ALL SELECT 'delivery_parts', encode(sha256(convert_to(coalesce(string_agg(encode(sha256(convert_to(row_to_json(t)::text,'UTF8')),'hex'), E'\n' ORDER BY message_id,part),''),'UTF8')),'hex') FROM delivery_parts t

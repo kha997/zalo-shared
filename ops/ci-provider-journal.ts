@@ -1,5 +1,5 @@
 /** Disposable CI fixture only. Run after load/browser workers have stopped. */
-import { createPool } from "../server/db.js";
+import { ACCOUNT, createPool } from "../server/db.js";
 import {
   ingestProviderEvent,
   recordPartAccepted,
@@ -93,6 +93,16 @@ try {
   ).rows.map((r) => r.state);
   if (!["linked", "held", "conflict"].every((s) => states.includes(s)))
     throw new Error("Journal fixture incomplete");
+  const owner = await pool.query(
+    "UPDATE connector_ownership SET phase='uncertain',epoch=17,owner_id=gen_random_uuid(),owner_label='ci-synthetic-owner',reserved_at=now(),uncertain_at=now(),fault_code='shutdown' WHERE account_id=$1 AND phase='idle' RETURNING account_id",
+    [ACCOUNT],
+  );
+  if (owner.rowCount !== 1) throw new Error("Pristine ownership fixture required");
+  // A second synthetic row exercises restoration of a previously idle identity.
+  // This is recovery coverage, not application multi-account support.
+  await pool.query(
+    "INSERT INTO connector_ownership(account_id) VALUES('00000000-0000-4000-8000-000000000002')",
+  );
   console.log("Synthetic linked/held/conflict journal fixtures persisted");
 } finally {
   await pool.end();
