@@ -90,3 +90,11 @@ Typed media, lifetime ownership/takeover fencing, privileged reconciliation cont
 ## Typed outbound media — hosted gates pending
 
 New source binds attachment UUIDs to original part order and preflights bounded private PNG/JPEG/PDF/plaintext bytes before any text send. Separate Buffer-only facade/transport media operations preserve per-part confirmations and quarantine timeout/ambiguous results. Three independent scoped reviews accepted source conditional on hosted evidence; transport48/48, guardedSDK2/2 and complete build pass locally. Four-staff media HTTP flow and nonempty binding/content recovery fixture are authored but not yet passed on hosted PostgreSQL. Inbound media remains an explicit unsupported placeholder; real upload/phone operation and lifecycle ownership remain unproven.
+
+## Outbound media hosted acceptance
+
+[Run40913017350](https://github.com/kha997/zalo-shared/actions/runs/40913017350), source95783b0d, passed96/96units,2/2guardedSDK cases,6browser cases (1skip), four-staff ordered private-media HTTPflow, partial-confirmation/unknown/no-resend tests, nonempty bound-media/journal unclean restart and encrypted fresh restore. Monitoring checks and SDK-free nonroot image passed, Trivy0HIGH/CRITICAL. [Retained evidence](evidence/ci-connector-media-results.json) records exact scope.
+
+4/10/25/50-user p95≈45/54/119/232ms;50×50rounds10,050requests p95≈81ms.100/200/500users≈774/957/3112ms;500fails the2s target, with zero request errors and all three mock drains passed. Short synthetic workloads do not establish staff-seat/provider capacity.
+
+The guarded actual SDK checks remain import/models/constructor only; injected media sends are not uploads to Zalo. Inbound media is still an unsupported placeholder. Ownership/runtime/control work is separate and unvalidated by this media snapshot. Actual phone coexistence, account identity, network/schema compatibility and low-volume soak remain UNPROVEN. No real account or production deployment.

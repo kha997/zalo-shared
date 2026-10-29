@@ -94,3 +94,5 @@ This phase remains required before complete media acceptance. Real phone/media/S
 - Task3 implemented and independently reviewed;48/48transport,2/2actualSDKguard,6/6selectedbridge/media/sentinel checks passed. Complete client/server build passed. Worker whitespace skip now uses the same JavaScript trim semantics as media preflight; newline/tab media-only regression included.
 - Added independent four-staff HTTP media flow and nonempty binding/content restart/restore fixtures. All new SQL/HTTP/durability claims remain pending hosted media CI.
 - SDK remains disabled/dev-only; no real upload/account/phone or inbound URL fetch.25MiB payload cache limit is not peak process RAM.
+
+- HostedCI40913017350/source95783b0d passed96units/2SDKguards/6browser cases, fourstafforderedmediaflow and nonemptyboundmedia restart/restore. Outbound injected-media phase accepted; actualZaloupload/inbounddownload/phone remainunproven. See docs/evidence/ci-connector-media-results.json.
