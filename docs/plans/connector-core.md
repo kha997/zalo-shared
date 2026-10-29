@@ -89,3 +89,5 @@ Files: adapters/zalo/provider.ts, tests/backend/provider-bridge.test.ts, server/
 - Final integrated review found a P1: SDK-returned cancelled metadata could impersonate pre-dispatch cancellation. Replaced structural sentinel with a per-call private Symbol; regression reproduced the old failed classification and now requires unknown after one SDK invocation. Fresh transport/facade/vault 40/40, actual offline SDK guards 2/2 and complete client/server build passed. Independent fix re-review and hosted PostgreSQL acceptance pending.
 
 - Independent bounded re-review accepted the P1 correction. Added two actual transport-to-bridge offline regressions (2/2 PASS) and typecheck PASS; hosted SQL unknown/no-retry remains required.
+
+- Hosted CI40908043580 on e31abe21 passed83/83 units,2 SDKguards,6browser cases, four-staff HTTPflow, nonempty journal restart/restore and image gates. See docs/evidence/ci-connector-core-results.json. Core offline acceptance complete; real account and later phases remain unproven.
