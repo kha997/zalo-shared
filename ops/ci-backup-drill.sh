@@ -20,6 +20,16 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 age-keygen -o "$work/identity" 2>/dev/null
 export AGE_RECIPIENT="$(age-keygen -y "$work/identity")" QUIESCED=yes
+psql -X -v ON_ERROR_STOP=1 <<'SQL'
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM provider_events WHERE state='linked') OR NOT EXISTS(SELECT 1 FROM provider_events WHERE state='held') OR NOT EXISTS(SELECT 1 FROM provider_events WHERE state='conflict') THEN RAISE EXCEPTION 'nonempty representative journal fixture required'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM provider_events e JOIN messages m ON m.id=e.message_id WHERE e.direction='outbound' AND m.actor_id IS NOT NULL) THEN RAISE EXCEPTION 'staff echo fixture missing'; END IF;
+END $$;
+SQL
+provider_digest_sql="SELECT encode(sha256(convert_to(string_agg(row_to_json(e)::text,E'\n' ORDER BY id),'UTF8')),'hex') FROM provider_events e"
+provider_digest_before=$(psql -X -v ON_ERROR_STOP=1 -At -c "$provider_digest_sql")
+[[ -n "$provider_digest_before" ]] || { echo 'Empty journal digest' >&2; exit 1; }
+provider_events_before=$(psql -X -v ON_ERROR_STOP=1 -At -c 'SELECT count(*) FROM provider_events')
 bash /tmp/zalo-ops/backup.sh "$work/backup.age"
 export AGE_IDENTITY_FILE="$work/identity" RESTORE_QUARANTINE=yes
 restore_started=$(date +%s)
@@ -41,5 +51,9 @@ if psql -X --username=zs_ci_runtime --dbname=zs_restore_ci -c 'SELECT 1' > "$wor
  echo 'Runtime unexpectedly connected to restore' >&2
  exit 1
 fi
-grep -q 'permission denied for database' "$work/denied.log"
+provider_events_after=$(psql -X -v ON_ERROR_STOP=1 --dbname=zs_restore_ci -At -c 'SELECT count(*) FROM provider_events')
+provider_digest_after=$(psql -X -v ON_ERROR_STOP=1 --dbname=zs_restore_ci -At -c "$provider_digest_sql")
+[[ "$provider_digest_before" == "$provider_digest_after" ]] || { echo 'Provider journal content changed during restore' >&2; exit 1; }
+[[ "$provider_events_before" == "$provider_events_after" ]] || { echo 'Provider event journal lost during restore' >&2; exit 1; }
+grep -q 'permission denied for database'  "$work/denied.log"
 echo 'Restore quarantine and runtime audit privilege assertions PASS'

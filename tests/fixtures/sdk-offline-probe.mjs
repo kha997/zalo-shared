@@ -67,18 +67,18 @@ test("actual ESM and CJS import, constructor and inbound model contracts stay of
     const numericInbound = new sdk.UserMessage("owner", raw("peer", "0", 123));
     assert.deepEqual(normalizeInbound(directSelf), {
       threadId: "peer", threadType: 0, providerId: "provider-1", senderId: "owner",
-      isSelf: true, kind: "text", text: "synthetic-only",
+      isSelf: true, kind: "text", text: "synthetic-only", clientId: "client-1", providerTimestamp: "1",
     });
     assert.equal(directSelf.data.cliMsgId, "client-1");
     assert.equal(directSelf.data.quote.ownerId, "123");
     assert.deepEqual(normalizeInbound(directPeer), {
       threadId: "peer", threadType: 0, providerId: "provider-1", senderId: "peer",
-      isSelf: false, kind: "text", text: "synthetic-only",
+      isSelf: false, kind: "text", text: "synthetic-only", clientId: "client-1", providerTimestamp: "1",
     });
     assert.equal(directPeer.data.idTo, "owner");
     assert.deepEqual(normalizeInbound(groupSelf), {
       threadId: "group", threadType: 1, providerId: "provider-1", senderId: "owner",
-      isSelf: true, kind: "text", text: "synthetic-only",
+      isSelf: true, kind: "text", text: "synthetic-only", clientId: "client-1", providerTimestamp: "1",
     });
     // Constructors do not validate types; malformed provider frames remain rejected.
     assert.equal(normalizeInbound(numericInbound), null);

@@ -76,6 +76,10 @@ jobs:
           LOAD_USERS=4,10,25,50 LOAD_ROUNDS=3 npm run test:load | tee docs/evidence/ci-load.log
           LOAD_USERS=50 LOAD_ROUNDS=50 LOAD_PROFILE=sustained npm run test:load | tee docs/evidence/ci-load-sustained.log
           LOAD_USERS=100,200,500 LOAD_ROUNDS=3 LOAD_PROFILE=capacity npm run test:load | tee docs/evidence/ci-load-capacity.log
+      - name: Seed representative provider journal recovery states
+        env:
+          CI_PROVIDER_JOURNAL_DISPOSABLE: "yes"
+        run: node --import tsx ops/ci-provider-journal.ts | tee docs/evidence/ci-provider-journal-fixture.log
       - name: Unclean PostgreSQL restart preserves committed data
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}

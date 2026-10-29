@@ -19,6 +19,8 @@ class Listener extends EventEmitter {
 }
 function setup(extra = {}) {
   const listener = new Listener();
+  const listeners = [listener];
+  let creations = 0;
   let sends = 0;
   let options: unknown;
   const api = {
@@ -32,7 +34,10 @@ function setup(extra = {}) {
     approvedSdk: {
       createApi: async (o) => {
         options = o;
-        return api;
+        if (creations++ === 0) return api;
+        const fresh = new Listener();
+        listeners.push(fresh);
+        return { ...api, listener: fresh };
       },
     },
     reconnectDelayMs: 5,
@@ -41,6 +46,7 @@ function setup(extra = {}) {
   });
   return {
     listener,
+    listeners,
     transport,
     api,
     sends: () => sends,
@@ -70,15 +76,17 @@ test("reconnect is bounded and stale message callback is ignored", async () => {
   const callback = x.listener.listeners("message")[0]!;
   x.listener.emit("closed", 1006, "");
   await delay();
-  assert.equal(x.listener.starts, 2);
+  assert.equal(x.listeners.length, 2);
+  assert.equal(x.listener.starts, 1);
   callback({});
   assert.equal(received.length, 0);
   for (let i = 0; i < 4; i++) {
-    x.listener.emit("closed", 1006, "");
+    x.listeners[x.listeners.length - 1].emit("closed", 1006, "");
     await delay();
   }
   assert.equal(x.transport.status, "disconnected");
-  assert.equal(x.listener.starts, 4);
+  assert.equal(x.listeners.length, 4);
+  assert.ok(x.listeners.every((listener) => listener.starts === 1));
   x.transport.stop();
 });
 test("duplicate/kick and explicit invalidation expire without retry or sending", async () => {
@@ -212,7 +220,8 @@ test("SDK connected event gates delivery and disconnected+closed only schedules 
   x.listener.emit("disconnected", 1006, "");
   x.listener.emit("closed", 1006, "");
   await delay();
-  assert.equal(x.listener.starts, 2);
+  assert.equal(x.listeners.length, 2);
+  assert.equal(x.listener.starts, 1);
   x.transport.stop();
 });
 test("default waits for connected and stop fences a queued send before execution", async () => {

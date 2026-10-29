@@ -1,4 +1,5 @@
 import pg from "pg";
+import { providerSchema } from "./provider-schema.js";
 import { randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 export const ACCOUNT = "00000000-0000-4000-8000-000000000001";
@@ -52,6 +53,7 @@ CREATE TRIGGER audit_immutable BEFORE UPDATE OR DELETE OR TRUNCATE ON audit FOR 
   await pool.query(
     "CREATE INDEX IF NOT EXISTS session_users ON sessions(user_id)",
   );
+  await pool.query(providerSchema);
   if (options.appRole) {
     if (!/^[a-z_][a-z0-9_]{0,62}$/.test(options.appRole))
       throw new Error("Invalid APP_DATABASE_ROLE");

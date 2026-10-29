@@ -5,6 +5,7 @@ UNION ALL SELECT 'conversations', encode(sha256(convert_to(coalesce(string_agg(e
 UNION ALL SELECT 'delivery_parts', encode(sha256(convert_to(coalesce(string_agg(encode(sha256(convert_to(row_to_json(t)::text,'UTF8')),'hex'), E'\n' ORDER BY message_id,part),''),'UTF8')),'hex') FROM delivery_parts t
 UNION ALL SELECT 'messages', encode(sha256(convert_to(coalesce(string_agg(encode(sha256(convert_to(row_to_json(t)::text,'UTF8')),'hex'), E'\n' ORDER BY id),''),'UTF8')),'hex') FROM messages t
 UNION ALL SELECT 'outbox', encode(sha256(convert_to(coalesce(string_agg(encode(sha256(convert_to(row_to_json(t)::text,'UTF8')),'hex'), E'\n' ORDER BY id),''),'UTF8')),'hex') FROM outbox t
+UNION ALL SELECT 'provider_events', encode(sha256(convert_to(coalesce(string_agg(encode(sha256(convert_to(row_to_json(t)::text,'UTF8')),'hex'), E'\n' ORDER BY id),''),'UTF8')),'hex') FROM provider_events t
 UNION ALL SELECT 'provider_ledger', encode(sha256(convert_to(coalesce(string_agg(encode(sha256(convert_to(row_to_json(t)::text,'UTF8')),'hex'), E'\n' ORDER BY message_id,part),''),'UTF8')),'hex') FROM provider_ledger t
 UNION ALL SELECT 'provider_state', encode(sha256(convert_to(coalesce(string_agg(encode(sha256(convert_to(row_to_json(t)::text,'UTF8')),'hex'), E'\n' ORDER BY account_id),''),'UTF8')),'hex') FROM provider_state t
 UNION ALL SELECT 'read_cursors', encode(sha256(convert_to(coalesce(string_agg(encode(sha256(convert_to(row_to_json(t)::text,'UTF8')),'hex'), E'\n' ORDER BY user_id,conversation_id),''),'UTF8')),'hex') FROM read_cursors t
