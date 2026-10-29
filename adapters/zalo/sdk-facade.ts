@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { prepareMedia, type MediaInput } from "./media.js";
 interface SafeOptions {
   logging: false;
   selfListen: true;
@@ -224,6 +225,50 @@ export function createSdkFacade(options: Options) {
           listener: proxy as EventEmitter & {
             start(options: { retryOnClose: boolean }): void;
             stop(): void;
+          },
+          sendAttachment: async (input: MediaInput, peer: string, type = 0) => {
+            try {
+              ensure();
+              if (
+                typeof peer !== "string" ||
+                !peer.trim() ||
+                peer.length > 200 ||
+                peer.includes("\0") ||
+                (type !== 0 && type !== 1)
+              )
+                throw unavailable();
+              const source = prepareMedia(input);
+              const result = record(
+                await raw.sendMessage(
+                  { msg: "", attachments: [source] },
+                  peer,
+                  type,
+                ),
+              );
+              ensure();
+              if (
+                result.message !== null ||
+                !Array.isArray(result.attachment) ||
+                result.attachment.length !== 1
+              )
+                throw unavailable();
+              const entry = record(result.attachment[0]);
+              const id = entry.msgId;
+              if (!(
+                (typeof id === "string" &&
+                  id.trim().length > 0 &&
+                  id.length <= 200 &&
+                  !id.includes("\0")) ||
+                (typeof id === "number" && Number.isSafeInteger(id) && id >= 0)
+              ))
+                throw unavailable();
+              return {
+                message: null,
+                attachment: [{ msgId: id as string | number }],
+              };
+            } catch {
+              throw unavailable();
+            }
           },
           sendMessage: async (text: string, peer: string, type = 0) => {
             try {

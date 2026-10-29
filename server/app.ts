@@ -535,8 +535,8 @@ export async function buildApp({
       await db.query("INSERT INTO outbox(message_id) VALUES($1)", [id]);
       for (let i = 0; i < 1 + b.attachmentIds.length; i++)
         await db.query(
-          "INSERT INTO delivery_parts(message_id,part) VALUES($1,$2)",
-          [id, i],
+          "INSERT INTO delivery_parts(message_id,part,attachment_id) VALUES($1,$2,$3)",
+          [id, i, i === 0 ? null : b.attachmentIds[i - 1]],
         );
       await db.query("UPDATE conversations SET updated_at=now() WHERE id=$1", [
         c.id,

@@ -24,6 +24,7 @@ psql -X -v ON_ERROR_STOP=1 <<'SQL'
 DO $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM provider_events WHERE state='linked') OR NOT EXISTS(SELECT 1 FROM provider_events WHERE state='held') OR NOT EXISTS(SELECT 1 FROM provider_events WHERE state='conflict') THEN RAISE EXCEPTION 'nonempty representative journal fixture required'; END IF;
  IF NOT EXISTS(SELECT 1 FROM provider_events e JOIN messages m ON m.id=e.message_id WHERE e.direction='outbound' AND m.actor_id IS NOT NULL) THEN RAISE EXCEPTION 'staff echo fixture missing'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM delivery_parts p JOIN attachments a ON a.id=p.attachment_id AND a.message_id=p.message_id WHERE p.part=1 AND p.provider_id='ci-bound-media' AND a.data=convert_to('synthetic bound media recovery fixture','UTF8')) THEN RAISE EXCEPTION 'bound media recovery fixture missing'; END IF;
 END $$;
 SQL
 provider_digest_sql="SELECT encode(sha256(convert_to(string_agg(row_to_json(e)::text,E'\n' ORDER BY id),'UTF8')),'hex') FROM provider_events e"
@@ -42,6 +43,7 @@ DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM outbox WHERE status IN ('pending','processing')) THEN RAISE EXCEPTION 'restored jobs can dispatch'; END IF;
  IF EXISTS(SELECT 1 FROM provider_state WHERE status<>'disconnected') THEN RAISE EXCEPTION 'provider not quarantined'; END IF;
  IF has_database_privilege('zs_ci_runtime',current_database(),'CONNECT') THEN RAISE EXCEPTION 'runtime can connect to restore'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM delivery_parts p JOIN attachments a ON a.id=p.attachment_id AND a.message_id=p.message_id WHERE p.part=1 AND p.provider_id='ci-bound-media' AND a.data=convert_to('synthetic bound media recovery fixture','UTF8')) THEN RAISE EXCEPTION 'bound media recovery fixture lost'; END IF;
 END $$;
 SELECT 'sessions',count(*) FROM sessions;
 SELECT 'dispatchable',count(*) FROM outbox WHERE status IN ('pending','processing');

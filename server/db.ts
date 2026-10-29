@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS attachments(id uuid PRIMARY KEY DEFAULT gen_random_uu
 CREATE TABLE IF NOT EXISTS read_cursors(user_id uuid REFERENCES users ON DELETE CASCADE,conversation_id uuid REFERENCES conversations ON DELETE CASCADE,read_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(user_id,conversation_id));
 CREATE TABLE IF NOT EXISTS outbox(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),message_id uuid UNIQUE REFERENCES messages ON DELETE CASCADE,status text NOT NULL DEFAULT 'pending',created_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS delivery_parts(message_id uuid REFERENCES messages ON DELETE CASCADE,part integer NOT NULL,status text NOT NULL DEFAULT 'pending',provider_id text,PRIMARY KEY(message_id,part));
+ALTER TABLE delivery_parts ADD COLUMN IF NOT EXISTS attachment_id uuid REFERENCES attachments(id) CHECK(part<>0 OR attachment_id IS NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS delivery_parts_attachment ON delivery_parts(message_id,attachment_id);
 CREATE TABLE IF NOT EXISTS provider_state(account_id uuid PRIMARY KEY,status text NOT NULL DEFAULT 'disconnected',last_event_at timestamptz);
 INSERT INTO provider_state(account_id) VALUES('${ACCOUNT}') ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS provider_ledger(message_id uuid NOT NULL,part integer NOT NULL,provider_id text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(message_id,part));

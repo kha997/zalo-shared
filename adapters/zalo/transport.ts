@@ -1,4 +1,5 @@
 import type { EventEmitter } from "node:events";
+import { prepareMedia, type MediaInput } from "./media.js";
 
 interface Listener extends EventEmitter {
   start(options: { retryOnClose: boolean }): unknown;
@@ -7,6 +8,11 @@ interface Listener extends EventEmitter {
 interface Api {
   listener: Listener;
   sendMessage(text: string, peer: string, type?: number): Promise<unknown>;
+  sendAttachment?(
+    input: MediaInput,
+    peer: string,
+    type?: number,
+  ): Promise<unknown>;
 }
 export type TransportFault =
   | "ingress-failed"
@@ -355,6 +361,47 @@ export function createZaloTransport(options: Options) {
     pending = opening;
     return opening;
   };
+  const dispatch = async (
+    sendingApi: Api,
+    invoke: () => Promise<unknown>,
+    acceptedId: (result: unknown) => unknown,
+  ): Promise<Delivery> => {
+    const token = generation;
+    const notDispatched = Symbol("transport-not-dispatched");
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        Promise.resolve()
+          .then(() => {
+            if (
+              status !== "connected" ||
+              token !== generation ||
+              api !== sendingApi
+            )
+              return notDispatched;
+            return invoke();
+          })
+          .then((result): Delivery => {
+            if (result === notDispatched) return { status: "failed" };
+            const id = acceptedId(result);
+            const providerId = boundedId(id)
+              ? id
+              : typeof id === "number" && Number.isSafeInteger(id) && id >= 0
+                ? String(id)
+                : null;
+            return providerId !== null
+              ? { status: "sent", providerId }
+              : { status: "unknown" };
+          })
+          .catch((): Delivery => ({ status: "unknown" })),
+        new Promise<Delivery>((resolve) => {
+          timer = setTimeout(() => resolve({ status: "unknown" }), sendTimeout);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
   const sendText = async (
     peer: string,
     text: string,
@@ -370,40 +417,46 @@ export function createZaloTransport(options: Options) {
       (type !== 0 && type !== 1)
     )
       return { status: "failed" };
-    const sendingApi = api,
-      token = generation;
-    const notDispatched = Symbol("transport-not-dispatched");
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    const sendingApi = api;
+    return dispatch(
+      sendingApi,
+      () => sendingApi.sendMessage(text, peer, type),
+      (result) => record(record(result)?.message)?.msgId,
+    );
+  };
+  const sendAttachment = async (
+    input: MediaInput,
+    peer: string,
+    type = 0,
+  ): Promise<Delivery> => {
+    if (
+      status !== "connected" ||
+      !api ||
+      !api.sendAttachment ||
+      !boundedId(peer) ||
+      (type !== 0 && type !== 1)
+    )
+      return { status: "failed" };
+    let media: MediaInput;
     try {
-      return await Promise.race([
-        Promise.resolve()
-          .then(() => {
-            if (status !== "connected" || token !== generation)
-              return notDispatched;
-            return sendingApi.sendMessage(text, peer, type);
-          })
-          .then(
-            (result): Delivery => {
-            if (result === notDispatched) return { status: "failed" };
-              const id = record(record(result)?.message)?.msgId;
-              const providerId = boundedId(id)
-                ? id
-                : typeof id === "number" && Number.isSafeInteger(id)
-                  ? String(id)
-                  : null;
-              return providerId !== null
-                ? { status: "sent", providerId }
-                : { status: "unknown" };
-            },
-            (): Delivery => ({ status: "unknown" }),
-          ),
-        new Promise<Delivery>((resolve) => {
-          timer = setTimeout(() => resolve({ status: "unknown" }), sendTimeout);
-        }),
-      ]);
-    } finally {
-      if (timer) clearTimeout(timer);
+      const source = prepareMedia(input);
+      media = { name: source.filename, mime: input.mime, data: source.data };
+    } catch {
+      return { status: "failed" };
     }
+    const sendingApi = api;
+    return dispatch(
+      sendingApi,
+      () => sendingApi.sendAttachment!(media, peer, type),
+      (result) => {
+        const r = record(result);
+        return r?.message === null &&
+          Array.isArray(r.attachment) &&
+          r.attachment.length === 1
+          ? record(r.attachment[0])?.msgId
+          : undefined;
+      },
+    );
   };
   return {
     start,
@@ -411,6 +464,7 @@ export function createZaloTransport(options: Options) {
     drain,
     sessionInvalid: expire,
     sendText,
+    sendAttachment,
     get status() {
       return status;
     },

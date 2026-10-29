@@ -2,7 +2,7 @@
 // and these fail-fast hooks detect network attempts before any SDK import.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createRequire, syncBuiltinESMExports } from "node:module";
+import { createRequire, syncBuiltinESMExports, registerHooks } from "node:module";
 import net from "node:net";
 import tls from "node:tls";
 import http from "node:http";
@@ -10,7 +10,6 @@ import https from "node:https";
 import dgram from "node:dgram";
 import childProcess from "node:child_process";
 import { writeFileSync } from "node:fs";
-import { normalizeInbound } from "../../adapters/zalo/transport.ts";
 
 // Fail before any self-check if invoked without the intended permission boundary.
 assert.ok(process.permission, "Run this probe through npm run test:sdk");
@@ -30,6 +29,18 @@ https.request = https.get = denyNetwork;
 dgram.createSocket = denyNetwork;
 globalThis.fetch = denyNetwork;
 syncBuiltinESMExports();
+
+// Native Node strips TypeScript but does not map emitted .js specifiers back to
+// source. Resolve only this fixed adapter edge; retain the permission boundary.
+const transportUrl = new URL("../../adapters/zalo/transport.ts", import.meta.url).href;
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (context.parentURL === transportUrl && specifier === "./media.js")
+      return { url: new URL("../../adapters/zalo/media.ts", import.meta.url).href, shortCircuit: true };
+    return nextResolve(specifier, context);
+  },
+});
+const { normalizeInbound } = await import(transportUrl);
 
 test("offline guard self-check denies network, subprocesses and filesystem writes", () => {
   for (const attempt of [

@@ -51,6 +51,17 @@ try {
       mid,
     ]);
     await recordPartAccepted(c, mid, 0, "ci-staff-echo");
+    const attachment = (
+      await c.query(
+        "INSERT INTO attachments(owner_id,name,mime,data,message_id) VALUES($1,'ci-bound.txt','text/plain',$2,$3) RETURNING id",
+        [actor, Buffer.from("synthetic bound media recovery fixture"), mid],
+      )
+    ).rows[0].id;
+    await c.query(
+      "INSERT INTO delivery_parts(message_id,part,attachment_id) VALUES($1,1,$2)",
+      [mid, attachment],
+    );
+    await recordPartAccepted(c, mid, 1, "ci-bound-media");
     await c.query("COMMIT");
   } catch (error) {
     await c.query("ROLLBACK");

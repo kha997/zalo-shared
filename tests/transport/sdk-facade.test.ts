@@ -95,7 +95,11 @@ test("safe flags, restricted API and fresh generations persist before exposure",
     checkUpdate: false,
   });
   assert.equal(f.writes.length, 1);
-  assert.deepEqual(Object.keys(api).sort(), ["listener", "sendMessage"]);
+  assert.deepEqual(Object.keys(api).sort(), [
+    "listener",
+    "sendAttachment",
+    "sendMessage",
+  ]);
   assert.deepEqual(await api.sendMessage("hello", "peer"), {
     message: { msgId: 42 },
     attachment: [],
@@ -435,5 +439,90 @@ test("explicit refresh excludes recreate and overlapping refresh until its write
   await refresh;
   await f.facade.createApi();
   assert.equal(writes, 3);
+  f.facade.close();
+});
+
+test("attachment facade sends one cloned canonical Buffer source and excludes raw response fields", async () => {
+  const f = fixture();
+  let sent: any;
+  (f.api as any).sendMessage = async (...args: any[]) => {
+    sent = args;
+    return {
+      message: null,
+      attachment: [{ msgId: 73, secret: "synthetic-secret" }],
+      secret: "synthetic-secret",
+    };
+  };
+  const api = await f.facade.createApi();
+  const data = Buffer.from("hello");
+  const pending = api.sendAttachment(
+    { name: "../../document.exe", mime: "text/plain", data },
+    "peer",
+    1,
+  );
+  data.fill(0);
+  assert.deepEqual(await pending, {
+    message: null,
+    attachment: [{ msgId: 73 }],
+  });
+  assert.equal(sent[0].msg, "");
+  assert.equal(sent[0].attachments.length, 1);
+  assert.deepEqual(sent[0].attachments[0], {
+    data: Buffer.from("hello"),
+    filename: "document.txt",
+    metadata: { totalSize: 5 },
+  });
+  assert.deepEqual(sent.slice(1), ["peer", 1]);
+  f.facade.close();
+  await assert.rejects(
+    api.sendAttachment(
+      { name: "a", mime: "text/plain", data: Buffer.from("x") },
+      "peer",
+    ),
+  );
+});
+test("attachment facade rejects unsafe inputs before dispatch and sanitizes uncertain envelopes", async () => {
+  const f = fixture();
+  let calls = 0;
+  let response: any = { message: null, attachment: [{ msgId: 1 }] };
+  (f.api as any).sendMessage = async () => {
+    calls++;
+    if (response instanceof Error) throw response;
+    return response;
+  };
+  const api = await f.facade.createApi();
+  const good = {
+    name: "a",
+    mime: "text/plain" as const,
+    data: Buffer.from("x"),
+  };
+  for (const args of [
+    [{ ...good, data: "/private/file" }, "peer", 0],
+    [good, "", 0],
+    [good, "peer\0", 0],
+    [good, "peer", 2],
+    [good, {}, 0],
+  ])
+    await assert.rejects(
+      (api.sendAttachment as Function)(...args),
+      /SDK facade unavailable/,
+    );
+  assert.equal(calls, 0);
+  for (response of [
+    { message: { msgId: 1 }, attachment: [{ msgId: 2 }] },
+    { message: null, attachment: [] },
+    { message: null, attachment: [{ msgId: 1 }, { msgId: 2 }] },
+    { message: null, attachment: [{ msgId: Number.MAX_SAFE_INTEGER + 1 }] },
+    { message: null, attachment: [{ msgId: "" }] },
+    Error("synthetic-secret"),
+  ])
+    await assert.rejects(
+      api.sendAttachment(good, "peer"),
+      (e) =>
+        e instanceof Error &&
+        e.message === "SDK facade unavailable" &&
+        !("cause" in e),
+    );
+  assert.equal(calls, 6);
   f.facade.close();
 });

@@ -111,14 +111,16 @@ export async function runWorkerOnce(pool: pg.Pool, provider: Provider) {
       for (const part of parts) {
         if (part.status === "sent" || part.status === "skipped") continue;
         // Blank text is skippable only when actual attachment parts exist.
-        const blank =
+        const attachmentText =
           part.part === 0 &&
           (
             await db.query(
-              "SELECT 1 FROM messages m WHERE m.id=$1 AND btrim(m.text)='' AND EXISTS(SELECT 1 FROM attachments a WHERE a.message_id=m.id) AND EXISTS(SELECT 1 FROM delivery_parts p WHERE p.message_id=m.id AND p.part>0)",
+              "SELECT m.text FROM messages m WHERE m.id=$1 AND EXISTS(SELECT 1 FROM attachments a WHERE a.message_id=m.id) AND EXISTS(SELECT 1 FROM delivery_parts p WHERE p.message_id=m.id AND p.part>0)",
               [job.message_id],
             )
-          ).rowCount;
+          ).rows[0]?.text;
+        const blank =
+          typeof attachmentText === "string" && !attachmentText.trim();
         await db.query(
           "UPDATE delivery_parts SET status='processing' WHERE message_id=$1 AND part=$2",
           [job.message_id, part.part],

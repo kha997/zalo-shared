@@ -87,3 +87,10 @@ Before implementation, inspect actual inbound SDK models and dedicated-account o
 Persist download intention and provider-event linkage transactionally before work. Locator URLs may contain access tokens: encrypt at rest with managed key, never return/log them; enforce short retention. Only authenticated attachment bytes/metadata become visible through existing private download API. Download failure retains explicit unavailable status and audit, never fabricates media. Backup/restore must cover jobs, ciphertext, key recovery and quarantine. DNS rebinding, redirect, oversize stream, malformed MIME and expired locator tests use local injected resolver/fetch with zero external requests.
 
 This phase remains required before complete media acceptance. Real phone/media/SDK upload evidence remains UNPROVEN until the approved dedicated-account pilot.
+
+## Execution ledger
+
+- Tasks1/2 implemented and independently reviewed without remaining scoped P0/P1/P2. Pure validator/facade focused17/17PASS; SQL binding assertions pending hosted CI.
+- Task3 implemented and independently reviewed;48/48transport,2/2actualSDKguard,6/6selectedbridge/media/sentinel checks passed. Complete client/server build passed. Worker whitespace skip now uses the same JavaScript trim semantics as media preflight; newline/tab media-only regression included.
+- Added independent four-staff HTTP media flow and nonempty binding/content restart/restore fixtures. All new SQL/HTTP/durability claims remain pending hosted media CI.
+- SDK remains disabled/dev-only; no real upload/account/phone or inbound URL fetch.25MiB payload cache limit is not peak process RAM.
