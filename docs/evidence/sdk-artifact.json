@@ -22,7 +22,25 @@
       "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
     }
   ],
-  "signatureVerification": "pending hosted npm audit signatures; metadata alone is not verification",
-  "advisoryAudit": "pending hosted npm audit; deprecation warning is not an advisory",
+  "signatureVerification": {
+    "tool": "npm audit signatures --json",
+    "status": "PASS",
+    "invalid": [],
+    "missing": [],
+    "run": "https://github.com/kha997/zalo-shared/actions/runs/40751604115",
+    "limits": "npm audit signatures exit0 with no invalid/missing entries; package counts and source-to-binary equivalence are not asserted"
+  },
+  "advisoryAudit": {
+    "tool": "npm audit --json",
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "run": "https://github.com/kha997/zalo-shared/actions/runs/40751604115"
+  },
   "deprecationRisk": "crypto-js4.2.0 declares active development discontinued; accepted for isolated tests, live/production promotion remains open"
 }

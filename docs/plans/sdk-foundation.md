@@ -53,5 +53,7 @@ Interfaces: `createSdkFacade(options)` returns `{ createApi(safeOptions), persis
 - Baseline: local370c55d / remote259644df, source2dda735c validated39/39 backend/transport +6 browser cases. Existing offline transport/vault13/13 reproduced before changes.
 - Ruling: development-only SDK until later connector promotion — keeps the live dependency out of deployed runtime while validating the actual artifact — promotion will require a fresh image/license/security review.
 - Ruling: work continues in the existing isolated worktree — no additional worktree or main changes needed.
-- Task1: code/artifact inventory and local guards complete; independent scoped review clean; hosted advisory/signature/image gates pending.
-- Task2: implementation complete; two independently reproduced P1s fixed and re-reviewed;13/13 focused tests,34/34 combined offline cases,2/2 actual-SDK guards and fresh-install build passed; broad review clean; hosted advisory/signature/integration/image gates pending.
+- Task1: code/artifact inventory and local guards complete; independent scoped review clean; hosted advisory/signature/image gates passed in40751604115 onf8167052.
+- Task2: implementation complete; two independently reproduced P1s fixed and re-reviewed;13/13 focused tests,34/34 combined offline cases,2/2 actual-SDK guards and fresh-install build passed; broad review clean; hosted53/53 units+2/2 actualSDK guards+6browser cases, advisory/signatures/recovery/image passed in40751604115. App/worker connector wiring and live tests remain outside this plan.
+
+- Completion: both SDK foundation tasks accepted offline and by hosted CI. See docs/evidence/ci-sdk-foundation-results.json; no live/provider/production approval.
