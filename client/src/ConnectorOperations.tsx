@@ -608,7 +608,7 @@ export default function ConnectorOperations() {
                 <dd>{detail.resolutionVersion}</dd>
                 <dt>Bản gốc</dt>
                 <dd>
-                  {detail.text ?? "Nội dung chưa hỗ trợ"}
+                  <p>{detail.text ?? "Nội dung chưa hỗ trợ"}</p>
                   <small className="break">Hash: {detail.semanticHash}</small>
                 </dd>
               </dl>
