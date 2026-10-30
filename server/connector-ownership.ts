@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type pg from "pg";
 import { ACCOUNT } from "./db.js";
+import {
+  MAX_GAP_VERSION,
+  nextGapVersionSql,
+  recordProviderFault,
+} from "./provider-faults.js";
 export type OwnerToken = Readonly<{
   accountId: string;
   ownerId: string;
@@ -175,7 +180,9 @@ export async function acquireConnectorOwnership(
           UPDATE connector_ownership SET phase='uncertain',uncertain_at=now(),fault_code=$4
           WHERE account_id=$1 AND owner_id=$2 AND epoch=$3 AND phase IN ('reserved','active') RETURNING account_id
         ), disconnected AS (
-          UPDATE provider_state SET status='disconnected',reconciliation_required=true,fault_code=$4
+          UPDATE provider_state SET status='disconnected',reconciliation_required=true,
+            fault_code=CASE WHEN gap_version=${MAX_GAP_VERSION} THEN 'version-exhausted' ELSE $4 END,
+            gap_version=${nextGapVersionSql}
           WHERE account_id IN(SELECT account_id FROM changed) RETURNING account_id
         ) INSERT INTO audit(account_id,action,target_id,metadata)
           SELECT account_id,'connector.uncertain',$2::text,jsonb_build_object('epoch',$3::text,'reason',$4::text) FROM changed`,
@@ -352,10 +359,7 @@ export async function acknowledgeConnectorFence(
       [ACCOUNT, old.owner_id, old.epoch],
     );
     if (result.rowCount !== 1) throw unavailable();
-    await db.query(
-      "UPDATE provider_state SET status='disconnected',reconciliation_required=true WHERE account_id=$1",
-      [ACCOUNT],
-    );
+    await recordProviderFault(db, "external-fence-ack");
   } catch {
     throw unavailable();
   }

@@ -85,6 +85,11 @@ try {
     providerId: "ci-conflict",
     text: "synthetic conflicting fixture",
   });
+  await ingestProviderEvent(pool, {
+    ...base,
+    providerId: "ci-conflict",
+    text: "synthetic second conflicting fixture",
+  });
   const states = (
     await pool.query(
       "SELECT DISTINCT state FROM provider_events WHERE thread_id=$1",

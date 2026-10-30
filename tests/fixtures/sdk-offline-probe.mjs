@@ -37,6 +37,8 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     if (context.parentURL === transportUrl && specifier === "./media.js")
       return { url: new URL("../../adapters/zalo/media.ts", import.meta.url).href, shortCircuit: true };
+    if (context.parentURL === new URL("../../adapters/zalo/media.ts", import.meta.url).href && specifier === "../../server/media.js")
+      return { url: new URL("../../server/media.ts", import.meta.url).href, shortCircuit: true };
     return nextResolve(specifier, context);
   },
 });

@@ -8,6 +8,7 @@ import { ingestProviderEvent } from "../../server/provider-store.js";
 import { runWorkerOnce, type Provider } from "../../server/worker.js";
 import { createSdkProvider } from "./provider.js";
 import { createZaloTransport } from "./transport.js";
+import { recordProviderFault } from "../../server/provider-faults.js";
 type TransportOptions = Parameters<typeof createZaloTransport>[0];
 type Facade = TransportOptions["approvedSdk"] & {
   close(): unknown;
@@ -157,10 +158,7 @@ export function createOwnedConnector(options: Options) {
                 [ACCOUNT, owner!.token.ownerId, owner!.token.epoch],
               );
               if (current.rowCount) {
-                await db.query(
-                  "UPDATE provider_state SET status='disconnected',reconciliation_required=true,fault_code=$2 WHERE account_id=$1",
-                  [ACCOUNT, reason],
-                );
+                await recordProviderFault(db, reason);
                 await db.query(
                   "INSERT INTO audit(account_id,action,target_id,metadata) VALUES($1,'connector.gap',$2,$3)",
                   [

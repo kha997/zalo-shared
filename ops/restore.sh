@@ -31,7 +31,9 @@ DELETE FROM sessions;
 UPDATE outbox SET status='unknown' WHERE status IN ('pending','processing');
 UPDATE messages SET status='unknown' WHERE direction='outbound' AND status IN ('pending','processing');
 UPDATE delivery_parts SET status='unknown' WHERE status IN ('pending','processing');
-UPDATE provider_state SET status='disconnected',reconciliation_required=true;
+UPDATE provider_state SET status='disconnected',reconciliation_required=true,
+ fault_code=CASE WHEN gap_version=9223372036854775807 THEN 'version-exhausted' ELSE 'restore-quarantine' END,
+ gap_version=CASE WHEN gap_version<9223372036854775807 THEN gap_version+1 ELSE gap_version END;
 UPDATE connector_ownership SET phase='uncertain',owner_id=coalesce(owner_id,gen_random_uuid()),owner_label=coalesce(owner_label,'restored-quarantine'),uncertain_at=now(),fault_code='restore-quarantine';
 INSERT INTO audit(action,target_id,metadata) VALUES('system.restore_quarantine',current_database(),'{"dispatchEnabled":false}');
 COMMIT;

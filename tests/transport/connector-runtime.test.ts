@@ -303,7 +303,16 @@ test("fault observation blocks dispatch locally before pool acquisition and lock
   gate.resolve({
     async query(text: string) {
       sql.push(text);
-      return { rowCount: 1, rows: [{}] };
+      return {
+        rowCount: 1,
+        rows: [
+          text.includes("current_setting")
+            ? { marker: "active" }
+            : text.includes("UPDATE provider_state")
+              ? { gap_version: "1" }
+              : {},
+        ],
+      };
     },
     release() {},
   });
@@ -311,9 +320,11 @@ test("fault observation blocks dispatch locally before pool acquisition and lock
   assert.equal(sql[0], "BEGIN");
   assert.match(sql[1], /statement_timeout/);
   assert.match(sql[2], /connector_ownership.*FOR SHARE/);
-  assert.match(sql[3], /UPDATE provider_state/);
-  assert.match(sql[4], /INSERT INTO audit/);
-  assert.equal(sql[5], "COMMIT");
+  const faultWrite = sql.findIndex((s) => s.includes("UPDATE provider_state"));
+  assert.ok(faultWrite > 2);
+  assert.match(sql[faultWrite], /gap_version/);
+  assert.match(sql[faultWrite + 1], /INSERT INTO audit/);
+  assert.equal(sql.at(-1), "COMMIT");
   assert.equal(dispatchOwner.admitted, false);
   await runtime.stop();
 });

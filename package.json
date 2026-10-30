@@ -21,13 +21,14 @@
     "test:transport": "node --import tsx --test --test-isolation=none tests/transport/*.test.ts",
     "build:server": "tsc -p tsconfig.server.json",
     "start:worker": "node dist/server/worker.js",
-    "test:sdk": "node --permission --allow-fs-read=./node_modules --allow-fs-read=./package.json --allow-fs-read=./tests/fixtures/sdk-offline-probe.mjs --allow-fs-read=./adapters/zalo/transport.ts --allow-fs-read=./adapters/zalo/media.ts tests/fixtures/sdk-offline-probe.mjs"
+    "test:sdk": "node --permission --allow-fs-read=./node_modules --allow-fs-read=./package.json --allow-fs-read=./tests/fixtures/sdk-offline-probe.mjs --allow-fs-read=./adapters/zalo/transport.ts --allow-fs-read=./adapters/zalo/media.ts --allow-fs-read=./server/media.ts tests/fixtures/sdk-offline-probe.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
     "@fastify/helmet": "^13.0.2",
     "@fastify/rate-limit": "^10.3.0",
     "fastify": "^5.6.0",
+    "ipaddr.js": "2.5.0",
     "pg": "^8.16.3",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

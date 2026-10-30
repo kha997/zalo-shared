@@ -2,6 +2,7 @@ import type pg from "pg";
 import type { OwnerToken } from "./connector-ownership.js";
 import { createHash } from "node:crypto";
 import { ACCOUNT, audit } from "./db.js";
+import { recordProviderFault, MAX_GAP_VERSION } from "./provider-faults.js";
 export interface ProviderEvent {
   threadType: 0 | 1;
   threadId: string;
@@ -204,17 +205,66 @@ export async function ingestProviderEvent(
       ).rows[0];
     const duplicate = !inserted.rowCount;
     if (row.conflict || row.semantic_hash !== semantic) {
-      if (!row.conflict) {
+      const differing = row.semantic_hash !== semantic;
+      const known =
+        !differing ||
+        !!(
+          await db.query(
+            "SELECT 1 FROM provider_event_variants WHERE event_id=$1 AND semantic_hash=$2",
+            [row.id, semantic],
+          )
+        ).rowCount;
+      const newEvidence =
+        differing && !known && row.last_overflow_hash !== semantic;
+      let overflow = row.variant_overflow;
+      if (differing && !known) {
+        const count = (
+          await db.query(
+            "SELECT count(*)::int n FROM provider_event_variants WHERE event_id=$1",
+            [row.id],
+          )
+        ).rows[0].n;
+        if (count < 8) {
+          await db.query(
+            "INSERT INTO provider_event_variants(event_id,semantic_hash,sender_id,kind,text,client_id,provider_timestamp) VALUES($1,$2,$3,$4,$5,$6,$7)",
+            [
+              row.id,
+              semantic,
+              event.senderId,
+              event.kind,
+              event.kind === "text" ? event.text : null,
+              event.clientId ?? null,
+              event.providerTimestamp ?? null,
+            ],
+          );
+        } else {
+          overflow = true;
+          await db.query(
+            `UPDATE provider_events SET variant_overflow=true,overflow_receipts=CASE WHEN overflow_receipts<${MAX_GAP_VERSION} THEN overflow_receipts+1 ELSE overflow_receipts END,last_overflow_hash=$2 WHERE id=$1`,
+            [row.id, semantic],
+          );
+        }
+      }
+      // A version at its bigint ceiling is permanently non-resolvable, not wrapped.
+      if (newEvidence || !row.conflict) {
         await db.query(
-          "UPDATE provider_events SET conflict=true,state='conflict' WHERE id=$1",
+          `UPDATE provider_events SET conflict=true,state='conflict',resolved_at=NULL,resolved_by=NULL,resolution_ref=NULL,
+             variant_overflow=variant_overflow OR resolution_version>=${BigInt(MAX_GAP_VERSION) - 1n},
+             resolution_version=CASE WHEN resolution_version<${MAX_GAP_VERSION} THEN resolution_version+1 ELSE resolution_version END WHERE id=$1`,
           [row.id],
         );
+        await audit(db, null, "provider.event_variant", row.id, {
+          semanticHash: semantic,
+          retained: !overflow,
+        });
+      }
+      if (!row.conflict) {
         await audit(db, null, "provider.event_conflict", row.id);
       }
-      await db.query(
-        "UPDATE provider_state SET reconciliation_required=true,status='disconnected',fault_code='provider_event_conflict' WHERE account_id=$1",
-        [ACCOUNT],
-      );
+      const resolved =
+        !!row.resolved_at && !overflow && !row.variant_evidence_missing;
+      if (newEvidence || !resolved)
+        await recordProviderFault(db, "provider_event_conflict");
     } else if (!duplicate) await project(db, row);
     await db.query(
       "UPDATE provider_state SET last_event_at=now() WHERE account_id=$1",
