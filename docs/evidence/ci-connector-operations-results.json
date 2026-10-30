@@ -1,0 +1,218 @@
+{
+  "sourceCommit": "4dd6f3009ef5f02ff9e0d9ed2145be0dd5b45b93",
+  "sourceTree": "9d3ecf4c0c6ca17948bb14cac85ff7d3ffad9afb",
+  "runId": 41026456993,
+  "url": "https://github.com/kha997/zalo-shared/actions/runs/41026456993",
+  "units": {
+    "passed": 145,
+    "failed": 0
+  },
+  "sdkOfflineGuards": {
+    "passed": 2,
+    "failed": 0
+  },
+  "browser": {
+    "passed": 9,
+    "skipped": 1
+  },
+  "fourStaffRecovery": "PASS: four actual authenticated browser sessions plus admin, private HTTP/PostgreSQL, exact-ID confirmation preserves actor and creates no new send; synthetic provider receipts only",
+  "recovery": "PASS: resolved/admin metadata, unresolved evidence, variant/journal/media/ownership hashes, exhausted version saturation, restart/encrypted fresh restore/runtime audit quarantine",
+  "image": {
+    "sdkAbsentNonroot": "PASS",
+    "highCriticalCount": 0
+  },
+  "measurements": [
+    {
+      "namedConcurrentUsers": 4,
+      "rounds": 3,
+      "requests": 52,
+      "durationMs": 116.43356399999999,
+      "requestsPerSecond": 446.6066159410873,
+      "p50Ms": 5.127962999999966,
+      "p95Ms": 38.35710399999999,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 12,
+      "idempotentRetriesVerified": 12
+    },
+    {
+      "namedConcurrentUsers": 10,
+      "rounds": 3,
+      "requests": 130,
+      "durationMs": 267.78523499999994,
+      "requestsPerSecond": 485.46365896536463,
+      "p50Ms": 14.299922000000038,
+      "p95Ms": 56.25633700000003,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 30,
+      "idempotentRetriesVerified": 30
+    },
+    {
+      "namedConcurrentUsers": 25,
+      "rounds": 3,
+      "requests": 325,
+      "durationMs": 544.0029169999998,
+      "requestsPerSecond": 597.4232671256065,
+      "p50Ms": 24.30427899999995,
+      "p95Ms": 138.30727200000024,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 75,
+      "idempotentRetriesVerified": 75
+    },
+    {
+      "namedConcurrentUsers": 50,
+      "rounds": 3,
+      "requests": 650,
+      "durationMs": 973.4309200000007,
+      "requestsPerSecond": 667.7412712552829,
+      "p50Ms": 42.500058000000536,
+      "p95Ms": 250.68882399999984,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 150,
+      "idempotentRetriesVerified": 150
+    },
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 1017.0046409999995,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    },
+    {
+      "namedConcurrentUsers": 50,
+      "rounds": 50,
+      "requests": 10050,
+      "durationMs": 10407.185558,
+      "requestsPerSecond": 965.678947876025,
+      "p50Ms": 42.32811200000015,
+      "p95Ms": 66.99739099999988,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 2500,
+      "idempotentRetriesVerified": 2500
+    },
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 13436.130950000002,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    },
+    {
+      "namedConcurrentUsers": 100,
+      "rounds": 3,
+      "requests": 1300,
+      "durationMs": 2047.0401150000002,
+      "requestsPerSecond": 635.0632752499821,
+      "p50Ms": 96.64333600000009,
+      "p95Ms": 530.9515149999997,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 300,
+      "idempotentRetriesVerified": 300
+    },
+    {
+      "namedConcurrentUsers": 200,
+      "rounds": 3,
+      "requests": 2600,
+      "durationMs": 4056.6313630000004,
+      "requestsPerSecond": 640.9258735497283,
+      "p50Ms": 146.70180299999993,
+      "p95Ms": 985.484312999999,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 600,
+      "idempotentRetriesVerified": 600
+    },
+    {
+      "namedConcurrentUsers": 500,
+      "rounds": 3,
+      "requests": 6500,
+      "durationMs": 9405.217667000004,
+      "requestsPerSecond": 691.1057489723482,
+      "p50Ms": 409.498818,
+      "p95Ms": 2205.102242000001,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": false,
+      "errors": [],
+      "uniqueMessages": 1500,
+      "idempotentRetriesVerified": 1500
+    },
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 6602.227251999997,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    },
+    {
+      "scanner": "Trivy0.76.1",
+      "highCriticalCount": 0,
+      "fixableHighCriticalCount": 0,
+      "findings": []
+    }
+  ],
+  "priorFailure": {
+    "runId": 41024495394,
+    "sourceCommit": "d08d4d2f38d82e095e6d0edf7b372310625d1a33",
+    "units": 145,
+    "browserPassed": 8,
+    "browserFailed": 1,
+    "reason": "Canonical content and checksum shared a composite element; exact-text assertion failed. Separate canonical paragraph passed next hosted execution.",
+    "laterStages": "SKIPPED, not passes"
+  },
+  "limits": [
+    "No real account/phone, provider-side fencing or CDN observed",
+    "500 synthetic API users fail 2s p95 (~2205ms); no stable 200-seat guarantee",
+    "Inbound encrypted receipt/download worker/private UI not validated by this operator source",
+    "Private activation/real-account consent/soak and production approval still open"
+  ]
+}

@@ -1,4 +1,5 @@
 import type pg from "pg";
+import type { LocatorCipher } from "../../server/locator-cipher.js";
 import {
   acquireConnectorOwnership,
   type OwnershipHandle,
@@ -18,6 +19,9 @@ type Transport = ReturnType<typeof createZaloTransport>;
 interface Options {
   pool: pg.Pool;
   ownerLabel: string;
+  /** Explicit private encryption capability, not provider/download activation. */
+  mediaCipher?: LocatorCipher;
+  maxPendingMedia?: number;
   createFacade(): Facade | Promise<Facade>;
   createTransport?: (
     options: TransportOptions,
@@ -138,10 +142,13 @@ export function createOwnedConnector(options: Options) {
         transport = await (options.createTransport ?? createZaloTransport)({
           ...options.transportOptions,
           approvedSdk: { createApi: approvedSdk },
+          captureMedia: !!options.mediaCipher,
           onInbound: async (event) => {
             await assertCurrent();
             await ingestProviderEvent(options.pool, event, {
               owner: owner!.token,
+              mediaCipher: options.mediaCipher,
+              maxPendingMedia: options.maxPendingMedia,
             });
           },
           onFault: async (reason) => {

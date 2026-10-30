@@ -39,6 +39,8 @@ registerHooks({
       return { url: new URL("../../adapters/zalo/media.ts", import.meta.url).href, shortCircuit: true };
     if (context.parentURL === new URL("../../adapters/zalo/media.ts", import.meta.url).href && specifier === "../../server/media.js")
       return { url: new URL("../../server/media.ts", import.meta.url).href, shortCircuit: true };
+    if (context.parentURL === transportUrl && specifier === "./inbound-media.js")
+      return { url: new URL("../../adapters/zalo/inbound-media.ts", import.meta.url).href, shortCircuit: true };
     return nextResolve(specifier, context);
   },
 });

@@ -24,6 +24,78 @@ const user = (r: any) => ({
   role: r.role,
   active: r.active,
 });
+const mediaErrorCodes = new Set([
+  "policy",
+  "address",
+  "timeout",
+  "response",
+  "content",
+  "network",
+  "expired",
+  "version-exhausted",
+  "descriptor",
+  "retry-limit",
+  "key-unavailable",
+  "storage-budget",
+  "unsupported-echo",
+  "unavailable",
+]);
+/** Safe read boundary: never serialize locator envelopes, hashes or unchecked error text. */
+export function safeInboundMedia(rows: unknown) {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .slice(0, 5)
+    .filter(
+      (r) => r && typeof r.id === "string" && uuid.safeParse(r.id).success,
+    )
+    .map((r) => {
+      const cleanName =
+        typeof r.name === "string" &&
+        r.name.trim() &&
+        r.name.length <= 200 &&
+        Buffer.from(r.name).toString("utf8") === r.name &&
+        !/[\\/?:#@%=&\x00-\x1f\x7f]/.test(r.name.normalize("NFKC"));
+      const attachmentId =
+        typeof r.attachment_id === "string" &&
+        uuid.safeParse(r.attachment_id).success
+          ? r.attachment_id
+          : null;
+      const validVersion =
+        typeof r.version === "string" &&
+        /^(0|[1-9][0-9]{0,18})$/.test(r.version) &&
+        BigInt(r.version) <= 9223372036854775807n;
+      const status =
+        ["pending", "processing", "held", "ready", "unavailable"].includes(
+          r.status,
+        ) &&
+        validVersion &&
+        (r.status !== "ready" || attachmentId)
+          ? r.status
+          : "unavailable";
+      return {
+        id: r.id,
+        name: cleanName ? r.name : "Tệp đính kèm",
+        category: r.category === "photo" ? "photo" : "file",
+        status,
+        version: validVersion ? r.version : "0",
+        errorCode:
+          r.error_code == null
+            ? null
+            : mediaErrorCodes.has(r.error_code)
+              ? r.error_code
+              : "unavailable",
+        attachmentId,
+      };
+    });
+}
+const mediaRowsSql = (
+  account: "$2" | "$3" | "$4",
+) => `coalesce((SELECT jsonb_agg(jsonb_build_object('id',x.id,'name',x.name,'category',x.category,'status',x.status,'version',x.version::text,'error_code',x.error_code,'attachment_id',x.valid_attachment_id,'generated_placeholder',x.generated_placeholder) ORDER BY x.item_index,x.id) FROM (
+ SELECT j.id,j.name,j.category,j.status,j.version,j.error_code,j.item_index,a.id valid_attachment_id,(e.kind='unsupported' AND jsonb_array_length(e.media_descriptor)>0 AND m.actor_id IS NULL AND e.provider_id=m.provider_id) generated_placeholder FROM provider_media_jobs j
+ JOIN provider_events e ON e.id=j.event_id AND e.account_id=j.account_id AND e.message_id=m.id AND e.conversation_id=m.conversation_id
+ LEFT JOIN attachments a ON a.id=j.attachment_id AND a.message_id=m.id AND a.account_id=${account}
+ WHERE j.message_id=m.id AND j.account_id=${account} ORDER BY j.item_index,j.id LIMIT 5
+) x),'[]'::jsonb) AS media_rows`;
 export async function buildApp({
   pool,
   config,
@@ -168,19 +240,21 @@ export async function buildApp({
   async function message(db: any, id: string) {
     const r = (
       await db.query(
-        `SELECT m.*,to_char(m.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_precise FROM messages m WHERE id=$1`,
-        [id],
+        `SELECT m.*,to_char(m.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_precise,${mediaRowsSql("$2")} FROM messages m JOIN conversations c ON c.id=m.conversation_id WHERE m.id=$1 AND c.account_id=$2`,
+        [id, ACCOUNT],
       )
     ).rows[0];
+    if (!r) fail(404, "Message not found");
     const a = (
       await db.query(
-        "SELECT id,name,mime,octet_length(data) AS size FROM attachments WHERE message_id=$1 ORDER BY created_at,id",
-        [id],
+        "SELECT id,name,mime,octet_length(data) AS size FROM attachments WHERE message_id=$1 AND account_id=$2 ORDER BY created_at,id",
+        [id, ACCOUNT],
       )
     ).rows;
     return messageView(r, a);
   }
   function messageView(r: any, a: any[]) {
+    const media = safeInboundMedia(r.media_rows);
     return {
       id: r.id,
       conversationId: r.conversation_id,
@@ -191,6 +265,8 @@ export async function buildApp({
       providerId: r.provider_id,
       createdAt:
         r.created_at_precise ?? r.created_at.toISOString().replace("Z", "000Z"),
+      media,
+      mediaPlaceholder: r.text === "[Unsupported Zalo message]" && media.length > 0 && !r.actor_id && Array.isArray(r.media_rows) && r.media_rows.some((item: any) => item.generated_placeholder === true),
       attachments: a.map((x: any) => ({
         ...x,
         url: `/api/attachments/${x.id}`,
@@ -458,6 +534,7 @@ export async function buildApp({
       req.staff.id,
     ),
   );
+  app.get("/api/messages/:id", async (req: any) => message(pool, uuid.parse(req.params.id)));
   app.get("/api/conversations/:id/messages", async (req: any) => {
     await conversation(pool, req.params.id);
     const q = z
@@ -475,11 +552,11 @@ export async function buildApp({
     }
     const r = await pool.query(
       `SELECT m.*,to_char(m.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_precise,
-       coalesce((SELECT jsonb_agg(jsonb_build_object('id',a.id,'name',a.name,'mime',a.mime,'size',octet_length(a.data)) ORDER BY a.created_at,a.id) FROM attachments a WHERE a.message_id=m.id),'[]'::jsonb) AS attachment_rows
+       coalesce((SELECT jsonb_agg(jsonb_build_object('id',a.id,'name',a.name,'mime',a.mime,'size',octet_length(a.data)) ORDER BY a.created_at,a.id) FROM attachments a WHERE a.message_id=m.id AND a.account_id=${q.before ? "$4" : "$3"}),'[]'::jsonb) AS attachment_rows,${mediaRowsSql(q.before ? "$4" : "$3")}
        FROM messages m WHERE conversation_id=$1 ${q.before ? "AND (created_at,id)<(SELECT created_at,id FROM messages WHERE id=$3 AND conversation_id=$1)" : ""} ORDER BY created_at DESC,id DESC LIMIT $2`,
       q.before
-        ? [req.params.id, q.limit + 1, q.before]
-        : [req.params.id, q.limit + 1],
+        ? [req.params.id, q.limit + 1, q.before, ACCOUNT]
+        : [req.params.id, q.limit + 1, ACCOUNT],
     );
     const page = r.rows.slice(0, q.limit);
     return {

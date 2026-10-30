@@ -5,7 +5,7 @@ import { normalizeMediaCandidate } from "../../adapters/zalo/inbound-media.js";
 
 const content = {
   href: "https://media.example.test/file?signature=synthetic-only",
-  title: "../photo.png",
+  title: "photo.png",
 };
 const frame = (msgType = "chat.photo", value: unknown = content) => ({
   data: { msgType, content: value },
@@ -74,5 +74,32 @@ test("candidate parser rejects unsupported schemas, albums, invalid names and no
       },
     }),
     null,
+  );
+});
+test("candidate names cannot copy signed locator, query, fragment or credential text into plaintext metadata", () => {
+  const url =
+    "https://cdn.example.test/private.pdf?token=SYNTHETIC-LOCATOR-TOKEN";
+  for (const title of [
+    url,
+    "private.pdf?token=SYNTHETIC-LOCATOR-TOKEN",
+    "private.pdf#SYNTHETIC-LOCATOR-TOKEN",
+    "user:password@host.pdf",
+    "private.pdf&token=synthetic",
+    "https%3A%2F%2Fcdn.example.test%2Fprivate.pdf%3Ftoken%3Dsynthetic",
+    "//cdn.example.test/private.pdf",
+    "folder/private.pdf",
+    "private.pdf？token＝synthetic",
+    "user＠host.pdf",
+  ]) {
+    assert.equal(
+      normalizeMediaCandidate(frame("share.file", { href: url, title })),
+      null,
+    );
+  }
+  assert.equal(
+    normalizeMediaCandidate(
+      frame("share.file", { href: url, title: "Hóa đơn (1).pdf" }),
+    )![0].name,
+    "Hóa đơn (1).pdf",
   );
 });

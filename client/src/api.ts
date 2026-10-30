@@ -23,6 +23,11 @@ export type Attachment = {
   size: number;
   url: string;
 };
+export type InboundMedia = {
+  id: string; name: string; category: "photo" | "file";
+  status: "pending" | "processing" | "held" | "ready" | "unavailable";
+  version: string; errorCode: string | null; attachmentId: string | null;
+};
 export type Message = {
   id: string;
   conversationId: string;
@@ -32,6 +37,8 @@ export type Message = {
   status: "received" | "pending" | "processing" | "sent" | "failed" | "unknown";
   createdAt: string;
   attachments: Attachment[];
+  media?: InboundMedia[];
+  mediaPlaceholder?: boolean;
 };
 export type Provider = {
   mode: "mock" | "disabled";

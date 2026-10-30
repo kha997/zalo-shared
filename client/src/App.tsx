@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import ConnectorOperations from "./ConnectorOperations";
+import InboundMediaStatus from "./InboundMediaStatus";
 import {
   api,
   ApiError,
@@ -899,7 +900,7 @@ export default function App() {
                               "Đội ngũ"}
                         </div>
                         <div className="bubble">
-                          {m.text && <p>{m.text}</p>}
+                          {m.text && !m.mediaPlaceholder && <p>{m.text}</p>}
                           {m.attachments.map((a) => (
                             <a
                               className="attachment"
@@ -913,6 +914,15 @@ export default function App() {
                             </a>
                           ))}
                         </div>
+                        <InboundMediaStatus
+                          key={`${user.id}:${selected}:${m.id}`}
+                          message={m}
+                          onRefresh={(fresh) => setMessages((rows) => rows.map((row) =>
+                            row.id === fresh.id && row.conversationId === fresh.conversationId
+                              ? { ...row, attachments: fresh.attachments, media: fresh.media, mediaPlaceholder: fresh.mediaPlaceholder }
+                              : row,
+                          ))}
+                        />
                         <div className={"message-meta " + m.status}>
                           <time>{time(m.createdAt)}</time>
                           <span>{statusLabel[m.status]}</span>

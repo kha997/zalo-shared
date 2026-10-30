@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS provider_events(
  received_at timestamptz NOT NULL DEFAULT now(),
  UNIQUE(account_id,thread_type,thread_id,direction,provider_id)
 );
+ALTER TABLE provider_events ADD COLUMN IF NOT EXISTS media_descriptor jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(media_descriptor)='array' AND jsonb_array_length(media_descriptor)<=5);
 CREATE INDEX IF NOT EXISTS provider_events_held ON provider_events(conversation_id,state);
 ALTER TABLE provider_events ADD COLUMN IF NOT EXISTS resolution_version bigint NOT NULL DEFAULT 0 CHECK(resolution_version>=0);
 ALTER TABLE provider_events ADD COLUMN IF NOT EXISTS resolved_at timestamptz;
@@ -33,6 +34,19 @@ CREATE TABLE IF NOT EXISTS provider_event_variants(
  text text CHECK(length(text)<=10000),client_id varchar(200),provider_timestamp varchar(64),
  received_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(event_id,semantic_hash)
 );
+ALTER TABLE provider_event_variants ADD COLUMN IF NOT EXISTS media_descriptor jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(media_descriptor)='array' AND jsonb_array_length(media_descriptor)<=5);
+CREATE TABLE IF NOT EXISTS provider_media_jobs(
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),account_id uuid NOT NULL,event_id uuid NOT NULL REFERENCES provider_events ON DELETE CASCADE,
+ item_index integer NOT NULL CHECK(item_index BETWEEN 0 AND 4),category text NOT NULL CHECK(category IN ('photo','file')),
+ name varchar(200) NOT NULL,locator_fingerprint char(64) NOT NULL CHECK(locator_fingerprint ~ '^[a-f0-9]{64}$'),
+ locator_envelope jsonb CHECK(locator_envelope IS NULL OR (jsonb_typeof(locator_envelope)='object' AND octet_length(locator_envelope::text)<=16384)),
+ status text NOT NULL CHECK(status IN ('held','pending','processing','ready','unavailable')),
+ message_id uuid REFERENCES messages ON DELETE CASCADE,attachment_id uuid REFERENCES attachments,
+ attempts integer NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 3),version bigint NOT NULL DEFAULT 0 CHECK(version>=0),
+ error_code varchar(64),created_at timestamptz NOT NULL DEFAULT now(),claimed_at timestamptz,next_attempt_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(event_id,item_index),CHECK(status<>'ready' OR (attachment_id IS NOT NULL AND locator_envelope IS NULL))
+);
+CREATE INDEX IF NOT EXISTS provider_media_jobs_pending ON provider_media_jobs(account_id,status,next_attempt_at);
 -- Older conflicts discarded their variants. Never imply that a later replay recovered all evidence.
 UPDATE provider_events e SET variant_evidence_missing=true WHERE conflict AND resolution_version=0
  AND NOT EXISTS(SELECT 1 FROM provider_event_variants v WHERE v.event_id=e.id);

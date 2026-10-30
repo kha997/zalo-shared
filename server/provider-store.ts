@@ -1,6 +1,13 @@
 import type pg from "pg";
 import type { OwnerToken } from "./connector-ownership.js";
-import { createHash } from "node:crypto";
+import {
+  prepareEventMedia,
+  enqueueEventMedia,
+  linkEventMedia,
+  type MediaCandidate,
+} from "./media-jobs.js";
+import type { LocatorCipher } from "./locator-cipher.js";
+import { createHash, randomUUID } from "node:crypto";
 import { ACCOUNT, audit } from "./db.js";
 import { recordProviderFault, MAX_GAP_VERSION } from "./provider-faults.js";
 export interface ProviderEvent {
@@ -13,6 +20,8 @@ export interface ProviderEvent {
   text?: string;
   clientId?: string;
   providerTimestamp?: string;
+  /** Private receipt payload, enabled only with an explicitly injected locator cipher. */
+  media?: ReadonlyArray<MediaCandidate>;
 }
 function validate(e: ProviderEvent) {
   const bounded = (s: unknown, n: number, required = false) =>
@@ -103,11 +112,16 @@ async function project(db: pg.PoolClient, e: any) {
     "UPDATE provider_events SET state='linked',message_id=$2 WHERE id=$1",
     [e.id, mid],
   );
+  if (e.media_descriptor?.length) await linkEventMedia(db, e.id);
 }
 export async function ingestProviderEvent(
   pool: pg.Pool,
   event: ProviderEvent,
-  context?: { owner: OwnerToken },
+  context?: {
+    owner?: OwnerToken;
+    mediaCipher?: LocatorCipher;
+    maxPendingMedia?: number;
+  },
 ): Promise<{
   eventId: string;
   messageId: string | null;
@@ -116,8 +130,35 @@ export async function ingestProviderEvent(
   conflict: boolean;
 }> {
   validate(event);
-  if (context) {
-    const owner = context.owner;
+  const media =
+    event.media === undefined
+      ? undefined
+      : prepareEventMedia(event.media, context?.mediaCipher);
+  if (
+    media &&
+    (event.kind !== "unsupported" ||
+      (context?.maxPendingMedia !== undefined &&
+        (!Number.isInteger(context.maxPendingMedia) ||
+          context.maxPendingMedia < 1 ||
+          context.maxPendingMedia > 10000)))
+  )
+    throw new Error("Private media receipt unavailable");
+  const hasOwner =
+    context !== undefined &&
+    context !== null &&
+    typeof context === "object" &&
+    !Array.isArray(context) &&
+    Object.hasOwn(context, "owner");
+  if (
+    context !== undefined &&
+    (!context ||
+      typeof context !== "object" ||
+      Array.isArray(context) ||
+      (!hasOwner && !media))
+  )
+    throw new Error("Connector ownership unavailable");
+  if (hasOwner) {
+    const owner = context!.owner;
     if (
       !owner ||
       owner.accountId !== ACCOUNT ||
@@ -139,14 +180,15 @@ export async function ingestProviderEvent(
         event.kind === "text" ? event.text : null,
         event.clientId ?? null,
         event.providerTimestamp ?? null,
+        ...(media ? [media.descriptors] : []),
       ]),
     )
     .digest("hex");
   const db = await pool.connect();
   try {
     await db.query("BEGIN");
-    if (context) {
-      const owner = context.owner;
+    if (hasOwner) {
+      const owner = context!.owner;
       if (
         !owner ||
         owner.accountId !== ACCOUNT ||
@@ -173,7 +215,7 @@ export async function ingestProviderEvent(
     ).rows[0].id;
     await lockConversation(db, cid);
     const inserted = await db.query(
-      `INSERT INTO provider_events(account_id,conversation_id,thread_type,thread_id,direction,provider_id,sender_id,client_id,provider_timestamp,kind,text,semantic_hash,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'held') ON CONFLICT DO NOTHING RETURNING *`,
+      `INSERT INTO provider_events(account_id,conversation_id,thread_type,thread_id,direction,provider_id,sender_id,client_id,provider_timestamp,kind,text,semantic_hash,state,id,media_descriptor) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'held',$13,$14) ON CONFLICT DO NOTHING RETURNING *`,
       [
         ACCOUNT,
         cid,
@@ -187,6 +229,8 @@ export async function ingestProviderEvent(
         event.kind,
         event.kind === "text" ? event.text : null,
         semantic,
+        randomUUID(),
+        JSON.stringify(media?.descriptors ?? []),
       ],
     );
     const row =
@@ -204,6 +248,8 @@ export async function ingestProviderEvent(
         )
       ).rows[0];
     const duplicate = !inserted.rowCount;
+    if (!duplicate && media)
+      await enqueueEventMedia(db, row.id, media, context?.maxPendingMedia);
     if (row.conflict || row.semantic_hash !== semantic) {
       const differing = row.semantic_hash !== semantic;
       const known =
@@ -226,7 +272,7 @@ export async function ingestProviderEvent(
         ).rows[0].n;
         if (count < 8) {
           await db.query(
-            "INSERT INTO provider_event_variants(event_id,semantic_hash,sender_id,kind,text,client_id,provider_timestamp) VALUES($1,$2,$3,$4,$5,$6,$7)",
+            "INSERT INTO provider_event_variants(event_id,semantic_hash,sender_id,kind,text,client_id,provider_timestamp,media_descriptor) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
             [
               row.id,
               semantic,
@@ -235,6 +281,7 @@ export async function ingestProviderEvent(
               event.kind === "text" ? event.text : null,
               event.clientId ?? null,
               event.providerTimestamp ?? null,
+              JSON.stringify(media?.descriptors ?? []),
             ],
           );
         } else {
@@ -263,8 +310,13 @@ export async function ingestProviderEvent(
       }
       const resolved =
         !!row.resolved_at && !overflow && !row.variant_evidence_missing;
-      if (newEvidence || !resolved)
+      if (newEvidence || !resolved) {
+        await db.query(
+          "UPDATE provider_media_jobs SET status='held',version=version+1 WHERE event_id=$1 AND status IN ('pending','processing')",
+          [row.id],
+        );
         await recordProviderFault(db, "provider_event_conflict");
+      } else if (row.media_descriptor?.length) await linkEventMedia(db, row.id);
     } else if (!duplicate) await project(db, row);
     await db.query(
       "UPDATE provider_state SET last_event_at=now() WHERE account_id=$1",

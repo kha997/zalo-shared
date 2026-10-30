@@ -1,3 +1,4 @@
+import { normalizeMediaCandidate } from "./inbound-media.js";
 import type { EventEmitter } from "node:events";
 import { prepareMedia, type MediaInput } from "./media.js";
 
@@ -33,6 +34,8 @@ interface Options {
   handshakeTimeoutMs?: number;
   maxPendingInbound?: number;
   requireConnectedEvent?: boolean;
+  /** Private candidate capture requires an upstream encrypted receipt consumer. Default false. */
+  captureMedia?: boolean;
   onInbound?: (
     message: NonNullable<ReturnType<typeof normalizeInbound>>,
   ) => void | Promise<void>;
@@ -53,7 +56,7 @@ const boundedId = (x: unknown, max = 200): x is string =>
   x.length <= max &&
   !x.includes("\0");
 
-export function normalizeInbound(raw: unknown) {
+export function normalizeInbound(raw: unknown, captureMedia = false) {
   const m = record(raw),
     d = record(m?.data);
   if (
@@ -81,9 +84,10 @@ export function normalizeInbound(raw: unknown) {
     ...(boundedId(d.cliMsgId) ? { clientId: d.cliMsgId } : {}),
     ...(boundedId(d.ts, 64) ? { providerTimestamp: d.ts } : {}),
   };
+  const media = captureMedia === true ? normalizeMediaCandidate(raw) : null;
   return d.msgType === "webchat" && typeof d.content === "string"
     ? { ...base, kind: "text" as const, text: d.content }
-    : { ...base, kind: "unsupported" as const };
+    : { ...base, kind: "unsupported" as const, ...(media ? { media } : {}) };
 }
 
 /** Injected transport only: no SDK import or default account authentication. */
@@ -254,7 +258,7 @@ export function createZaloTransport(options: Options) {
     };
     const inbound = (raw: unknown) => {
       if (!valid()) return;
-      const message = normalizeInbound(raw);
+      const message = normalizeInbound(raw, options.captureMedia === true);
       if (!message) {
         failIngress("invalid-inbound");
         return;

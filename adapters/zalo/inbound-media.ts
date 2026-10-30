@@ -34,6 +34,9 @@ export function normalizeMediaCandidate(
       typeof title !== "string" ||
       !title.trim() ||
       title.length > 200 ||
+      // A title is a filename, never a second locator or credential container.
+      // Reject ambiguous syntax rather than stripping a signed query/path.
+      /[:?&#=@%/\\]/.test(title.normalize("NFKC")) ||
       Buffer.from(title, "utf8").toString("utf8") !== title ||
       /[\x00-\x1f\x7f]/.test(title)
     )
@@ -57,7 +60,7 @@ export function normalizeMediaCandidate(
       parsed.port
     )
       return null;
-    const name = title.split(/[\\/]/).pop()!.trim();
+    const name = title.trim();
     if (!name || name === "." || name === "..") return null;
     const result = Object.freeze({
       index: 0,

@@ -20,3 +20,5 @@ Authenticated recovery routes are being completed independently. This test must 
 ## First hosted execution and follow-up
 
 CI41024495394/sourced08d4d2f passed145/145units,2/2SDKguards and8browser cases, but the integratedfourstaff case failed at exact canonical-body visibility. Source inspection identified a likely selector cause: the canonical body shared a dd text node with the nested checksum, making the composite element differ from the exact expected text. Rendering the body in its own paragraph separates evidence content from the hash without loosening the assertion. A local no-network Chromium DOM probe could not launch (setsockopt EPERM); it supplies no execution confirmation. The corrected DOM still requires hosted re-execution. Load/recovery/image stages were skipped after the browser failure and are not passed for this source.
+
+HostedfollowupCI41026456993/source4dd6f300 passed the integratedfourstaffbrowserflow, confirming the canonical paragraph correction; overall145units/2SDKguards/9browser cases (1skip), load/recovery/image gates passed. This supplies actualbrowser/privateHTTP/SQL evidence withsyntheticproviderfixtures, not realZalo/phone.

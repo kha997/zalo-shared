@@ -2,7 +2,15 @@
 
 **NOT PRODUCTION-READY. No live Zalo login, production deployment, real customer data or public application endpoint has been used.** The repository is public; runtime credentials and unlicensed upstream application snapshots are excluded.
 
-## Latest verified source — 2026-10-30
+## Latest verified source — operator acceptance, 2026-10-30
+
+[Source4dd6f300](https://github.com/kha997/zalo-shared/commit/4dd6f3009ef5f02ff9e0d9ed2145be0dd5b45b93), [CI41026456993](https://github.com/kha997/zalo-shared/actions/runs/41026456993):145/145units,2/2guardedSDK cases,9browser cases (1skip), including four actual authenticated staff browsers and administrator recovery through private HTTP/PostgreSQL. Exact-ID confirmation preserves original staff attribution without another send. Conflict/gap/fence role/CSRF/session/CAS tests and positive resolved/admin/MAX-version restart/restore fixtures passed. Monitoring and SDK-free image gates passed, Trivy0HIGH/CRITICAL at scan time. [Retained measurements](evidence/ci-connector-operations-results.json).
+
+50×50rounds10,050requests p95≈67ms;100/200/500-user p95≈531/985/2205ms.500FAILS the2s target, zero request errors and all mock drains passed. Runner variability prevents a stable200-seat guarantee; these remain short synthetic API workloads.
+
+The first operator run passed145units but failed one browser assertion; the corrected canonical text/checksum DOM passed the rerun. Skipped recovery/image stages in that failed run were not passes. Inbound receipt/jobs/private file UI are now under development and are NOT validated by this source. Actual Zalo/phone/CDN, private activation and soak remain open.
+
+## Previous verified foundation — 2026-10-30
 
 [Source945d30f3](https://github.com/kha997/zalo-shared/commit/945d30f34289c00fdc4b7aeb292cfad35972f9b6), [CI40997300485](https://github.com/kha997/zalo-shared/actions/runs/40997300485):136/136units,2/2guardedSDK cases,6browser cases (1skip), nonempty conflict variants/journal/media/ownership restart and encrypted restore, monitoring and SDK-free image gates PASS. Trivy0HIGH/CRITICAL at scan time. [Retained measurements](evidence/ci-inbound-foundations-results.json).50×50rounds p95≈109ms;100/200/500-user p95≈790/1872/3855ms;500FAILS the2s target. Zero request errors and all mock drains passed.200varies across runs; no staff-seat/provider capacity guarantee.
 
