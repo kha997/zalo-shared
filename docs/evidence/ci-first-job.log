@@ -1,0 +1,27 @@
+Run: https://github.com/kha997/zalo-shared/actions/runs/40681629226
+Commit: 29c9c7422ce5719e9c39986934edd08ef3c24857
+IMPORTANT: workflow result success was misleading: upstream test failure was hidden by tee/default shell. 26 passed, 2 failed. This run is not accepted as a green full suite.
+2026-10-28T11:39:40.2647454Z shell: /usr/bin/bash -e {0}
+2026-10-28T11:39:43.4000533Z shell: /usr/bin/bash -e {0}
+2026-10-28T11:39:44.7081309Z shell: /usr/bin/bash -e {0}
+2026-10-28T11:39:49.4027746Z shell: /usr/bin/bash -e {0}
+2026-10-28T11:39:57.1689955Z ℹ tests 28
+2026-10-28T11:39:57.1691252Z ℹ pass 26
+2026-10-28T11:39:57.1691645Z ℹ fail 2
+2026-10-28T11:39:57.1705921Z ✖ failing tests:
+2026-10-28T11:39:57.1708092Z   AssertionError [ERR_ASSERTION]: pagination must not drop sub-millisecond messages
+2026-10-28T11:39:57.1708719Z   13 !== 100
+2026-10-28T11:39:57.1715338Z   AssertionError [ERR_ASSERTION]: connected backlog should drain; idle polling delay must not limit every job
+2026-10-28T11:39:57.1716005Z   8 !== 12
+2026-10-28T11:39:57.2115010Z shell: /usr/bin/bash -e {0}
+2026-10-28T11:40:17.1796171Z shell: /usr/bin/bash -e {0}
+2026-10-28T11:40:18.0088144Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-28T11:40:25.4187291Z {"namedConcurrentUsers":4,"rounds":3,"requests":52,"durationMs":189.805697,"requestsPerSecond":273.9643794780301,"p50Ms":9.509856000000013,"p95Ms":66.71439299999997,"engineeringTarget":{"p95Ms":2000,"errorCount":0,"scope":"short local API workload; not a production SLA"},"engineeringTargetMet":true,"errors":[],"uniqueMessages":12,"idempotentRetriesVerified":12}
+2026-10-28T11:40:26.7832728Z {"namedConcurrentUsers":10,"rounds":3,"requests":130,"durationMs":409.933182,"requestsPerSecond":317.1248528010109,"p50Ms":20.396756000000096,"p95Ms":80.36835299999984,"engineeringTarget":{"p95Ms":2000,"errorCount":0,"scope":"short local API workload; not a production SLA"},"engineeringTargetMet":true,"errors":[],"uniqueMessages":30,"idempotentRetriesVerified":30}
+2026-10-28T11:40:29.1178247Z {"namedConcurrentUsers":25,"rounds":3,"requests":325,"durationMs":909.8166799999999,"requestsPerSecond":357.2148182642684,"p50Ms":43.951942999999574,"p95Ms":207.06277799999998,"engineeringTarget":{"p95Ms":2000,"errorCount":0,"scope":"short local API workload; not a production SLA"},"engineeringTargetMet":true,"errors":[],"uniqueMessages":75,"idempotentRetriesVerified":75}
+2026-10-28T11:40:33.5867482Z {"namedConcurrentUsers":50,"rounds":3,"requests":650,"durationMs":1649.7019990000008,"requestsPerSecond":394.0105548723407,"p50Ms":71.36734099999921,"p95Ms":415.2507290000003,"engineeringTarget":{"p95Ms":2000,"errorCount":0,"scope":"short local API workload; not a production SLA"},"engineeringTargetMet":true,"errors":[],"uniqueMessages":150,"idempotentRetriesVerified":150}
+2026-10-28T11:40:33.8933284Z shell: /usr/bin/bash -e {0}
+2026-10-28T11:40:37.2478188Z Restore elapsed seconds: 1
+2026-10-28T11:40:37.2900887Z docker exec zalo-ci-smoke node -e 'if(process.getuid()===0)process.exit(1);fetch("http://127.0.0.1:3100/health/ready").then(r=>{if(!r.ok)process.exit(1);console.log("nonroot/private readiness PASS")})'
+2026-10-28T11:40:37.2921281Z shell: /usr/bin/bash -e {0}
+2026-10-28T11:40:55.2859573Z nonroot/private readiness PASS

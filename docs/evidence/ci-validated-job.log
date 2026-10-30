@@ -1,0 +1,31 @@
+Run https://github.com/kha997/zalo-shared/actions/runs/40687394289
+Commit a74268c95e8eda5536d5f6429cf21cb62fa2b698
+2026-10-28T12:23:49.5323731Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-28T12:23:51.0260475Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-28T12:23:51.3548337Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-28T12:23:54.5634476Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-28T12:23:58.6510288Z ℹ tests 38
+2026-10-28T12:23:58.6510751Z ℹ pass 38
+2026-10-28T12:23:58.6511282Z ℹ fail 0
+2026-10-28T12:23:58.6511752Z ℹ skipped 0
+2026-10-28T12:23:58.6971928Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-28T12:24:16.4567008Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-28T12:24:17.0335987Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-28T12:24:31.4385130Z   1 skipped
+2026-10-28T12:24:31.4385449Z   6 passed (12.9s)
+2026-10-28T12:24:32.0053640Z {"namedConcurrentUsers":4,"rounds":3,"requests":52,"durationMs":118.070067,"requestsPerSecond":440.4164520377548,"p50Ms":5.466136000000006,"p95Ms":40.347680999999966,"engineeringTarget":{"p95Ms":2000,"errorCount":0,"scope":"short local API workload; not a production SLA"},"engineeringTargetMet":true,"errors":[],"uniqueMessages":12,"idempotentRetriesVerified":12}
+2026-10-28T12:24:32.6701409Z {"namedConcurrentUsers":10,"rounds":3,"requests":130,"durationMs":247.48160100000007,"requestsPerSecond":525.2915751098602,"p50Ms":11.755377999999837,"p95Ms":56.795324999999934,"engineeringTarget":{"p95Ms":2000,"errorCount":0,"scope":"short local API workload; not a production SLA"},"engineeringTargetMet":true,"errors":[],"uniqueMessages":30,"idempotentRetriesVerified":30}
+2026-10-28T12:24:34.2963542Z {"namedConcurrentUsers":25,"rounds":3,"requests":325,"durationMs":625.2996909999997,"requestsPerSecond":519.75077659202,"p50Ms":30.41320199999973,"p95Ms":177.25685199999998,"engineeringTarget":{"p95Ms":2000,"errorCount":0,"scope":"short local API workload; not a production SLA"},"engineeringTargetMet":true,"errors":[],"uniqueMessages":75,"idempotentRetriesVerified":75}
+2026-10-28T12:24:37.3567500Z {"namedConcurrentUsers":50,"rounds":3,"requests":650,"durationMs":1110.5414289999999,"requestsPerSecond":585.3000914925796,"p50Ms":47.89242099999956,"p95Ms":247.98514200000045,"engineeringTarget":{"p95Ms":2000,"errorCount":0,"scope":"short local API workload; not a production SLA"},"engineeringTargetMet":true,"errors":[],"uniqueMessages":150,"idempotentRetriesVerified":150}
+2026-10-28T12:24:37.8672875Z {"mockDispatchDrain":{"status":"PASS","waitMs":510.50155599999925,"pending":0,"unknown":0,"failed":0}}
+2026-10-28T12:24:52.7695035Z {"namedConcurrentUsers":50,"rounds":50,"requests":10050,"durationMs":12032.808296,"requestsPerSecond":835.2164974938449,"p50Ms":50.060152000000016,"p95Ms":86.28720599999906,"engineeringTarget":{"p95Ms":2000,"errorCount":0,"scope":"short local API workload; not a production SLA"},"engineeringTargetMet":true,"errors":[],"uniqueMessages":2500,"idempotentRetriesVerified":2500}
+2026-10-28T12:25:01.9007685Z {"mockDispatchDrain":{"status":"PASS","waitMs":9131.333047,"pending":0,"unknown":0,"failed":0}}
+2026-10-28T12:25:02.3450690Z echo 'Unclean database restart: committed content fingerprints PASS'
+2026-10-28T12:25:02.3467670Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-28T12:25:04.4785857Z Unclean database restart: committed content fingerprints PASS
+2026-10-28T12:25:04.4881160Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-28T12:25:07.4102740Z Restore elapsed seconds: 0
+2026-10-28T12:25:07.4566753Z Restore quarantine and runtime audit privilege assertions PASS
+2026-10-28T12:25:07.4643867Z docker exec zalo-ci-smoke node -e 'if(process.getuid()===0)process.exit(1);fetch("http://127.0.0.1:3100/health/ready").then(r=>{if(!r.ok)process.exit(1);console.log("nonroot/private readiness PASS")})'
+2026-10-28T12:25:07.4660239Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-10-28T12:25:22.9280560Z nonroot/private readiness PASS

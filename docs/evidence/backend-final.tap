@@ -1,0 +1,15 @@
+✔ transactional authenticated inbox and durable dispatch (2822.858445ms)
+✔ configuration rejects live provider and public HTTP (3.208001ms)
+✔ ambiguous delivery is quarantined without automatic retry (357.890228ms)
+✔ audit prohibits update, delete and truncate even for ordinary owner SQL (364.259801ms)
+✔ pending uploads have a concurrency-safe per-user quota (1323.514209ms)
+✔ protected metrics include request duration and pending age without personal labels (176.986833ms)
+✔ serves only enumerated public build files, never arbitrary paths (355.070254ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9042.09554

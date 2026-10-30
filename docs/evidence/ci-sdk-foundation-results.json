@@ -1,0 +1,228 @@
+{
+  "commit": "f816705298db1f011ee91bef8a37012d26c9e6dc",
+  "tree": "d109707409509962a07cddbfe242c548d9c47ea4",
+  "run": "https://github.com/kha997/zalo-shared/actions/runs/40751604115",
+  "scope": "SDK development-only offline foundation and simulator application; no real login/QR/account/phone/customer data",
+  "units": {
+    "passed": 53,
+    "failed": 0
+  },
+  "actualSdkGuards": {
+    "passed": 2,
+    "failed": 0,
+    "scope": "actual ESM/CJS imports, Zalo constructor and message models under guarded network and Node permission restrictions; no login"
+  },
+  "browser": {
+    "passed": 6,
+    "placeholderSkipped": 1,
+    "scope": "includes4 independent browser contexts, not4 physical workstations"
+  },
+  "npmAdvisories": {
+    "info": 0,
+    "low": 0,
+    "moderate": 0,
+    "high": 0,
+    "critical": 0,
+    "total": 0
+  },
+  "npmRegistrySignatures": {
+    "invalid": [],
+    "missing": []
+  },
+  "signatureLimits": "npm audit signatures exit0 with no invalid/missing entries; package counts and source-to-binary equivalence are not asserted",
+  "sdkAbsentFromProductionImage": "PASS: explicit filesystem assertion after production prune",
+  "recovery": {
+    "workerSigkill": "PASS",
+    "uncleanPostgresRestart": "PASS",
+    "encryptedQuarantinedRestore": "PASS"
+  },
+  "monitoringRuleTests": "PASS",
+  "loads": [
+    {
+      "namedConcurrentUsers": 4,
+      "rounds": 3,
+      "requests": 52,
+      "durationMs": 175.86489400000005,
+      "requestsPerSecond": 295.6815247049817,
+      "p50Ms": 8.58290599999998,
+      "p95Ms": 67.09190100000006,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 12,
+      "idempotentRetriesVerified": 12
+    },
+    {
+      "namedConcurrentUsers": 10,
+      "rounds": 3,
+      "requests": 130,
+      "durationMs": 410.288538,
+      "requestsPerSecond": 316.8501870261849,
+      "p50Ms": 17.233076999999867,
+      "p95Ms": 87.21568700000012,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 30,
+      "idempotentRetriesVerified": 30
+    },
+    {
+      "namedConcurrentUsers": 25,
+      "rounds": 3,
+      "requests": 325,
+      "durationMs": 894.6466770000002,
+      "requestsPerSecond": 363.27190203155465,
+      "p50Ms": 34.538466999999855,
+      "p95Ms": 224.1277,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 75,
+      "idempotentRetriesVerified": 75
+    },
+    {
+      "namedConcurrentUsers": 50,
+      "rounds": 3,
+      "requests": 650,
+      "durationMs": 1641.2642940000005,
+      "requestsPerSecond": 396.0361547961634,
+      "p50Ms": 64.08278900000005,
+      "p95Ms": 419.53202299999975,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 150,
+      "idempotentRetriesVerified": 150
+    },
+    {
+      "namedConcurrentUsers": 50,
+      "rounds": 50,
+      "requests": 10050,
+      "durationMs": 14762.022771999998,
+      "requestsPerSecond": 680.8010091315148,
+      "p50Ms": 69.01345399999991,
+      "p95Ms": 96.87366900000052,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 2500,
+      "idempotentRetriesVerified": 2500
+    },
+    {
+      "namedConcurrentUsers": 100,
+      "rounds": 3,
+      "requests": 1300,
+      "durationMs": 3264.1960980000003,
+      "requestsPerSecond": 398.260386622152,
+      "p50Ms": 144.4582020000007,
+      "p95Ms": 970.9842070000004,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 300,
+      "idempotentRetriesVerified": 300
+    },
+    {
+      "namedConcurrentUsers": 200,
+      "rounds": 3,
+      "requests": 2600,
+      "durationMs": 6273.365152000002,
+      "requestsPerSecond": 414.4506077684794,
+      "p50Ms": 263.5659290000003,
+      "p95Ms": 1566.1496239999979,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 600,
+      "idempotentRetriesVerified": 600
+    },
+    {
+      "namedConcurrentUsers": 500,
+      "rounds": 3,
+      "requests": 6500,
+      "durationMs": 15668.256087000002,
+      "requestsPerSecond": 414.8515293538679,
+      "p50Ms": 656.7421399999948,
+      "p95Ms": 3711.0094929999977,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": false,
+      "errors": [],
+      "uniqueMessages": 1500,
+      "idempotentRetriesVerified": 1500
+    }
+  ],
+  "dispatchDrains": [
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 765.6470339999996,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    },
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 7638.356388,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    },
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 4077.4235120000085,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    }
+  ],
+  "limitations": [
+    "SDK not wired into app/worker; live authentication/delivery/media/phone coexistence UNPROVEN",
+    "500-user short API workload fails2s p95 target",
+    "200-user latency varies across retained runs; no stable seat ceiling",
+    "Crypto-js4.2.0 unmaintained; production promotion remains a separate risk review",
+    "original-code license and spark-md5 missing MIT alternative grant remain explicit license review notes"
+  ],
+  "imageScan": {
+    "scanner": "Trivy0.76.1",
+    "highCriticalCount": 0,
+    "fixableHighCriticalCount": 0,
+    "findings": []
+  }
+}

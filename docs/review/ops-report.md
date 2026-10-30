@@ -1,0 +1,21 @@
+# Operations implementation evidence
+
+Date: 2026-10-27. Scope: ops/, .github/, docs/operations/. Original implementation; no upstream source or secrets included.
+
+Implemented private Compose app/worker/PostgreSQL, internal-only network and loopback 3100 publication, nonroot read-only app/worker with dropped capabilities, explicit required external runtime secrets, provider disabled default and opt-in dispatch profile. Database includes attachment bytes, so no separate media volume exists. Added exact historical image tags, CI read-only repository permission and pinned known action commits, tests/build/browser pipeline without deployment. Image/action provenance/advisories remain unverified; no invented digest pins.
+
+Added age authenticated encrypted custom-format database backup with private temporary files, quiescence precondition, counts and SHA-256 manifest. Restore refuses existing target, checks manifests/counts, revokes sessions, disconnects provider and quarantines pending/processing work before any operator enablement. Runbook covers least privilege gap, token monitoring and stale/unknown alerts, threat model, incident/revoke/reconnect, restore drill, measured capacity and closed live acceptance gates.
+
+Verification executed: `bash -n ops/backup.sh ops/restore.sh` passed. `docker compose -f ops/compose.yaml config --quiet` with explicitly supplied synthetic required variables passed. Docker binary/Compose available; host age and pg_dump unavailable, so encrypted backup/restore has not been executed here. No image build, service start, live account, public endpoint or production action performed by ops agent. Root integration owns actual app/build/PG/browser evidence and recovery drill.
+
+Open evidence: full backup/restore with media hashes and runtime role tests; image build and vulnerability/digest verification; action source verification; CI run after shared lockfile/backend/browser completion; measured RPO/RTO and alert thresholds; independent security/live/provider/fencing acceptance. Repository owner licensing unresolved. Do not claim production readiness.
+
+## Review remediation
+
+Runtime and owner credentials split: Compose has maintenance-profile migration service with MIGRATION_DATABASE_URL, app/worker only restricted DATABASE_URL; PG initialization creates zs_app using independent required APP_DATABASE_PASSWORD and psql quoted environment variable, no literal password SQL interpolation. Backend owns migration grants and audit TRUNCATE denial. Existing PG volumes require explicit bootstrap, never destructive recreation.
+
+Restore now creates template0 DB and revokes PUBLIC CONNECT before pg_restore, retaining isolation after quarantine. It compares deterministic SHA-256 fingerprints of attachment bytes and complete message/audit/user records in addition to counts. Runtime role must fail DB connection until explicit post-drill owner approval/grant. Host root has installed age in isolated PG container for actual drill; result pending root evidence. PostgreSQL image digest verified by root pull: sha256:858bb5e98eed02eb8cafbcdc007f9a65d1b613972028944a8ec2133ccaf80d27. Compose and bash checks rerun after changes and passed. Docker npm install supports ephemeral proxy_ca secret with strict TLS retained. CI uses downloaded browser sentinel and raised synthetic login limit.
+
+Node image also verified by actual root pull and pinned in both Dockerfile stages: node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df. CI Node version aligned, high-severity npm advisory gate added, plus four-user/one-round HTTP load smoke after browser tests. Root confirms real PG zs_app provisioning and migrate grants succeeded; full drill/image results remain root evidence.
+
+Optional monitoring config added under ops/monitoring: private app:3100 authenticated metrics scrape via bearer_token_file, unknown-delivery and failed-scrape rules, no collector deployment/port/notifications. Backend currently exports zs_outbox_jobs only. Queue-age, provider freshness, dedicated readiness probe and notification routing remain explicit gaps; no invented active metrics. promtool is not available, so configuration/rule validation is pending chosen collector version.
