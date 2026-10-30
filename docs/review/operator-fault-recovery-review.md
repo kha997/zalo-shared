@@ -18,3 +18,15 @@ Reviewed the current ops delta against local612c6b3: `ops/counts.sql`, `ops/inte
 ## Executed evidence and limits
 
 `bash -n ops/restore.sh ops/ci-backup-drill.sh ops/backup.sh` and scoped `git diff --check` exited0. No SQL/restart/restore case was run locally; those outcomes remain **UNPROVEN** for this delta until hosted CI validates the exact source snapshot. The current fixture exercises an ordinary nonzero version; an exhausted-version restore branch and later resolved-conflict/admin metadata should gain positive coverage in the complete operator phase. Their absence is not reported as an executed pass. No real Zalo, phone or production readiness is established.
+
+
+## Follow-up: resolved evidence and exhausted-version fixtures
+
+Bounded independent re-review of the subsequent operator Task4 additions found **no P0/P1/P2**. The prior statement about missing fixture branches is historical: both branches are now represented in source, with hosted execution still pending.
+
+- The disposable fixture opens a transaction, selects a current active administrator, obtains the canonical event's current resolution version and complete ordered retained hash set, then invokes the actual `resolveKnownConflict` service with explicit synthetic external-review attestation. That service rechecks active admin, locks the scoped conversation/event, verifies exact hashes/version and rejection gates, records admin/reference/time/version, and appends `connector.conflict_resolved` atomically. The fixture does not bypass the service with a direct resolved-field update.
+- A separate provider event remains conflicted/unresolved, so resolving the first fixture cannot accidentally remove the required unresolved recovery branch. Canonical and retained-variant full-row fingerprints/digests remain unchanged by restore quarantine and therefore cover the new resolution metadata too.
+- A second synthetic provider-state row starts at MAX bigint with version-exhausted fault alongside its existing idle ownership fixture. Pre- and post-restore assertions require the same maximum and terminal fault code. The ordinary ACCOUNT row still exercises the exact increment branch independently. The second identity is solely disposable recovery coverage, not application multi-account support.
+- The drill checks admin-linked resolution metadata before and after restore, while the existing full audit fingerprint protects the service's appended audit contents. The complete operator snapshot must include `server/connector-operations.ts`; these fixture changes must not be published alone against a snapshot lacking that service.
+
+Fresh `bash -n ops/restore.sh ops/ci-backup-drill.sh` and scoped diffcheck exited0. No PostgreSQL, restart, restore, network or account operation was attempted. These positive assertions are **wired but UNPROVEN** until hosted CI runs the exact complete operator snapshot; earlier foundation CI cannot validate this follow-up.

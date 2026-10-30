@@ -2,7 +2,13 @@
 
 **NOT PRODUCTION-READY. No live Zalo login, production deployment, real customer data or public application endpoint has been used.** The repository is public; runtime credentials and unlicensed upstream application snapshots are excluded.
 
-## Validated simulator revision
+## Latest verified source — 2026-10-30
+
+[Source945d30f3](https://github.com/kha997/zalo-shared/commit/945d30f34289c00fdc4b7aeb292cfad35972f9b6), [CI40997300485](https://github.com/kha997/zalo-shared/actions/runs/40997300485):136/136units,2/2guardedSDK cases,6browser cases (1skip), nonempty conflict variants/journal/media/ownership restart and encrypted restore, monitoring and SDK-free image gates PASS. Trivy0HIGH/CRITICAL at scan time. [Retained measurements](evidence/ci-inbound-foundations-results.json).50×50rounds p95≈109ms;100/200/500-user p95≈790/1872/3855ms;500FAILS the2s target. Zero request errors and all mock drains passed.200varies across runs; no staff-seat/provider capacity guarantee.
+
+Inbound parser/cipher/downloader are reviewed libraries, not integrated download jobs or verified real CDN contracts. Operator service/HTTP/UI is being integrated and is not validated by this source. Real phone, live delivery, account-ban risk acceptance, private activation and soak remain open. Earlier sections below are historical snapshots.
+
+## Historical simulator baseline
 
 Source commit [`a74268c95e8eda5536d5f6429cf21cb62fa2b698`](https://github.com/kha997/zalo-shared/commit/a74268c95e8eda5536d5f6429cf21cb62fa2b698), [hosted CI run40687394289](https://github.com/kha997/zalo-shared/actions/runs/40687394289). Results below come from raw assertion output, not merely the job icon. Machine-readable summary: [ci-validated-results.json](evidence/ci-validated-results.json).
 

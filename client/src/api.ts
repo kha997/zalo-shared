@@ -37,7 +37,36 @@ export type Provider = {
   mode: "mock" | "disabled";
   status: "connected" | "disconnected" | "expired";
   lastEventAt: string | null;
+  reconciliationRequired?: boolean;
+  gapVersion?: string;
+  counts?: OperationsCounts;
+  ownershipPhase?: OwnershipPhase;
 };
+export type OperationsCounts = { held: number; unresolvedConflicts: number; unknownJobs: number };
+export type OwnershipPhase = "idle" | "reserved" | "active" | "uncertain";
+export type OperationsOverview = {
+  mode: "mock" | "disabled"; status: "connected" | "disconnected" | "expired";
+  reconciliationRequired: boolean; gapVersion: string; faultCode: string | null;
+  owner: { ownerId: string | null; epoch: string; phase: OwnershipPhase };
+  counts: OperationsCounts;
+};
+export type ProviderEventSummary = {
+  id: string; conversationId: string; providerId: string;
+  direction: "inbound" | "outbound"; kind: "text" | "unsupported"; text: string | null;
+  state: "held" | "linked" | "conflict"; resolutionVersion: string;
+  conflict: boolean; resolvedAt: string | null; variantOverflow: boolean;
+  variantEvidenceMissing: boolean; receivedAt: string;
+};
+export type ProviderEventDetail = ProviderEventSummary & {
+  semanticHash: string;
+  variants: { semanticHash: string; senderId: string; kind: string; text: string | null;
+    clientId: string | null; providerTimestamp: string | null; receivedAt: string }[];
+};
+export type UnknownJob = {
+  messageId: string; conversationId: string; text: string; actorId: string | null; createdAt: string;
+  parts: { part: number; status: string; providerId: string | null; attachmentId: string | null }[];
+};
+export type OperationsPage<T> = { items: T[]; nextCursor: string | null };
 export type Audit = {
   id: string;
   actorName: string;

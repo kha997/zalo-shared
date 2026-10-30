@@ -1,5 +1,6 @@
 /** Disposable CI fixture only. Run after load/browser workers have stopped. */
 import { ACCOUNT, createPool } from "../server/db.js";
+import { resolveKnownConflict } from "../server/connector-operations.js";
 import {
   ingestProviderEvent,
   recordPartAccepted,
@@ -90,6 +91,48 @@ try {
     providerId: "ci-conflict",
     text: "synthetic second conflicting fixture",
   });
+  const review = await pool.connect();
+  try {
+    await review.query("BEGIN");
+    const actor = (
+      await review.query(
+        "SELECT id FROM users WHERE role='admin' AND active AND account_id=$1 ORDER BY id LIMIT 1",
+        [ACCOUNT],
+      )
+    ).rows[0];
+    const event = (
+      await review.query(
+        "SELECT id,resolution_version FROM provider_events WHERE thread_id=$1 AND provider_id='ci-conflict' AND account_id=$2 AND direction='inbound'",
+        [base.threadId, ACCOUNT],
+      )
+    ).rows[0];
+    const hashes = (
+      await review.query(
+        "SELECT semantic_hash FROM provider_event_variants WHERE event_id=$1 ORDER BY semantic_hash",
+        [event.id],
+      )
+    ).rows.map((r) => r.semantic_hash);
+    await resolveKnownConflict(review, actor, {
+      eventId: event.id,
+      expectedResolutionVersion: event.resolution_version,
+      expectedVariantHashes: hashes,
+      decision: "retain-canonical",
+      evidenceRef: "ci-synthetic-external-review",
+      confirmExternalReview: true,
+    });
+    await review.query("COMMIT");
+  } catch (error) {
+    await review.query("ROLLBACK");
+    throw error;
+  } finally {
+    review.release();
+  }
+  await ingestProviderEvent(pool, { ...base, providerId: "ci-unresolved" });
+  await ingestProviderEvent(pool, {
+    ...base,
+    providerId: "ci-unresolved",
+    text: "synthetic unresolved variant",
+  });
   const states = (
     await pool.query(
       "SELECT DISTINCT state FROM provider_events WHERE thread_id=$1",
@@ -102,11 +145,15 @@ try {
     "UPDATE connector_ownership SET phase='uncertain',epoch=17,owner_id=gen_random_uuid(),owner_label='ci-synthetic-owner',reserved_at=now(),uncertain_at=now(),fault_code='shutdown' WHERE account_id=$1 AND phase='idle' RETURNING account_id",
     [ACCOUNT],
   );
-  if (owner.rowCount !== 1) throw new Error("Pristine ownership fixture required");
+  if (owner.rowCount !== 1)
+    throw new Error("Pristine ownership fixture required");
   // A second synthetic row exercises restoration of a previously idle identity.
   // This is recovery coverage, not application multi-account support.
   await pool.query(
     "INSERT INTO connector_ownership(account_id) VALUES('00000000-0000-4000-8000-000000000002')",
+  );
+  await pool.query(
+    "INSERT INTO provider_state(account_id,status,reconciliation_required,gap_version,fault_code) VALUES('00000000-0000-4000-8000-000000000002','disconnected',true,9223372036854775807,'version-exhausted')",
   );
   console.log("Synthetic linked/held/conflict journal fixtures persisted");
 } finally {

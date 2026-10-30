@@ -25,6 +25,9 @@ DO $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM provider_events WHERE state='linked') OR NOT EXISTS(SELECT 1 FROM provider_events WHERE state='held') OR NOT EXISTS(SELECT 1 FROM provider_events WHERE state='conflict') THEN RAISE EXCEPTION 'nonempty representative journal fixture required'; END IF;
  IF NOT EXISTS(SELECT 1 FROM provider_events e JOIN messages m ON m.id=e.message_id WHERE e.direction='outbound' AND m.actor_id IS NOT NULL) THEN RAISE EXCEPTION 'staff echo fixture missing'; END IF;
  IF (SELECT count(*) FROM provider_event_variants)<2 THEN RAISE EXCEPTION 'retained conflict variants missing'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM provider_events e JOIN users u ON u.id=e.resolved_by WHERE e.resolved_at IS NOT NULL AND e.resolution_ref='ci-synthetic-external-review' AND u.role='admin') THEN RAISE EXCEPTION 'audited conflict resolution fixture missing'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM provider_events WHERE conflict AND resolved_at IS NULL) THEN RAISE EXCEPTION 'unresolved conflict fixture missing'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM provider_state WHERE account_id='00000000-0000-4000-8000-000000000002' AND gap_version=9223372036854775807 AND fault_code='version-exhausted') THEN RAISE EXCEPTION 'exhausted gap fixture missing'; END IF;
  IF NOT EXISTS(SELECT 1 FROM provider_state WHERE gap_version>0) THEN RAISE EXCEPTION 'versioned gap fixture missing'; END IF;
  IF NOT EXISTS(SELECT 1 FROM connector_ownership WHERE phase='uncertain' AND epoch=17 AND owner_label='ci-synthetic-owner' AND owner_id IS NOT NULL) THEN RAISE EXCEPTION 'uncertain ownership fixture missing'; END IF;
  IF NOT EXISTS(SELECT 1 FROM connector_ownership WHERE account_id='00000000-0000-4000-8000-000000000002' AND phase='idle' AND owner_id IS NULL) THEN RAISE EXCEPTION 'idle ownership fixture missing'; END IF;
@@ -52,6 +55,8 @@ DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM outbox WHERE status IN ('pending','processing')) THEN RAISE EXCEPTION 'restored jobs can dispatch'; END IF;
  IF EXISTS(SELECT 1 FROM provider_state WHERE status<>'disconnected') THEN RAISE EXCEPTION 'provider not quarantined'; END IF;
  IF EXISTS(SELECT 1 FROM provider_state WHERE NOT reconciliation_required) THEN RAISE EXCEPTION 'provider gap not quarantined'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM provider_state WHERE account_id='00000000-0000-4000-8000-000000000002' AND gap_version=9223372036854775807 AND fault_code='version-exhausted') THEN RAISE EXCEPTION 'exhausted gap wrapped during restore'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM provider_events e JOIN users u ON u.id=e.resolved_by WHERE e.resolved_at IS NOT NULL AND e.resolution_ref='ci-synthetic-external-review' AND u.role='admin') THEN RAISE EXCEPTION 'conflict resolution evidence lost'; END IF;
  IF EXISTS(SELECT 1 FROM connector_ownership WHERE phase<>'uncertain' OR owner_id IS NULL OR fault_code<>'restore-quarantine') THEN RAISE EXCEPTION 'connector owner not quarantined'; END IF;
  IF NOT EXISTS(SELECT 1 FROM connector_ownership WHERE epoch=17 AND owner_label='ci-synthetic-owner') THEN RAISE EXCEPTION 'owner epoch fixture lost'; END IF;
  IF NOT EXISTS(SELECT 1 FROM connector_ownership WHERE account_id='00000000-0000-4000-8000-000000000002' AND phase='uncertain' AND owner_id IS NOT NULL AND epoch=0 AND owner_label='restored-quarantine') THEN RAISE EXCEPTION 'idle owner restoration admitted a connector'; END IF;

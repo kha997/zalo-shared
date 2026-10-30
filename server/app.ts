@@ -8,6 +8,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ACCOUNT, audit, checkPassword, hashPassword } from "./db.js";
 import type { Config } from "./config.js";
 import { registerStaticAssets } from "./static.js";
+import { providerSummary, registerConnectorOperations } from "./connector-operations-http.js";
 import { decodeAttachmentBase64 } from "./base64.js";
 import { resolve } from "node:path";
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -626,16 +627,10 @@ export async function buildApp({
       .type(a.mime)
       .send(a.data);
   });
+  registerConnectorOperations(app, { config, transaction, admin });
   app.get("/api/provider", async () => {
-    const r = await pool.query(
-      "SELECT * FROM provider_state WHERE account_id=$1",
-      [ACCOUNT],
-    );
-    return {
-      mode: config.mockEnabled ? "mock" : "disabled",
-      status: config.mockEnabled ? r.rows[0].status : "disconnected",
-      lastEventAt: r.rows[0].last_event_at?.toISOString() || null,
-    };
+    const { privateOwner: _owner, privateFault: _fault, ...safe } = await providerSummary(pool, config);
+    return safe;
   });
   app.post("/api/provider/mock/state", async (req: any) => {
     admin(req);

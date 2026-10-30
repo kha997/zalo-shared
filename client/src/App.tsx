@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import ConnectorOperations from "./ConnectorOperations";
 import {
   api,
   ApiError,
@@ -596,6 +597,9 @@ export default function App() {
               <span>♙</span> Nhân sự
             </button>
           )}
+          {user.role === "admin" && (
+            <button className={page === "operations" ? "nav active" : "nav"} onClick={() => setPage("operations")}><span>◇</span> Đối soát Zalo</button>
+          )}
           {user.role !== "agent" && (
             <button
               className={page === "audit" ? "nav active" : "nav"}
@@ -609,12 +613,14 @@ export default function App() {
           <div className="provider">
             <span
               className={
-                "dot " + (provider?.status === "connected" ? "green" : "red")
+                "dot " + (provider?.status === "connected" && !provider.reconciliationRequired ? "green" : "red")
               }
             />
             <div>
               <strong>
-                {provider?.status === "connected"
+                {provider?.reconciliationRequired
+                  ? "Cần đối soát"
+                  : provider?.status === "connected"
                   ? "Kết nối hoạt động"
                   : "Kết nối gián đoạn"}
               </strong>
@@ -657,7 +663,9 @@ export default function App() {
                 ? "Hộp thư chung"
                 : page === "staff"
                   ? "Đội ngũ của bạn"
-                  : "Nhật ký hoạt động"}
+                  : page === "operations"
+                    ? "Đối soát Zalo"
+                    : "Nhật ký hoạt động"}
             </h1>
           </div>
           <span className="private-badge">
@@ -677,6 +685,9 @@ export default function App() {
             Mất kết nối với máy chủ. Đang thử kết nối lại; trạng thái hiển thị
             có thể chưa cập nhật.
           </div>
+        )}
+        {provider && provider.reconciliationRequired && (
+          <div className="notice warning" role="status">Zalo đang cần đối soát. Tin chưa rõ kết quả không được gửi lại. Đang giữ: {provider.counts?.held ?? "—"}; xung đột: {provider.counts?.unresolvedConflicts ?? "—"}; lần gửi chưa rõ: {provider.counts?.unknownJobs ?? "—"}.</div>
         )}
         {provider && provider.status !== "connected" && (
           <div className="notice warning">
@@ -1082,6 +1093,8 @@ export default function App() {
               </aside>
             )}
           </div>
+        ) : page === "operations" ? (
+          user.role === "admin" ? <ConnectorOperations key={user.id} /> : <div className="notice warning" role="alert">Chỉ quản trị viên được xem đối soát Zalo.</div>
         ) : page === "staff" ? (
           <Staff
             users={users}

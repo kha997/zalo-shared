@@ -107,3 +107,9 @@ Files: `ops/counts.sql`, `ops/integrity.sql`, `ops/ci-provider-journal.ts`, `ops
 - [ ] Restore increments gap_version while setting disconnected/reconciliation_required and retaining uncertainty/evidence. No restored session or job becomes dispatchable. Existing bound-media/ownership/audit assertions remain.
 - [ ] Runbook explains evidence attestation limitations, exact-ID-only recovery, externally verified fencing, no retry/reset, overflow escalation, retained customer-content access/retention and separate live history review. No claim the system verifies external firewall truth or real-provider completeness.
 - [ ] Full build, SQL/concurrency/crash, four-client/browser, load, backup/restore and independent whole-delta review. Record tested source SHA and PASS/FAIL/UNPROVEN. Actual Zalo delivery, phone coexistence and production readiness remain separate acceptance gates.
+
+## Execution ledger
+
+Task1 versioned faults/evidence passed hostedCI40997300485/source945d30f3 with136units and variant/gap restart/restore. Tasks2service and3UI implemented and independently reviewed conditionalSQL/browser;3pure service cases/typecheck PASS. HTTP routes implemented; cursor year0000 defect reproduced/corrected and independently re-reviewed. Four-staff actual-browser recovery test uses an independently guarded disposable database to avoid the main worker's database-wide lock. Operator positive resolution/admin metadata and exhausted-version restore fixtures are included in the next snapshot; runtime assertions remain pending CI. No actual SDK, Zalo account, phone or production action.
+
+- Coordinating full client/server build PASS and4/4pure service/cursor checks PASS. All scoped source reviews accepted; realSQL/HTTP/four-browser/restore assertions remain pending the operator snapshot CI.

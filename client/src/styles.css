@@ -1410,3 +1410,35 @@ code {
   border-radius: 8px;
   padding: 8px;
 }
+
+.connector-operations { overflow: auto; }
+.connector-operations .section-intro { flex-wrap: wrap; }
+.operations-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+.operations-cards > div, .operations-panel { border: 1px solid var(--line, #dde5ec); border-radius: 12px; padding: 18px; background: #fff; min-width: 0; }
+.operations-cards span, .operations-cards small, .operations-cards strong { display: block; }
+.operations-cards span, .operations-cards small { color: #61726c; font-size: 12px; }
+.operations-cards strong { margin: 8px 0; }
+.operations-identifiers, .operations-detail dd, .operations-panel code { overflow-wrap: anywhere; }
+.operations-counts, .operations-pagination { display: flex; flex-wrap: wrap; gap: 12px; margin: 14px 0; }
+.operations-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.operations-panel { margin: 16px 0; }
+.operations-panel h3 { margin-top: 0; }
+.operations-panel p { line-height: 1.6; }
+.operations-panel label { display: flex; flex-direction: column; gap: 7px; margin: 14px 0; font-size: 13px; font-weight: 600; }
+.operations-panel input:not([type=checkbox]), .operations-panel select { width: 100%; min-height: 42px; border: 1px solid #c7d4cd; border-radius: 8px; padding: 9px; background: #fff; color: #203b31; }
+.operations-panel .operations-check { flex-direction: row; align-items: flex-start; font-weight: 400; line-height: 1.6; }
+.operations-check input { margin: 5px 6px 0 0; flex: 0 0 auto; }
+.connector-operations button { min-height: 40px; padding: 9px 14px; border: 1px solid #b8cec2; border-radius: 8px; background: #f3f9f5; color: #16553b; cursor: pointer; }
+.connector-operations button:disabled { opacity: .5; cursor: not-allowed; }
+.connector-operations :is(button,input,select):focus-visible { outline: 3px solid #3c936b; outline-offset: 3px; }
+.operations-list { list-style: none; padding: 0; max-height: 420px; overflow: auto; }
+.operations-list li + li { margin-top: 8px; }
+.operations-list button { width: 100%; text-align: left; overflow-wrap: anywhere; }
+.operations-list small, .operations-detail small { display: block; margin-top: 6px; }
+.operations-detail dl { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 10px; }
+.operations-detail dd { margin: 0; }
+.operations-variant { padding: 12px; border-left: 3px solid #c89c37; background: #fff9ed; margin: 12px 0; }
+.operations-panel table { width: 100%; table-layout: fixed; font-size: 12px; }
+.operations-panel th, .operations-panel td { text-align: left; padding: 8px 4px; overflow-wrap: anywhere; }
+@media(max-width: 1050px) { .operations-cards { grid-template-columns: repeat(2,minmax(0,1fr)); } .operations-columns { grid-template-columns: 1fr; } }
+@media(max-width: 600px) { .operations-cards { grid-template-columns: 1fr; } .operations-detail dl { grid-template-columns: 1fr; } }

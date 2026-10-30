@@ -1,0 +1,208 @@
+{
+  "sourceCommit": "945d30f34289c00fdc4b7aeb292cfad35972f9b6",
+  "sourceTree": "d5048824cb50b70f254208e8519057dcf36dbca9",
+  "runId": 40997300485,
+  "url": "https://github.com/kha997/zalo-shared/actions/runs/40997300485",
+  "units": {
+    "passed": 136,
+    "failed": 0
+  },
+  "sdkOfflineGuards": {
+    "passed": 2,
+    "failed": 0
+  },
+  "browser": {
+    "passed": 6,
+    "skipped": 1
+  },
+  "recovery": "PASS: bounded variant evidence and gap version preserved across unclean restart/encrypted restore; journal/media/ownership quarantine and runtime audit assertions",
+  "image": {
+    "sdkAbsentNonroot": "PASS",
+    "highCriticalCount": 0
+  },
+  "measurements": [
+    {
+      "namedConcurrentUsers": 4,
+      "rounds": 3,
+      "requests": 52,
+      "durationMs": 181.31002,
+      "requestsPerSecond": 286.8015788647533,
+      "p50Ms": 9.00129000000004,
+      "p95Ms": 63.00830100000002,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 12,
+      "idempotentRetriesVerified": 12
+    },
+    {
+      "namedConcurrentUsers": 10,
+      "rounds": 3,
+      "requests": 130,
+      "durationMs": 427.2578990000002,
+      "requestsPerSecond": 304.265878534407,
+      "p50Ms": 20.0522390000001,
+      "p95Ms": 78.80042900000012,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 30,
+      "idempotentRetriesVerified": 30
+    },
+    {
+      "namedConcurrentUsers": 25,
+      "rounds": 3,
+      "requests": 325,
+      "durationMs": 938.9789280000005,
+      "requestsPerSecond": 346.120653306077,
+      "p50Ms": 44.11489100000017,
+      "p95Ms": 221.4678530000001,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 75,
+      "idempotentRetriesVerified": 75
+    },
+    {
+      "namedConcurrentUsers": 50,
+      "rounds": 3,
+      "requests": 650,
+      "durationMs": 1684.6424500000012,
+      "requestsPerSecond": 385.8385498952609,
+      "p50Ms": 78.0151560000013,
+      "p95Ms": 459.3206970000001,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 150,
+      "idempotentRetriesVerified": 150
+    },
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 1781.1373509999994,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    },
+    {
+      "namedConcurrentUsers": 50,
+      "rounds": 50,
+      "requests": 10050,
+      "durationMs": 16605.609525,
+      "requestsPerSecond": 605.2171698286396,
+      "p50Ms": 78.09357200000159,
+      "p95Ms": 108.80900800000018,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 2500,
+      "idempotentRetriesVerified": 2500
+    },
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 20632.510345000002,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    },
+    {
+      "namedConcurrentUsers": 100,
+      "rounds": 3,
+      "requests": 1300,
+      "durationMs": 3443.4059340000003,
+      "requestsPerSecond": 377.5331822379324,
+      "p50Ms": 171.07343799999944,
+      "p95Ms": 790.0752830000001,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 300,
+      "idempotentRetriesVerified": 300
+    },
+    {
+      "namedConcurrentUsers": 200,
+      "rounds": 3,
+      "requests": 2600,
+      "durationMs": 6564.266505000003,
+      "requestsPerSecond": 396.0838576586705,
+      "p50Ms": 308.00127500000235,
+      "p95Ms": 1871.963259,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 600,
+      "idempotentRetriesVerified": 600
+    },
+    {
+      "namedConcurrentUsers": 500,
+      "rounds": 3,
+      "requests": 6500,
+      "durationMs": 15536.551638999998,
+      "requestsPerSecond": 418.36825513350334,
+      "p50Ms": 625.3430999999982,
+      "p95Ms": 3855.3247090000004,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": false,
+      "errors": [],
+      "uniqueMessages": 1500,
+      "idempotentRetriesVerified": 1500
+    },
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 12236.428231000013,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    },
+    {
+      "scanner": "Trivy0.76.1",
+      "highCriticalCount": 0,
+      "fixableHighCriticalCount": 0,
+      "findings": []
+    }
+  ],
+  "limits": [
+    "500 synthetic API users failed 2s latency target (~3855ms); no stable 200-seat guarantee",
+    "Inbound parser/cipher/downloader are libraries only, not integrated jobs or actual CDN validation",
+    "Operator service/HTTP/UI not part of tested source",
+    "No real account/phone/provider egress fencing or production approval"
+  ]
+}
