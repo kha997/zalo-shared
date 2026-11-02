@@ -11,7 +11,9 @@ Continue only with synthetic/offline work until the Owner supplies and approves 
 
 The main application remains provider-disabled/mock and SDK-free in its production image. The pinned `zca-js@2.2.0` is only for development/research/guard tests; no authenticated session was used.
 
-## Latest evidenced hosted baseline — QR enrollment and CLIHosted CI **41374543813** on `ad036f60ae4fa4a8b00cbd72e584c0a0128e1784` passed **229/229** unit checks, **2/2** guarded offline SDK checks and **9 browser cases expected + 1 explicit skip, 0 failed**, including the full PostgreSQL, transport, recovery/restore, monitoring and SDK-free nonroot image stages. The prior inbound-media completion baseline is CI 41370951223 on `c128933` (179/179, 2/2, 9+1). Neither run demonstrates provider compatibility, physical-phone coexistence or production readiness.
+## Latest evidenced hosted baseline — pilot runtime, image and restore drill
+
+Hosted CI **41374543813** on `ad036f60ae4fa4a8b00cbd72e584c0a0128e1784` passed **229/229** unit checks, **2/2** guarded offline SDK checks and **9 browser cases expected + 1 explicit skip, 0 failed**, including the full PostgreSQL, transport, recovery/restore, monitoring and SDK-free nonroot image stages. The prior inbound-media completion baseline is CI 41370951223 on `c128933` (179/179, 2/2, 9+1). Neither run demonstrates provider compatibility, physical-phone coexistence or production readiness.
 
 ## Working slice — second-review hardening (local PASS, hosted pending)
 
@@ -50,6 +52,7 @@ Local typecheck passes; full local suite 201/203 (two Windows-only vault mode as
 - `ops/Dockerfile.connector`, `connector/`, `tsconfig.connector.json`, `ops/pilot-compose.example.yml`, `ops/pilot-scan.sh`, `ops/ci-pilot-manifest.ts`: separate SDK-bearing image with an exact dedicated lock, UID 65532, no ports, default dry-run, and a hosted `pilot` CI job that builds, dry-runs, inventories and scans it. The application image remains SDK-free.
 - Locally: typecheck/build/build:connector PASS; focused pilot/connector/QR/recovery suites 59/59 PASS; full local suite 253 tests, 251 PASS, 2 FAIL (only the two Windows-only `vault.test.ts` POSIX assertions).
 - Hosted [CI 41377272040](https://github.com/kha997/zalo-shared/actions/runs/41377272040) on `105f2d7` passed both jobs: 251/251 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip, dry-run admitted, UID 65532, `zca-js` 2.2.0, no exposed ports, Trivy 0 HIGH/CRITICAL (0 fixable). The first run (`f9ac8e5`) passed every substantive pilot step but failed evidence upload because the owner-only synthetic manifest was inside `docs/evidence/`; it is now generated in `$RUNNER_TEMP`. [Retained measurements](evidence/ci-pilot-runtime-results.json).
+- The restore drill and early grant-freshness check were committed as `f84b777` and passed hosted CI 41378053199: 253/253 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip, plus the pilot job; 200/500-client p95 2272.4/4044.7 ms still FAIL the 2 s target.
 - Review: [private pilot runtime review](review/private-pilot-runtime-review.md) (H1, M1–M4, L2–L5/L7 fixed; L1/L6 accepted and documented) and [connector image review](review/private-pilot-connector-image-review.md).
 
 ## Historical snapshot
