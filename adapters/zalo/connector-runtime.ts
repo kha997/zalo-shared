@@ -4,7 +4,7 @@ import {
   acquireConnectorOwnership,
   type OwnershipHandle,
 } from "../../server/connector-ownership.js";
-import { ACCOUNT } from "../../server/db.js";
+import { ACCOUNT, audit } from "../../server/db.js";
 import { ingestProviderEvent } from "../../server/provider-store.js";
 import { runWorkerOnce, type Provider } from "../../server/worker.js";
 import { runMediaScheduler } from "../../server/media-scheduler.js";
@@ -45,6 +45,10 @@ interface Options {
   ) => Provider;
   /** Pilot-only: persist inbound only for the bound account and these exact direct peers. */
   inbound?: { accountId: string; allowedPeerIds: readonly string[] };
+  /** Pilot-only: mark provider_state connected under the active owner fence. */
+  publishConnected?: boolean;
+  /** Pilot-only: restrict outbound claims to these exact direct peers. */
+  dispatchPeers?: readonly string[];
   acquireOwnership?: typeof acquireConnectorOwnership;
   transportOptions?: Pick<
     TransportOptions,
@@ -67,13 +71,26 @@ function readInboundPolicy(value: Options["inbound"]) {
     peers.length < 1 ||
     peers.length > 4 ||
     !peers.every((peer) => typeof peer === "string" && peerId.test(peer)) ||
-    new Set(peers).size !== peers.length
+    new Set(peers).size !== peers.length ||
+    peers.includes(value.accountId)
   )
     throw unavailable();
   return Object.freeze({
     ownAccountId: value.accountId,
     peers: new Set(peers),
   });
+}
+function readDispatchPeers(value: Options["dispatchPeers"]) {
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.length < 1 ||
+    value.length > 4 ||
+    !value.every((peer) => typeof peer === "string" && peerId.test(peer)) ||
+    new Set(value).size !== value.length
+  )
+    throw unavailable();
+  return Object.freeze([...value]);
 }
 /** Inbound content from any other direct peer, group or mismatched sender is dropped unpersisted. */
 export function admitPilotInbound(
@@ -97,6 +114,18 @@ export function admitPilotInbound(
 /** Injected, single-lifetime connector. No SDK import, login default, executable or live switch. */
 export function createOwnedConnector(options: Options) {
   const inboundPeers = readInboundPolicy(options.inbound);
+  const dispatchPeers = readDispatchPeers(options.dispatchPeers);
+  if (
+    dispatchPeers &&
+    inboundPeers &&
+    dispatchPeers.some((peer) => !inboundPeers.peers.has(peer))
+  )
+    throw unavailable();
+  if (
+    options.publishConnected !== undefined &&
+    typeof options.publishConnected !== "boolean"
+  )
+    throw unavailable();
   let rejectedInbound = 0;
   let status: "stopped" | "starting" | "active" | "blocked" = "stopped";
   let gap = false;
@@ -147,6 +176,35 @@ export function createOwnedConnector(options: Options) {
     try {
       await owner?.close();
     } catch {}
+  };
+  /** Publish app-observable provider state only under the active owner row lock. */
+  const publishConnected = async () => {
+    if (options.publishConnected !== true) return;
+    const db = await options.pool.connect();
+    try {
+      await db.query("BEGIN");
+      await db.query("SET LOCAL statement_timeout='2000ms'");
+      const current = await db.query(
+        "SELECT account_id FROM connector_ownership WHERE account_id=$1 AND owner_id=$2 AND epoch=$3 AND phase='active' FOR SHARE",
+        [ACCOUNT, owner!.token.ownerId, owner!.token.epoch],
+      );
+      if (!current.rowCount) throw unavailable();
+      const published = await db.query(
+        "UPDATE provider_state SET status='connected',last_event_at=now() WHERE account_id=$1 AND reconciliation_required=false",
+        [ACCOUNT],
+      );
+      if (published.rowCount !== 1) throw unavailable();
+      await audit(db, null, "provider.state", ACCOUNT, {
+        status: "connected",
+        ownerLabel: options.ownerLabel,
+      });
+      await db.query("COMMIT");
+    } catch {
+      await db.query("ROLLBACK").catch(() => {});
+      throw unavailable();
+    } finally {
+      db.release();
+    }
   };
   const discardApi = (api: Awaited<ReturnType<Facade["createApi"]>>) => {
     // Rejected APIs never reach the transport's sink installation. Late SDK
@@ -279,6 +337,8 @@ export function createOwnedConnector(options: Options) {
         await assertCurrent();
         await owner.markActive();
         await assertCurrent();
+        await publishConnected();
+        await assertCurrent();
         status = "active";
       } catch {
         terminal = true;
@@ -311,7 +371,11 @@ export function createOwnedConnector(options: Options) {
     async runOnce() {
       await assertCurrent();
       if (status !== "active" || !provider) throw unavailable();
-      return runWorkerOnce(options.pool, provider);
+      return runWorkerOnce(
+        options.pool,
+        provider,
+        dispatchPeers ? { peers: dispatchPeers } : undefined,
+      );
     },
     /** One bounded media step under the same dispatch fence; never sends mail. */
     async runMediaOnce() {

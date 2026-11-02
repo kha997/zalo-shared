@@ -41,7 +41,12 @@ export function createMockProvider(pool: pg.Pool): Provider {
     },
   };
 }
-export async function runWorkerOnce(pool: pg.Pool, provider: Provider) {
+export async function runWorkerOnce(
+  pool: pg.Pool,
+  provider: Provider,
+  /** Optional exact direct-peer scope; other conversations are never claimed. */
+  scope?: { peers: readonly string[] },
+) {
   const db = await pool.connect();
   let locked = false;
   try {
@@ -72,9 +77,12 @@ export async function runWorkerOnce(pool: pg.Pool, provider: Provider) {
     await db.query("COMMIT");
     if (!(await provider.connected(db))) return { processed: false };
     await db.query("BEGIN");
+    const scoped = Array.isArray(scope?.peers) && scope.peers.length > 0;
     const r = await db.query(
-      "SELECT o.* FROM outbox o JOIN messages m ON m.id=o.message_id JOIN conversations c ON c.id=m.conversation_id WHERE o.status='pending' AND c.account_id=$1 ORDER BY o.created_at,o.id FOR UPDATE OF o SKIP LOCKED LIMIT 1",
-      [ACCOUNT],
+      scoped
+        ? "SELECT o.* FROM outbox o JOIN messages m ON m.id=o.message_id JOIN conversations c ON c.id=m.conversation_id WHERE o.status='pending' AND c.account_id=$1 AND c.provider_thread_type=0 AND c.provider_thread_id=ANY($2::text[]) ORDER BY o.created_at,o.id FOR UPDATE OF o SKIP LOCKED LIMIT 1"
+        : "SELECT o.* FROM outbox o JOIN messages m ON m.id=o.message_id JOIN conversations c ON c.id=m.conversation_id WHERE o.status='pending' AND c.account_id=$1 ORDER BY o.created_at,o.id FOR UPDATE OF o SKIP LOCKED LIMIT 1",
+      scoped ? [ACCOUNT, [...scope!.peers]] : [ACCOUNT],
     );
     if (!r.rowCount) {
       await db.query("COMMIT");

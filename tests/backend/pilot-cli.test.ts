@@ -258,6 +258,7 @@ test("safety halts exit non-zero and expose only bounded counters", async () => 
     "already-reserved",
     "reservation-denied",
     "dispatch-uncertain",
+    "future-unknown-halt",
   ]) {
     const result = await runPilotCli({
       argv: [
@@ -407,6 +408,29 @@ test("runner failures, missing manifests and policy-invalid live manifests fail 
   });
   assert.equal(observeWithoutAccount.exitCode, 1);
   assert.equal(JSON.parse(observeWithoutAccount.stdout!).gate, "denied");
+
+  const selfPeer = await runPilotCli({
+    argv: [
+      "run-observe",
+      "--manifest",
+      "/private/pilot/manifest.json",
+      "--acknowledge-pilot-risk",
+    ],
+    dependencies: {
+      readFile: async () =>
+        JSON.stringify(
+          manifestFor(
+            "observe",
+            { allowedPeerIds: [account] },
+            { allowedPeerIds: [account] },
+          ),
+        ),
+      now: () => now,
+      runCommand: async () => {},
+    },
+  });
+  assert.equal(selfPeer.exitCode, 1);
+  assert.equal(JSON.parse(selfPeer.stdout!).gate, "denied");
 });
 
 test("manifest parsing rejects extra keys and returns a frozen grant", () => {

@@ -6,6 +6,11 @@ import {
   type PilotConsentScope,
   type PilotGrant,
 } from "../server/pilot-policy.js";
+import {
+  assertBuildIdentity,
+  readBuildIdentity,
+  requireTlsDatabaseUrl,
+} from "./pilot-gates.js";
 
 export type PilotCommand =
   | "dry-run"
@@ -172,12 +177,9 @@ export function parsePilotManifest(text: string, now: Date): PilotManifest {
   }
 }
 
-const SAFETY_HALTS = new Set([
-  "runtime-error",
-  "already-reserved",
-  "reservation-denied",
-  "dispatch-uncertain",
-]);
+// Any halt not listed here is treated as a safety failure so a new or unknown
+// reason can never produce a successful exit.
+const COMPLETION_HALTS = new Set(["tick-limit", "grant-expired", "aborted"]);
 const counter = (value: unknown) =>
   Number.isInteger(value) && (value as number) >= 0
     ? (value as number)
@@ -270,7 +272,7 @@ export async function runPilotCli(options: {
         : undefined;
     const halt =
       outcome && typeof outcome.halt === "string" ? outcome.halt : undefined;
-    if (halt && SAFETY_HALTS.has(halt))
+    if (halt !== undefined && !COMPLETION_HALTS.has(halt))
       return {
         exitCode: 1,
         stdout: safeOutcome(command, false, halt, manifest, outcome),
@@ -299,13 +301,13 @@ async function liveBootstrap(input: {
   if (input.command !== "bootstrap") throw unavailable();
   if (process.platform !== "linux") throw unavailable();
   const { env, manifest } = input;
-  const databaseUrl = env.DATABASE_URL;
+  // Enrollment must also bind to the reviewed image, not a copied manifest.
+  assertBuildIdentity(await readBuildIdentity(), manifest.build);
+  const databaseUrl = requireTlsDatabaseUrl(env.DATABASE_URL);
   const keyPath = env.PILOT_KEY_FILE;
   const sessionPath = env.PILOT_SESSION_FILE;
   const viewDirectory = env.PILOT_VIEW_DIR;
   if (
-    !databaseUrl ||
-    !/^postgres(ql)?:\/\//.test(databaseUrl) ||
     !keyPath ||
     !isAbsolute(keyPath) ||
     !sessionPath ||

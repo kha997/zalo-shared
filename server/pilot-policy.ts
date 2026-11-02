@@ -216,6 +216,12 @@ export function validatePilotGrant(
     value.allowedPeerIds.length < 1
   )
     throw unavailable();
+  // A peer list must never include the bound account itself.
+  if (
+    value.expectedAccountId !== null &&
+    value.allowedPeerIds.includes(value.expectedAccountId)
+  )
+    throw unavailable();
   if (!value.allowedPeerIds.every((peer) => consent.allowedPeerIds.includes(peer)))
     throw unavailable();
   if (

@@ -174,7 +174,7 @@ test("non-allowlisted peers and group threads are refused before egress", async 
       const { mid } = await seed(database.pool, options);
       await assert.rejects(
         prepare(database.pool, provider, mid),
-        /Pilot destination denied/,
+        ProviderNotDispatchedError,
       );
     }
     assert.equal(transportSpy.calls.length, 0);
@@ -182,6 +182,60 @@ test("non-allowlisted peers and group threads are refused before egress", async 
   } finally {
     await database.close();
   }
+});
+
+test("the scoped worker never claims or fails mail outside the grant peers", async () => {
+  const database = await isolatedDatabase();
+  try {
+    const transportSpy = transport();
+    const provider = createSdkProvider(
+      database.pool,
+      transportSpy,
+      owner(),
+      { grant: grant(), now: () => new Date() },
+    );
+    // The out-of-scope row is older, so an unscoped claim would touch it first.
+    const outside = await seed(database.pool, {
+      peer: "peer-z",
+      outbox: true,
+    });
+    const inside = await seed(database.pool, { peer: "peer-a", outbox: true });
+    await runWorkerOnce(database.pool, provider, { peers: ["peer-a"] });
+    assert.deepEqual(transportSpy.calls, [
+      { peer: "peer-a", text: "synthetic pilot body", type: 0 },
+    ]);
+    assert.deepEqual(
+      (
+        await database.pool.query(
+          "SELECT m.status AS message,m2.status AS outbox FROM messages m JOIN outbox m2 ON m2.message_id=m.id WHERE m.id=$1",
+          [outside.mid],
+        )
+      ).rows[0],
+      { message: "pending", outbox: "pending" },
+    );
+    assert.equal(
+      (
+        await database.pool.query(
+          "SELECT status FROM messages WHERE id=$1",
+          [inside.mid],
+        )
+      ).rows[0].status,
+      "sent",
+    );
+  } finally {
+    await database.close();
+  }
+});
+
+test("a grant that allowlists the bound account cannot construct a provider", () => {
+  assert.throws(
+    () =>
+      createSdkProvider({} as never, transport(), owner(), {
+        grant: grant({ allowedPeerIds: [sentinelUid] }),
+        now: () => new Date(),
+      }),
+    /Pilot dispatch unavailable/,
+  );
 });
 
 test("an expired grant halts dispatch before reservation or egress", async () => {
@@ -459,6 +513,28 @@ test("abort, worker errors and policy halts stop without retry", async () => {
   );
   assert.equal(failing.counts.stopped, 1);
 
+  // A policy halt must win over the abort it triggered, so the command exits
+  // non-zero instead of reporting a benign operator abort.
+  const ambiguous = new AbortController();
+  const racing = fakeConnector();
+  racing.runOnce = async () => {
+    ambiguous.abort();
+    throw new Error("raw internal detail");
+  };
+  assert.deepEqual(
+    await runPilotLoop({
+      connector: racing,
+      mode: "send-test",
+      grant: grant(),
+      maxTicks: 5,
+      tickMs: 0,
+      signal: ambiguous.signal,
+      haltReason: () => "dispatch-uncertain",
+    }),
+    { halt: "dispatch-uncertain", ticks: 0, rejectedInbound: 0 },
+  );
+  assert.equal(racing.counts.stopped, 1);
+
   const halted = fakeConnector();
   assert.deepEqual(
     await runPilotLoop({
@@ -487,6 +563,7 @@ test("the loop refuses grants outside the bounded dispatch shape", async () => {
       expiresAt: new Date(base + 9 * 60 * 60 * 1000).toISOString(),
     },
     { expectedAccountId: null as unknown as string },
+    { allowedPeerIds: [sentinelUid] },
   ]) {
     const connector = fakeConnector();
     await assert.rejects(
@@ -597,6 +674,53 @@ test("the loop refuses unbounded peers and reports redacted inbound rejections",
     }),
     { halt: "tick-limit", ticks: 1, rejectedInbound: 2 },
   );
+});
+
+test("the runtime build identity and database transport are verified", async () => {
+  const { assertBuildIdentity, requireTlsDatabaseUrl } = await import(
+    "../../tools/pilot-gates.js"
+  );
+  const build = {
+    sourceCommit: "a".repeat(40),
+    lockSha256: "b".repeat(64),
+    sdkIntegrity: "sha512-" + "c".repeat(64),
+  };
+  assert.doesNotThrow(() =>
+    assertBuildIdentity({ version: 1, ...build }, build),
+  );
+  for (const identity of [
+    null,
+    {},
+    { ...build, version: 2 },
+    { ...build, version: 1, sourceCommit: "d".repeat(40) },
+    { ...build, version: 1, extra: true },
+  ])
+    assert.throws(
+      () => assertBuildIdentity(identity, build),
+      /Pilot runtime unavailable/,
+    );
+
+  for (const url of [
+    "postgresql://u:p@127.0.0.1:5432/zalo",
+    "postgresql://u:p@localhost/zalo",
+    "postgresql://u:p@[::1]:5432/zalo",
+    "postgresql://u:p@db.internal:5432/zalo?sslmode=require",
+    "postgresql://u:p@db.internal/zalo?sslmode=verify-full",
+  ])
+    assert.doesNotThrow(() => requireTlsDatabaseUrl(url));
+  for (const url of [
+    "mysql://u:p@db.internal/zalo",
+    "postgresql://",
+    "not a url",
+    "postgresql://u:p@db.internal:5432/zalo",
+    "postgresql://u:p@db.internal:5432/zalo?sslmode=disable",
+    "postgresql://u:p@127.0.0.1:5432/zalo?ssl=false",
+    "postgresql://u:p@db.internal:5432/zalo?sslmode=prefer",
+  ])
+    assert.throws(
+      () => requireTlsDatabaseUrl(url),
+      /Pilot runtime unavailable/,
+    );
 });
 
 test("the runtime session adapter exposes only the bound account's credentials", async () => {

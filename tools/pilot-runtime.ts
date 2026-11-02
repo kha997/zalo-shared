@@ -2,8 +2,16 @@ import type pg from "pg";
 import { isAbsolute } from "node:path";
 import type { OwnershipHandle } from "../server/connector-ownership.js";
 import { ProviderNotDispatchedError, type Provider } from "../server/worker.js";
-import type { PilotGrant } from "../server/pilot-policy.js";
+import {
+  validatePilotGrant,
+  type PilotGrant,
+} from "../server/pilot-policy.js";
 import type { PilotManifest } from "./pilot-connector.js";
+import {
+  assertBuildIdentity,
+  readBuildIdentity,
+  requireTlsDatabaseUrl,
+} from "./pilot-gates.js";
 import {
   createOwnedConnector,
   type OwnedConnector,
@@ -59,6 +67,7 @@ function grantShape(grant: unknown): grant is PilotGrant {
     typeof g.expectedAccountId === "string" &&
     accountId.test(g.expectedAccountId) &&
     peers(g.allowedPeerIds) &&
+    !g.allowedPeerIds.includes(g.expectedAccountId) &&
     Number.isInteger(g.maxPartsPerDay) &&
     (g.maxPartsPerDay as number) >= 1 &&
     (g.maxPartsPerDay as number) <= 30 &&
@@ -173,9 +182,7 @@ export async function runPilotLoop(input: {
     try {
       policyHalt = input.haltReason?.();
     } catch {}
-    halt = input.signal?.aborted
-      ? "aborted"
-      : (policyHalt ?? "runtime-error");
+    halt = policyHalt ?? (input.signal?.aborted ? "aborted" : "runtime-error");
   } finally {
     try {
       await connector.stop();
@@ -261,24 +268,42 @@ export async function startPilotRuntime(input: {
     throw unavailable();
   const mode: PilotMode =
     input.command === "run-send-test" ? "send-test" : "observe";
-  const grant = input.manifest?.grant;
-  if (!grantShape(grant) || grant.purpose !== MODE_PURPOSE[mode])
+  const manifest = input.manifest;
+  if (!manifest || typeof manifest !== "object") throw unavailable();
+  // Re-validate the complete manifest: the runtime must never accept a bare
+  // grant-shaped object that skipped the consent scope or build binding.
+  const grant = validatePilotGrant(
+    manifest.grant,
+    manifest.build,
+    manifest.consent,
+    new Date(),
+  );
+  if (
+    grant.purpose !== MODE_PURPOSE[mode] ||
+    !grantShape(grant) ||
+    !fresh(grant, () => new Date())
+  )
     throw unavailable();
-  // Deny an expired grant before any vault, pool or SDK work.
-  if (!fresh(grant, () => new Date())) throw unavailable();
+  let identity: unknown;
+  try {
+    identity = await readBuildIdentity();
+  } catch {
+    throw unavailable();
+  }
+  assertBuildIdentity(identity, manifest.build);
   const env = input.env ?? {};
   const databaseUrl = env.DATABASE_URL;
   const keyPath = env.PILOT_KEY_FILE;
   const sessionPath = env.PILOT_SESSION_FILE;
   if (
     !databaseUrl ||
-    !/^postgres(ql)?:\/\//.test(databaseUrl) ||
     !keyPath ||
     !isAbsolute(keyPath) ||
     !sessionPath ||
     !isAbsolute(sessionPath)
   )
     throw unavailable();
+  requireTlsDatabaseUrl(databaseUrl);
 
   const [pgModule, files, facadeModule, ownership] = await Promise.all([
     import("pg"),
@@ -311,6 +336,10 @@ export async function startPilotRuntime(input: {
         accountId: grant.expectedAccountId!,
         allowedPeerIds: grant.allowedPeerIds,
       },
+      publishConnected: true,
+      ...(mode === "send-test"
+        ? { dispatchPeers: grant.allowedPeerIds }
+        : {}),
       createFacade: () =>
         facadeModule.createBoundSdkFacade({
           sessionStore,

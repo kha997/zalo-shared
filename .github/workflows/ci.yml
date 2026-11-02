@@ -155,7 +155,7 @@ jobs:
           docker pull "$builder_image"
           builder_base=$(docker image inspect --format '{{index .RepoDigests 0}}' "$builder_image")
           printf '%s\n' "$builder_base" | tee docs/evidence/connector-builder-digest.txt
-          docker build --build-arg BUILDER_IMAGE="$builder_base" -f ops/Dockerfile.connector -t zalo-shared-connector:ci .
+          docker build --build-arg BUILDER_IMAGE="$builder_base" --build-arg SOURCE_COMMIT="$GITHUB_SHA" -f ops/Dockerfile.connector -t zalo-shared-connector:ci .
       - name: Dry-run default performs no vault, SDK, database or network work
         run: |
           # The connector enforces owner-only manifest files; the CI runner UID
@@ -169,6 +169,18 @@ jobs:
           grep -q '"command":"dry-run"' docs/evidence/ci-pilot-dry-run.json
       - name: Separate connector scan, SDK inventory and nonroot/port assertions
         run: bash ops/pilot-scan.sh zalo-shared-connector:ci
+      - name: Image build identity matches this commit and the connector lock
+        run: |
+          node -e '
+          const crypto = require("node:crypto");
+          const fs = require("node:fs");
+          const identity = require("./docs/evidence/connector-image-inventory.json").buildIdentity;
+          const lock = fs.readFileSync("connector/package-lock.json");
+          const sdk = JSON.parse(lock.toString("utf8")).packages["node_modules/zca-js"].integrity;
+          if (identity.sourceCommit !== process.env.GITHUB_SHA) throw new Error("source commit mismatch");
+          if (identity.lockSha256 !== crypto.createHash("sha256").update(lock).digest("hex")) throw new Error("lock hash mismatch");
+          if (identity.sdkIntegrity !== sdk) throw new Error("SDK integrity mismatch");
+          '
       - name: Preserve pilot connector evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -17,8 +17,8 @@ Reviewed 2026-11-02. Scope: `connector/`, `tsconfig.connector.json`, `ops/Docker
 | `npm run typecheck` | PASS |
 | `npm run build` | PASS |
 | `npm run build:connector` | PASS |
-| Connector image build (`ops/Dockerfile.connector`) | PASS locally |
-| In-container inventory | `uid=65532`, `zca-js=2.2.0`, `crypto-js=4.2.0`, resolved `/app/node_modules/zca-js/dist/cjs/index.cjs` |
+| Connector image build (`ops/Dockerfile.connector`) | PASS locally; requires `--build-arg SOURCE_COMMIT=<40 hex>` |
+| In-container inventory | `uid=65532`, `zca-js=2.2.0`, `crypto-js=4.2.0`, resolved `/app/node_modules/zca-js/dist/cjs/index.cjs`, embedded build identity, no manifest/key/session/QR files |
 | Default dry-run with a synthetic manifest mounted read-only | PASS locally and hosted (`gate:"admitted"`, purpose `observe`) |
 | Connector scan assertions | PASS locally and hosted: UID 65532, no exposed ports, Trivy 0 HIGH/CRITICAL, 0 fixable |
 
@@ -29,6 +29,7 @@ Reviewed 2026-11-02. Scope: `connector/`, `tsconfig.connector.json`, `ops/Docker
 | The example Compose network was `internal: true`, which blocks outbound provider TLS and would make every live command fail. | **Fixed.** The example keeps a private bridge with no published ports and documents that host-level egress policy is an Owner decision. |
 | The scan inventory container ran with default capabilities and network access even though it only reads package metadata. | **Fixed.** It now runs with `--network none`, `--read-only`, `--cap-drop ALL` and `no-new-privileges`. |
 | The CI bind mount would be rejected by `readPrivateTextFile` because the runner-owned manifest did not match UID 65532. | **Fixed.** CI chowns the synthetic manifest to 65532 and sets mode 0600 before the dry-run. |
+| The grant's build identity was self-asserted by the manifest, so a copied manifest could rebind a grant to another artifact. | **Fixed.** The build stage requires `SOURCE_COMMIT`, derives the lock hash and SDK integrity from the connector lock, and embeds `/app/build-identity.json`. The runtime requires an exact match before any key, database or SDK work; CI asserts the identity equals `GITHUB_SHA`; the scanner validates its shape and rejects private pilot filenames in the image. |
 
 ## Residual risks
 

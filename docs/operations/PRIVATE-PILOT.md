@@ -21,6 +21,15 @@ sha256sum connector/package-lock.json                         # lockSha256 (64 h
 node -e 'console.log(require("./connector/package-lock.json").packages["node_modules/zca-js"].integrity)'  # sdkIntegrity
 ```
 
+The image build requires the same commit and embeds `/app/build-identity.json` derived from the actual build inputs:
+
+```bash
+docker build --build-arg SOURCE_COMMIT="$(git rev-parse HEAD)" \
+  -f ops/Dockerfile.connector -t zalo-shared-connector:pilot .
+```
+
+At startup of every live command (bootstrap and both run modes), the runtime compares the embedded identity with the manifest's `build` block before reading the key, session, database URL or SDK. A manifest copied onto the host with a different commit, lock hash or SDK integrity is refused; the grant cannot be rebound to another artifact by editing the manifest alone. CI also asserts the image identity equals the checked-out commit and the connector lock.
+
 `connector/package.json` pins `zca-js@2.2.0`, `pg` and `ipaddr.js` exactly. The runtime stage installs only that lock with `--omit=dev --ignore-scripts`; it never copies or prunes the root development tree. `crypto-js@4.2.0` is a transitive, deprecated dependency of `zca-js`; this residual risk is recorded in the scan summary and remains an explicit live-promotion gate.
 
 ## Private files
@@ -34,6 +43,8 @@ Keep all material outside the repository, on the private pilot host:
 | `state/session.enc` | 0600 | Encrypted `{version:1,accountId,session}` record written by the connector |
 | `state/view/` | 0700 | Local-only QR PNG directory; cleared after enrollment |
 | `state/view/qr.png` | 0600 | Short-lived enrollment view; never copied to evidence |
+
+`DATABASE_URL` must be a `postgres://` or `postgresql://` URL. A non-loopback host must also carry `sslmode=require`, `verify-ca` or `verify-full`; `ssl=false` is always refused. Loopback is accepted for a database on the same private host. The pilot connector never accepts a database, key or session value as a command argument.
 
 The container runs as UID 65532, so bind-mounted files must be owned by that UID (or a host user with the same numeric UID). The connector rejects symlinks, non-regular files, wrong owners/modes and escaping directories on POSIX.
 
@@ -79,8 +90,10 @@ Bootstrap writes the QR PNG only to the private view directory for the Owner to 
 
 ## Dispatch and inbound rules
 
+- A successful start publishes `provider_state.status='connected'` only after ownership, the UID-bound facade, transport start and `markActive`, inside a transaction holding the active owner row. Publication is refused while `reconciliation_required` is set. Normal shutdown invalidates ownership and returns the row to `disconnected` with reconciliation required, exactly like the generic connector.
 - Send-test reserves a durable per-account/day budget row before every external part. Accepted, failed and unknown attempts consume the reservation; refunds never occur. An `already-reserved` outcome is reported as a halt and is never resent.
-- Only exact allowlisted direct peers (`threadType 0`) are dispatchable; groups and unlisted peers are refused before reservation.
+- Only exact allowlisted direct peers (`threadType 0`) are dispatchable; groups and unlisted peers are refused before reservation. The worker claim itself is scoped to the grant peers, so mail for any other conversation is never claimed or marked failed.
+- The bound account's own UID can never appear in the peer allowlist; it is rejected by the grant parser, provider, connector and CLI.
 - Inbound persistence is limited to the bound account and the same allowlist. Unexpected direct peers, group events, a non-self sender that is not the peer, and a self sender that is not the bound account are dropped before persistence, without storing body, locator, identity or raw SDK error; the runtime reports only a count.
 - The 1–4 peer allowlist is a pilot safety scope, not a product seat limit. The application itself has no seat cap.
 - An expired grant, quota stop, lost ownership or uncertain result stops the loop. Local ownership gap state stays closed; do not add a permissive resume shortcut. Ownership recovery requires the reviewed admin reconciliation and externally verified old-owner termination.
@@ -88,11 +101,12 @@ Bootstrap writes the QR PNG only to the private view directory for the Owner to 
 ## Scanning and CI
 
 ```bash
-docker build -f ops/Dockerfile.connector -t zalo-shared-connector:pilot .
+docker build --build-arg SOURCE_COMMIT="$(git rev-parse HEAD)" \
+  -f ops/Dockerfile.connector -t zalo-shared-connector:pilot .
 bash ops/pilot-scan.sh zalo-shared-connector:pilot
 ```
 
-The scanner records vulnerabilities, licenses, the resolved `zca-js` version and runtime UID. It fails on fixable high/critical findings, any exposed port, non-root execution or an unexpected SDK version. Hosted CI runs the image default `dry-run` with a synthetic manifest and fake-only evidence; it never imports the real SDK for a login.
+The scanner records vulnerabilities, licenses, the resolved `zca-js` version, the embedded build identity and the runtime UID. It fails on fixable high/critical findings, any exposed port, non-root execution, an unexpected SDK version, a missing/malformed build identity or any manifest/key/session/QR file inside the image. Hosted CI runs the image default `dry-run` with a synthetic manifest and fake-only evidence; it never imports the real SDK for a login.
 
 ## Backup and restore
 

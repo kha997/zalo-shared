@@ -424,3 +424,104 @@ test("a retained old fault callback cannot disconnect or audit against a newer o
     await database.close();
   }
 });
+
+test("a publishing pilot runtime marks provider_state connected under its owner fence", async () => {
+  const database = await isolatedDatabase();
+  const { pool } = database;
+  let runtime: ReturnType<typeof createOwnedConnector> | undefined;
+  class Listener extends EventEmitter {
+    start() {
+      this.emit("connected");
+    }
+    stop() {}
+  }
+  const options = {
+    pool,
+    ownerLabel: "pilot-observe",
+    publishConnected: true,
+    inbound: { accountId: "zalo-uid-pilot", allowedPeerIds: ["peer-a"] },
+    dispatchPeers: ["peer-a"],
+    createFacade: () => ({
+      async createApi() {
+        return {
+          listener: new Listener(),
+          async sendMessage() {
+            throw new Error("send not expected");
+          },
+        };
+      },
+      close() {},
+    }),
+  };
+  try {
+    await pool.query(
+      "UPDATE provider_state SET status='disconnected',reconciliation_required=false WHERE account_id=$1",
+      [ACCOUNT],
+    );
+    runtime = createOwnedConnector(options);
+    await runtime.start();
+    assert.deepEqual(
+      (
+        await pool.query(
+          "SELECT status,reconciliation_required FROM provider_state WHERE account_id=$1",
+          [ACCOUNT],
+        )
+      ).rows[0],
+      { status: "connected", reconciliation_required: false },
+    );
+    const published = await pool.query(
+      "SELECT metadata FROM audit WHERE action='provider.state'",
+    );
+    assert.equal(published.rows.length, 1);
+    assert.deepEqual(published.rows[0].metadata, {
+      status: "connected",
+      ownerLabel: "pilot-observe",
+    });
+  } finally {
+    await runtime?.stop();
+    await database.close();
+  }
+});
+
+test("a publishing pilot runtime refuses to start while reconciliation is required", async () => {
+  const database = await isolatedDatabase();
+  const { pool } = database;
+  let runtime: ReturnType<typeof createOwnedConnector> | undefined;
+  class Listener extends EventEmitter {
+    start() {
+      this.emit("connected");
+    }
+    stop() {}
+  }
+  try {
+    await pool.query(
+      "UPDATE provider_state SET status='disconnected',reconciliation_required=true WHERE account_id=$1",
+      [ACCOUNT],
+    );
+    runtime = createOwnedConnector({
+      pool,
+      ownerLabel: "pilot-observe",
+      publishConnected: true,
+      createFacade: () => ({
+        async createApi() {
+          return { listener: new Listener(), async sendMessage() {} };
+        },
+        close() {},
+      }),
+    });
+    await assert.rejects(runtime.start());
+    assert.equal(runtime.status, "blocked");
+    assert.deepEqual(
+      (
+        await pool.query(
+          "SELECT status,reconciliation_required FROM provider_state WHERE account_id=$1",
+          [ACCOUNT],
+        )
+      ).rows[0],
+      { status: "disconnected", reconciliation_required: true },
+    );
+  } finally {
+    await runtime?.stop();
+    await database.close();
+  }
+});

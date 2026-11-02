@@ -17,19 +17,37 @@ docker save "$image" -o "$work/image.tar"
 # Runtime identity of the intentional SDK surface. Nothing here reads a
 # credential, manifest or network resource.
 docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true "$image" -e '
+const fs = require("fs");
+const path = require("path");
 const read = (name) => require(`/app/node_modules/${name}/package.json`);
 const zca = read("zca-js");
 const cryptoJs = read("crypto-js");
+const forbidden = new Set(["manifest.json", "session.key", "session.enc", "qr.png"]);
+const privateFiles = [];
+const walk = (dir) => {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== "node_modules" && entry.name !== ".cache") walk(full);
+    } else if (forbidden.has(entry.name)) privateFiles.push(full);
+  }
+};
+walk("/app");
+walk("/run");
 console.log(JSON.stringify({
   uid: process.getuid(),
   zcaJs: zca.version,
   zcaResolved: require.resolve("zca-js"),
-  cryptoJs: cryptoJs.version
+  cryptoJs: cryptoJs.version,
+  buildIdentity: JSON.parse(fs.readFileSync("/app/build-identity.json", "utf8")),
+  privateFiles
 }));
 ' | tee docs/evidence/connector-image-inventory.json
 
 python3 - "$image" "$work/licenses.json" <<'PY'
-import json, subprocess, sys
+import json, re, subprocess, sys
 from pathlib import Path
 image, license_path = sys.argv[1], sys.argv[2]
 report = json.loads(Path("docs/evidence/connector-container-vulnerabilities.json").read_text())
@@ -85,4 +103,15 @@ if inventory.get("zcaJs") != "2.2.0" or not inventory.get("zcaResolved"):
     raise SystemExit("Pilot connector image must pin and resolve zca-js 2.2.0")
 if inventory.get("cryptoJs") != "4.2.0":
     raise SystemExit("Unexpected crypto-js version; review the connector lock")
+if inventory.get("privateFiles"):
+    raise SystemExit("Pilot connector image must not contain private pilot material")
+identity = inventory.get("buildIdentity") or {}
+if (
+    sorted(identity) != ["lockSha256", "sdkIntegrity", "sourceCommit", "version"]
+    or identity.get("version") != 1
+    or not re.fullmatch(r"[a-f0-9]{40}", identity.get("sourceCommit") or "")
+    or not re.fullmatch(r"[a-f0-9]{64}", identity.get("lockSha256") or "")
+    or not re.fullmatch(r"sha512-[A-Za-z0-9+/]+={0,2}", identity.get("sdkIntegrity") or "")
+):
+    raise SystemExit("Pilot connector image must embed a valid build identity")
 PY

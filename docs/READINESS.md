@@ -2,6 +2,25 @@
 
 **NOT PRODUCTION-READY. No live Zalo login, production deployment, real customer data or public application endpoint has been used.** The repository is public; runtime credentials and unlicensed upstream application snapshots are excluded.
 
+## Private pilot review hardening — local PASS, hosted pending
+
+A second independent review of the committed pilot runtime, CLI, connector image and CI job found one high-impact defect and several medium issues. All are fixed in the working slice; hosted CI is pending.
+
+- Policy halts now win over the abort they trigger, so an ambiguous send cannot exit 0 as `aborted`. Any halt outside `tick-limit`, `grant-expired` and `aborted` exits non-zero.
+- Send-test can actually dispatch: the owned connector publishes `provider_state.status='connected'` after ownership, the UID-bound facade, transport start and `markActive`, in a transaction holding the active owner row `FOR SHARE`, and refuses while `reconciliation_required` is set. Before this fix the provider could never report connected.
+- Worker claims are scoped to the grant's exact direct peers, so an out-of-scope staff message is never claimed or marked failed. A denied destination now defers instead of failing.
+- The image embeds `/app/build-identity.json` derived from `SOURCE_COMMIT`, the connector lock and the pinned SDK integrity; the runtime refuses a manifest whose build block does not match. `DATABASE_URL` requires TLS for non-loopback hosts.
+- The bound account is rejected in every peer allowlist. The scanner walks the image for manifest/key/session/QR files, and CI asserts the embedded identity equals the checked-out commit.
+- `startPilotRuntime` re-validates the full manifest (build, consent scope, purpose, shape, freshness) instead of accepting a bare grant-shaped object.
+
+Local evidence: typecheck and both builds PASS; focused pilot/connector suites **47/47** PASS; full local suite **258 tests, 256 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions. The connector image built locally with a real identity; the inventory reported UID 65532, `zca-js@2.2.0`, `crypto-js@4.2.0`, the commit identity and no private files. [Review and dispositions](review/private-pilot-runtime-review.md).
+
+| Claim | Status |
+|---|---|
+| Policy-halt exit, real dispatch path, peer-scoped claims, image build identity, self-peer rejection, TLS rule | PASS locally; hosted pending |
+| Live send-test against a real account or peer | UNPROVEN — requires Owner activation |
+| Production readiness | NOT ESTABLISHED |
+
 ## Private pilot runtime, connector image and gate review — hosted PASS
 
 The `f9ac8e5` slice adds a bounded pilot driver (`tools/pilot-runtime.ts`): a single-lifetime owned connector, pre-start abort handling, grant shape/lifetime/peer/budget/interval validation, observe mode that never constructs a dispatcher, send-test ticks at `max(2000 ms, grant.minIntervalMs)`, policy-halt propagation, and an exact direct-peer inbound gate bound to the grant account. Session envelopes carry an explicit `keyId` bound into AES-GCM AAD, so key rotation is explicit and cross-id reads fail. The CLI now maps safety halts (`runtime-error`, `already-reserved`, `reservation-denied`, `dispatch-uncertain`) to exit 1 and exposes only bounded tick/rejection counters. A separate SDK-bearing connector image (`ops/Dockerfile.connector`) uses a dedicated exact lock, runs as UID 65532 with no ports, and defaults to dry-run; a hosted `pilot` CI job builds it, runs the dry-run with a synthetic owner-only manifest, inventories `zca-js`/`crypto-js`, and scans it.

@@ -35,6 +35,9 @@ services:
         target: /run/pilot/state
     # No published ports. The connector needs outbound TLS to the provider;
     # host-level egress policy remains an Owner operating decision.
+    # DATABASE_URL in the private env file must be a postgres URL; a
+    # non-loopback database host also requires sslmode=require, verify-ca or
+    # verify-full.
     networks: [pilot-private]
     # Live commands additionally require --acknowledge-pilot-risk and the
     # matching unexpired grant. Example:

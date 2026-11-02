@@ -54,6 +54,7 @@ function readPilotPolicy(policy: PilotDispatchPolicy) {
     grant.allowedPeerIds.length > 4 ||
     !grant.allowedPeerIds.every((peer) => pilotId.test(peer)) ||
     new Set(grant.allowedPeerIds).size !== grant.allowedPeerIds.length ||
+    grant.allowedPeerIds.includes(grant.expectedAccountId) ||
     !Number.isFinite(Date.parse(grant.issuedAt)) ||
     !Number.isFinite(Date.parse(grant.expiresAt))
   )
@@ -183,7 +184,8 @@ export function createSdkProvider(
           m.provider_thread_type !== 0 ||
           !dispatch.peers.has(m.provider_thread_id)
         )
-          throw new Error("Pilot destination denied");
+          // Defer, never fail: another connector may own this destination.
+          throw new ProviderNotDispatchedError();
       }
       const media = new Map<number, MediaInput>();
       if (m.attachments > 0) {

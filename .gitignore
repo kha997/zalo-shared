@@ -10,3 +10,4 @@ test-results/
 *.pem
 *.key
 credentials.json
+docs/evidence/pilot-manifest*.json

@@ -11,9 +11,20 @@ Continue only with synthetic/offline work until the Owner supplies and approves 
 
 The main application remains provider-disabled/mock and SDK-free in its production image. The pinned `zca-js@2.2.0` is only for development/research/guard tests; no authenticated session was used.
 
-## Latest evidenced hosted baseline — QR enrollment and CLI
+## Latest evidenced hosted baseline — QR enrollment and CLIHosted CI **41374543813** on `ad036f60ae4fa4a8b00cbd72e584c0a0128e1784` passed **229/229** unit checks, **2/2** guarded offline SDK checks and **9 browser cases expected + 1 explicit skip, 0 failed**, including the full PostgreSQL, transport, recovery/restore, monitoring and SDK-free nonroot image stages. The prior inbound-media completion baseline is CI 41370951223 on `c128933` (179/179, 2/2, 9+1). Neither run demonstrates provider compatibility, physical-phone coexistence or production readiness.
 
-Hosted CI **41374543813** on `ad036f60ae4fa4a8b00cbd72e584c0a0128e1784` passed **229/229** unit checks, **2/2** guarded offline SDK checks and **9 browser cases expected + 1 explicit skip, 0 failed**, including the full PostgreSQL, transport, recovery/restore, monitoring and SDK-free nonroot image stages. The prior inbound-media completion baseline is CI 41370951223 on `c128933` (179/179, 2/2, 9+1). Neither run demonstrates provider compatibility, physical-phone coexistence or production readiness.
+## Working slice — second-review hardening (local PASS, hosted pending)
+
+A second independent review of the committed pilot slice found one high-impact defect and several medium issues; all are fixed in the working tree.
+
+- Policy halts take precedence over the abort they trigger; an ambiguous send can no longer exit 0 as `aborted`, and any halt outside `tick-limit`/`grant-expired`/`aborted` exits non-zero.
+- Send-test can dispatch: the owned connector publishes `provider_state='connected'` after ownership, the UID-bound facade, transport start and `markActive`, under the active owner row lock, refusing while reconciliation is required. Ownership shutdown still returns it to disconnected/quarantined.
+- Worker claims are scoped to the grant peers; out-of-scope mail is never claimed or failed, and a denied destination defers rather than fails.
+- The image now embeds `/app/build-identity.json` (commit, connector lock hash, SDK integrity) and the runtime refuses a manifest that does not match; `DATABASE_URL` requires TLS for non-loopback hosts.
+- The bound account is rejected in every peer allowlist; the scanner rejects private pilot files inside the image; CI asserts the image identity equals `GITHUB_SHA`.
+- `startPilotRuntime` validates the full manifest (build, consent, purpose, shape, freshness), not just the grant object.
+
+Local: typecheck/build/build:connector PASS; focused pilot/connector suites 47/47 PASS; full local suite 258 tests, 256 PASS, only the two Windows-only `vault.test.ts` failures. Connector image built locally with a real identity; inventory reports UID 65532, `zca-js@2.2.0`, `crypto-js@4.2.0`, no private files. Hosted CI for this slice is pending.
 
 ## Work in the committed head — private pilot contract
 
@@ -65,5 +76,6 @@ Local typecheck passes; full local suite 201/203 (two Windows-only vault mode as
 - Private pilot policy/budget/UID gates: local and hosted PASS at `7e66b98`/41372493757.
 - QR enrollment, private files and CLI: hosted PASS at `ad036f6`/41374543813.
 - Pilot runtime, separate connector image, scan and review fixes: local and hosted PASS at `105f2d7`/41377272040.
+- Second-review hardening (halt precedence, real dispatch path, peer-scoped claims, image build identity, self-peer and TLS rules): local PASS, hosted pending.
 - Long-lived pilot runtime live drill, media scheduling in the pilot loop, dedicated admin retry, metadata/attachment retention policy and duplicate-egress bounds: open.
 - Actual Zalo login, messaging/media, account health, phone coexistence, terms compliance and ban risk: UNPROVEN. Production readiness: NOT ESTABLISHED.
