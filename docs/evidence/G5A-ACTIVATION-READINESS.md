@@ -11,17 +11,18 @@ This report covers the Owner's required pre-G5-A items. It contains aliases and 
 
 - Private host: Owner-controlled WSL2 Ubuntu 24.04 environment; Docker Engine with local-only images.
 - Repository: `/home/zen/Projects/zalo-shared`, branch `feat/shared-inbox`.
-- Connector artifact source commit: `2b41b340f57dbceea6b5c445b11a4d3a0f5ba62e`.
+- Connector artifact source commit: `6d199162e8b00d7b4968b6b1fd82450b4387f4df`.
 - PR #3 remains OPEN and **Draft**; nothing is deployed.
 
 ## 2. Reviewed connector artifact
 
 | Item | Value |
 | --- | --- |
-| Image tag | `zalo-shared-connector:g5-2b41b34` |
-| Local image digest (`RepoDigest`) | `sha256:e3fa923f1396c10ddcae039b889a6109f6cafcce6b25c2054ed8e43c0835c7b0` |
-| Local archive SHA-256 | `ce7dbd64bb3d1fde02e4126afbac519df209cfd661f09e037dae2f1761116246` |
-| Embedded source commit | `2b41b340f57dbceea6b5c445b11a4d3a0f5ba62e` |
+| Image tag | `zalo-shared-connector:g5-6d199162` |
+| Local image digest (`RepoDigest`) | `sha256:6b1f0100017d067f24d18eee53ffbfcffe7562ac3f79fd98283097ef1938d781` |
+| Local archive SHA-256 | `149890e070a387e501c00d5f8dff5ccb3db15b19fced38e8ed859e992436420c` |
+| Local archive size | 57,530,880 bytes |
+| Embedded source commit | `6d199162e8b00d7b4968b6b1fd82450b4387f4df` |
 | Embedded connector lock SHA-256 | `17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b` |
 | Embedded SDK integrity | `sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA==` |
 | Runtime | UID 65532, no exposed ports, `zca-js@2.2.0`, `crypto-js@4.2.0`, no private files |
@@ -32,7 +33,7 @@ The image was built locally from the reviewed source with `SOURCE_COMMIT` set to
 
 | Check | Result |
 | --- | --- |
-| Full local suite (Node 24.19, disposable PostgreSQL) | **283/283 PASS**, 0 fail, 0 skip |
+| Full local suite (Node 24.19, disposable PostgreSQL) | **286/286 PASS**, 0 fail, 0 skip |
 | TypeScript typecheck | PASS |
 | Connector compile (`build:connector`) | PASS |
 | G5 policy/preflight/session/text-only/reconnect tests | PASS (focused suites) |
@@ -64,8 +65,9 @@ Hosted CI status for this evidence head is recorded in the final Owner report an
 
 - The Owner names the exact UTC start in the G5-A start authorization. No start time is assumed by this report.
 - Enrollment grant: ≤1 hour, purpose `enroll-session`, null account, zero peers.
-- Observe/send-test: each requires a new Owner authorization; the connector stops automatically at the 2-hour wall-clock cap (`session-limit`), at grant expiry, or earlier on a fault/abort.
-- The 2-hour cap starts when the pilot runtime loop begins, before connector login/startup; the Owner activation time is recorded and must fall within the same 2-hour window. G5-A bootstrap is a short enrollment interaction, not a 2-hour observation session.
+- Observe/send-test: each requires a new Owner authorization and a fresh grant whose `expiresAt` is the Owner's automatic expiry (≤2 hours after the named start). The connector stops at grant expiry, at the 2-hour runtime wall-clock cap (`session-limit`), or earlier on a fault/abort.
+- The runtime cap starts when the pilot loop begins, before connector login/startup. A process restart resets that loop timer, so the absolute bound is the grant expiry: the grant is issued for the activation window and a restarted process cannot send after it. G5-A bootstrap is a short enrollment interaction, not a 2-hour observation session.
+- The durable part budget is 10 per UTC day **and** 10 per grant. The per-grant cap prevents a session that crosses UTC midnight from obtaining a second daily allowance.
 
 ## 7. QR interaction and Owner presence
 
@@ -77,7 +79,7 @@ Hosted CI status for this evidence head is recorded in the final Owner report an
 
 1. Send one `SIGTERM` to the connector and confirm exit; do not restart or start a second connector.
 2. Verify ownership is released/quarantined and the process is gone. Treat an in-flight provider call with unverified termination as unknown.
-3. Revoke the pilot session from the official phone. This build has no automatic reauthentication or QR retry.
+3. Revoke the pilot session from the official phone. This build performs one stored-credential login per process and has no QR/password re-enrollment, retry loop or automatic replacement login.
 4. Stop the application worker if it could claim pilot work; preserve the database and sanitized logs only.
 5. If ending the pilot, follow [PILOT-TEARDOWN.md](../operations/PILOT-TEARDOWN.md) for D7 deletion, inventory, backup disclosure and verification.
 
@@ -87,23 +89,41 @@ Hosted CI status for this evidence head is recorded in the final Owner report an
 | --- | --- |
 | One account / one peer | `assertG5Scope` in bootstrap, runtime and preflight; runtime peer-scoped claims |
 | 1–10 parts/day / ≥2 s | G5 preflight/runtime plus durable budget reservation and interval |
-| 2-hour session | `sessionLimitMs` in `runPilotLoop`, `session-limit` halt |
-| Text only | `textOnly` dispatch policy rejects attachments before reservation/egress |
-| No auto-reconnect | `maxReconnectAttempts: 0`, durable `connection-lost` fault, controller abort |
-| No auto-reauth/resend | Stored session only; unknown results stop; no retry path |
+| ≤10 parts per grant | Durable `pilot_part_ledger` count by `grant_id` before each reservation |
+| 2-hour session | `sessionLimitMs` in `runPilotLoop`, `session-limit` halt; grant `expiresAt` is the absolute bound across restarts |
+| Text only | `textOnly` dispatch policy rejects attachments before reservation/egress; omission defaults to text-only |
+| No auto-reconnect | `maxReconnectAttempts: 0`; the session aborts and the CLI exits non-zero with `connection-lost` |
+| Durable fault | Fault write is awaited (up to 3 s) before ownership is released; a dead pool can still prevent persistence |
+| No auto-reauth/resend | One stored-credential login per process; no QR/password re-enrollment, no retry loop, no resend after unknown. SDK-internal session refresh is not established offline |
 | Stage order | Separate purpose gates and Owner authorization per stage |
 
 ## Test IDs
 
 - `tests/backend/g5-policy.test.ts` — bounds, stage mapping, bootstrap exception, no identifier leakage.
-- `tests/backend/pilot-cli.test.ts` — preflight admission and denial; live command acknowledgement/purpose/runner gates.
-- `tests/backend/private-pilot-flow.test.ts` — two-hour `session-limit`, invalid cap rejection, text-only refusal before reservation/egress.
+- `tests/backend/pilot-cli.test.ts` — preflight admission/denial; `connection-lost` exits non-zero; live command acknowledgement/purpose/runner gates.
+- `tests/backend/private-pilot-flow.test.ts` — real `G5_SESSION_LIMIT_MS` `session-limit`, invalid cap rejection, text-only refusal before reservation/egress, omitted-`textOnly` fail-closed, per-grant budget across a UTC day rollover, and a `startPilotRuntime` refusal for a policy-valid 8-hour grant.
 - `tests/transport/transport.test.ts` — zero reconnect stops the listener with one durable fault; reconnect bounds.
+- `tests/transport/connector-runtime.test.ts` — teardown waits for a pre-stop fault write before releasing ownership.
 - In-image evidence: `g5-preflight-bootstrap.json`, `g5-preflight-observe.json`, `g5-preflight-send-test.json`, `g5-preflight-denied.json`.
 
 ## Independent review
 
-A read-only independent review of this slice is recorded in the final Owner report. It found no P1 bypass in the G5 scope enforcement; any P2/P3 findings and dispositions are listed there. The earlier G4 independent reviews cover the pre-existing pilot runtime, connector image and gate logic, not live provider behaviour.
+Two read-only reviews covered commits `8886f94` and the corrected slice `6d19916`; neither found a P1 bypass of the live send path. Their material findings and dispositions:
+
+| Finding | Disposition |
+| --- | --- |
+| `textOnly` defaulted to `false` when omitted (P2) | Fixed in `6d19916`: omission now defaults to text-only; regression test added |
+| 10-part budget was per UTC day only; a midnight-crossing session could emit 20 (P2) | Fixed: durable per-grant cap in addition to the daily cap; rollover test added |
+| A zero-reconnect transport fault exited 0 as `aborted` (P2) | Fixed: the runtime reports `connection-lost`, which exits non-zero; CLI test added |
+| A fault arriving during teardown could miss the durable write (P2) | Fixed: teardown awaits pending fault writes for up to 3 s before releasing ownership; runtime test added |
+| Teardown SQL used the Zalo UID for a UUID column, omitted `pilot_part_ledger`, and ignored `provider_events` FK order (P2, documentation) | Corrected in `PILOT-TEARDOWN.md`; SQL not executed against a populated pilot DB (UNPROVEN) |
+| The 2-hour test used a 1-hour configured cap; restart resets the loop timer (P3) | Test now uses the real `G5_SESSION_LIMIT_MS`; documents that grant expiry is the absolute bound |
+| "No automated reauthentication" overstated the one stored-credential `login()` per process (P2) | Wording narrowed; SDK-internal refresh remains unverified |
+| 8-hour observe grant was accepted by the live runner test (P2) | `startPilotRuntime` G5 refusal now has an explicit regression test |
+| Host preflight ignored the requested stage (P3) | Host wrapper now rejects a manifest whose purpose does not match the stage; build identity is still checked only by the live command |
+| The G5 artifact was still at `2b41b34`, whose CI invocation could not run the distroless CLI (P2) | New artifact `6d19916` rebuilt and re-scanned; CI run `41431903557` exercises the corrected command |
+
+Hosted CI `41430051691` on `8886f94` and `41431903557` on the artifact commit `6d19916` both passed the `test` and `pilot` jobs, including the G5 preflight admission/denial step. The earlier G4 reviews cover the pre-existing pilot runtime, connector image and gate logic, not live provider behaviour.
 
 ## Residual risks and UNPROVEN items
 
@@ -112,8 +132,11 @@ A read-only independent review of this slice is recorded in the final Owner repo
 - Host-level restricted egress is an Owner operating condition; Docker network isolation is implemented, but the host firewall is not proven here.
 - Platform terms and account-restriction/ban risk cannot be removed by tests; D5 acceptance remains with the Owner.
 - The skipped isolated-server browser case and monitoring deployment remain open G4 residuals.
-- The 2-hour cap is enforced by the runtime loop between ticks, not by an OS-level kill timer. A hung startup performs no provider activity; the Owner can terminate the container immediately. The grant expiry and connector/send timeouts provide additional bounds.
-- Capacity is not claimed; the pilot is one account, one peer and 10 parts/day.
+- The 2-hour runtime cap is enforced between ticks, not by an OS-level kill timer. A restart resets the loop timer, so the grant `expiresAt` (set at activation) is the absolute bound. A hung startup performs no provider activity; the Owner can terminate the container immediately. Grant expiry and connector/send timeouts provide additional bounds.
+- Fault persistence is best-effort under a dead database: teardown waits up to 3 seconds, then releases ownership. The session still stops and the local dispatch fence stays closed.
+- Teardown SQL is corrected but was not executed against a populated pilot database; treat deletion verification as UNPROVEN until it runs after the pilot.
+- The `connection-lost` halt, per-grant cap and omission-default paths are unit/integration tested; they have not been exercised against the real provider.
+- Capacity is not claimed; the pilot is one account, one peer and 10 parts/UTC-day (and per grant).
 
 ## Stop point
 

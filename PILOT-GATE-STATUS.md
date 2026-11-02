@@ -1,7 +1,7 @@
 # Pilot gate status
 
 **Date:** 2026-11-02
-**Branch:** `feat/shared-inbox`; connector artifact source `2b41b340f57dbceea6b5c445b11a4d3a0f5ba62e`
+**Branch:** `feat/shared-inbox`; connector artifact source `6d199162e8b00d7b4968b6b1fd82450b4387f4df`
 **PR #3:** OPEN, **Draft** (not merged, not deployed)
 **Owner decision:** `G5_SCOPE_APPROVED_ACTIVATION_PENDING` — D1–D7 approved in scope; live activation withheld
 **Live pilot:** **NOT ACTIVATED** — no Zalo login, QR scan, session, real account or external send performed
@@ -23,16 +23,16 @@
 
 ## Verified identity and offline status
 
-- Connector image `zalo-shared-connector:g5-2b41b34`, local digest `sha256:e3fa923f1396c10ddcae039b889a6109f6cafcce6b25c2054ed8e43c0835c7b0`, local archive SHA-256 `ce7dbd64bb3d1fde02e4126afbac519df209cfd661f09e037dae2f1761116246`.
-- Embedded build identity matches `2b41b34`, `connector/package-lock.json` and the locked SDK integrity; UID 65532; no exposed ports; no `manifest.json`, `session.key`, `session.enc` or `qr.png` in the image.
+- Connector image `zalo-shared-connector:g5-6d199162`, local digest `sha256:6b1f0100017d067f24d18eee53ffbfcffe7562ac3f79fd98283097ef1938d781`, local archive SHA-256 `149890e070a387e501c00d5f8dff5ccb3db15b19fced38e8ed859e992436420c` (57,530,880 bytes).
+- Embedded build identity matches `6d19916`, `connector/package-lock.json` and the locked SDK integrity; UID 65532; no exposed ports; no `manifest.json`, `session.key`, `session.enc` or `qr.png` in the image.
 - Trivy 0.76.1 reported **0 HIGH/CRITICAL** at scan time.
-- Full local suite **283/283 PASS**; typecheck and connector build PASS.
+- Full local suite **286/286 PASS**; typecheck and connector build PASS.
 - In-image `preflight` under `--network none` admitted the synthetic bootstrap, observe and send-test manifests and denied an out-of-scope manifest.
 - A local image digest is not a registry digest or signed attestation; CI does not push an image. This remains a deployment limitation.
 
 ## Enforced G5 limits
 
-Exactly one connector account, exactly one allowlisted direct peer, 1–10 outbound parts/account/day, ≥2000 ms interval, 2-hour session cap, text-only, no automatic reconnect, no automatic reauthentication, no resend after unknown, no concurrent connector ownership, and separate Owner authorization per stage.
+Exactly one connector account, exactly one allowlisted direct peer, 1–10 outbound parts/account/day and at most 10 per grant, ≥2000 ms interval, 2-hour runtime cap bounded absolutely by grant expiry, text-only by default, no automatic reconnect (a fault exits non-zero as `connection-lost`), no automatic resend after unknown, no concurrent connector ownership, and separate Owner authorization per stage. One stored-credential login per process is performed; no QR/password re-enrollment or retry loop exists.
 
 ## Next action
 

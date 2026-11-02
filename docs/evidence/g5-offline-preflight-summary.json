@@ -3,18 +3,18 @@
   "status": "PASS",
   "evidenceType": "synthetic-offline",
   "liveAction": "none",
-  "recordedAt": "2026-11-02T10:31:14.874Z",
+  "recordedAt": "2026-11-02T10:52:38.762Z",
   "branch": "feat/shared-inbox",
-  "artifactSourceCommit": "2b41b340f57dbceea6b5c445b11a4d3a0f5ba62e",
-  "image": "zalo-shared-connector:g5-2b41b34",
-  "imageId": "sha256:e3fa923f1396c10ddcae039b889a6109f6cafcce6b25c2054ed8e43c0835c7b0",
-  "localRepoDigest": "zalo-shared-connector@sha256:e3fa923f1396c10ddcae039b889a6109f6cafcce6b25c2054ed8e43c0835c7b0",
-  "localArchiveSha256": "ce7dbd64bb3d1fde02e4126afbac519df209cfd661f09e037dae2f1761116246",
-  "imageBytes": 57493682,
+  "artifactSourceCommit": "6d199162e8b00d7b4968b6b1fd82450b4387f4df",
+  "image": "zalo-shared-connector:g5-6d199162",
+  "imageId": "sha256:6b1f0100017d067f24d18eee53ffbfcffe7562ac3f79fd98283097ef1938d781",
+  "localRepoDigest": "zalo-shared-connector@sha256:6b1f0100017d067f24d18eee53ffbfcffe7562ac3f79fd98283097ef1938d781",
+  "localArchiveSha256": "149890e070a387e501c00d5f8dff5ccb3db15b19fced38e8ed859e992436420c",
+  "imageBytes": 57530880,
   "imageKind": "local image digest and local archive fingerprint; not a pushed registry digest or signature",
   "buildIdentity": {
     "version": 1,
-    "sourceCommit": "2b41b340f57dbceea6b5c445b11a4d3a0f5ba62e",
+    "sourceCommit": "6d199162e8b00d7b4968b6b1fd82450b4387f4df",
     "lockSha256": "17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b",
     "sdkIntegrity": "sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA=="
   },
@@ -35,13 +35,24 @@
     "bootstrap": "admitted",
     "observe": "admitted",
     "send-test": "admitted",
-    "outOfScope": "denied"
+    "outOfScope": "denied",
+    "stageMismatch": "rejected by host wrapper"
   },
   "checks": {
-    "fullLocalSuite": "283/283 PASS",
+    "fullLocalSuite": "286/286 PASS",
     "typecheck": "PASS",
     "connectorBuild": "PASS",
     "noQrLoginOrSend": true
+  },
+  "independentReview": {
+    "reviews": 2,
+    "p1BypassFound": 0,
+    "materialFindings": "dispositioned; see G5A-ACTIVATION-READINESS.md",
+    "unproven": [
+      "teardown SQL was not executed against a populated pilot database",
+      "SDK-internal session refresh behavior",
+      "host firewall and live provider behavior"
+    ]
   },
   "evidenceFiles": [
     "g5-preflight-bootstrap.json",
@@ -55,6 +66,7 @@
   "limitations": [
     "Synthetic manifests only; no real account, peer, session or provider action.",
     "The local image ID is not a registry digest or a signed attestation; CI does not push the image.",
+    "Preflight validates scope and shape only; the live command verifies the embedded build identity.",
     "Hosted egress restriction and phone coexistence remain unproven until the approved live pilot."
   ]
 }

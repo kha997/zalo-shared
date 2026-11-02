@@ -1,1 +1,1 @@
-{"command":"preflight","ok":true,"gate":"admitted","purpose":"enroll-session","accountBound":false,"peerCount":0,"maxPartsPerDay":10,"minIntervalMs":2000,"lifetimeMs":3600000,"expiresAt":"2026-11-02T11:30:12.509Z"}
+{"command":"preflight","ok":true,"gate":"admitted","purpose":"enroll-session","accountBound":false,"peerCount":0,"maxPartsPerDay":10,"minIntervalMs":2000,"lifetimeMs":3600000,"expiresAt":"2026-11-02T11:50:30.622Z"}

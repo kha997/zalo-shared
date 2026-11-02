@@ -26,12 +26,12 @@ The repository enforces the following independently of the generic pilot policy,
 
 - exactly one connector account and exactly one allowlisted direct peer for observe/send-test;
 - a null account and zero peers only for the ≤1-hour enrollment grant;
-- 1–10 outbound parts per account per day and a minimum 2000 ms interval;
-- a 2-hour wall-clock session cap measured by the connector process, with a terminal `session-limit` stop;
-- text-only dispatch: an attachment request is refused before reservation or egress;
-- zero automatic reconnects; a lost connection becomes a durable fault and aborts the session;
-- no automated reauthentication, no automatic resend after an unknown result and no concurrent connector ownership;
-- offline `preflight` denies any manifest outside this scope before a live command can start.
+- 1–10 outbound parts per account per UTC day, at most 10 per grant, and a minimum 2000 ms interval;
+- a 2-hour wall-clock runtime cap measured by the connector process, with a terminal `session-limit` stop; the grant `expiresAt` set at activation is the absolute bound across restarts;
+- text-only dispatch by default: an attachment request is refused before reservation or egress;
+- zero automatic reconnects; a lost connection aborts the session and exits non-zero as `connection-lost`, and teardown waits up to 3 seconds to persist the fault before releasing ownership;
+- no automatic resend after an unknown result and no concurrent connector ownership; one stored-credential login per process, with no QR/password re-enrollment or retry loop (SDK-internal refresh is unverified);
+- offline `preflight` denies a manifest outside this scope; live commands independently re-assert the scope and verify the embedded build identity before touching keys, session, database or SDK.
 
 ## Staged gates
 

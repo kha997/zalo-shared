@@ -11,10 +11,10 @@ No step in this document authorizes a live action by itself. The Owner must name
 1. The Owner has confirmed the dedicated account alias, the single consenting peer alias, the private host and the exact UTC window.
 2. The private consent record is complete and referenced by `consentRef`; the manifest uses aliases only in repository material.
 3. The reviewed connector image is the one recorded in the readiness report; the source commit, connector lock and SDK integrity match the embedded build identity.
-4. `ops/local/preflight-connector.sh IMAGE STAGE` returns `"ok":true` and `"gate":"admitted"` for the exact stage manifest with no network namespace. Preflight checks scope only; the live command separately verifies the embedded image identity.
+4. `ops/local/preflight-connector.sh IMAGE STAGE` returns `"ok":true` and `"gate":"admitted"` for the exact stage manifest with no network namespace, and its purpose matches the stage. Preflight checks scope only; the live command separately verifies the embedded image identity.
 5. The connector has exclusive ownership; no second connector process or stale container is running.
 6. The official phone is available, unlocked and held by the Owner; no screenshot, screen share, chat upload or cloud sync of the QR is permitted.
-7. The stage-specific grant is fresh, purpose-matching and expires no later than the Owner window. Enrollment ≤1 hour; observe/send-test ≤2 hours.
+7. The stage-specific grant is fresh and purpose-matching. Set `expiresAt` to the Owner's named automatic expiry, no later than the end of the authorized window: enrollment ≤1 hour; observe/send-test ≤2 hours. The grant expiry is the absolute bound even if the process restarts.
 8. The emergency stop path is open: the Owner can terminate the container and revoke the session from the phone.
 
 ## Stage G5-A — bootstrap (QR enrollment only)
@@ -39,7 +39,7 @@ No step in this document authorizes a live action by itself. The Owner must name
 1. Generate the observe manifest from [pilot-manifest.template.json](pilot-manifest.template.json) with the exact account UID and exactly one peer UID. Expiry ≤2 hours and ≤ the Owner window.
 2. Run `preflight` for `observe`; confirm `accountBound:true`, `peerCount:1`, `maxPartsPerDay:10`, `minIntervalMs:2000` and `lifetimeMs` ≤7200000.
 3. Start `run-observe --acknowledge-pilot-risk` once. No dispatcher is constructed.
-4. The runtime stops at grant expiry, the 2-hour wall-clock cap (`session-limit`), a connection fault, lost ownership or an operator abort.
+4. The runtime stops at grant expiry, the 2-hour runtime cap (`session-limit`), a connection fault (`connection-lost`, non-zero exit), lost ownership or an operator abort.
 5. Do not send from another device or introduce a second peer. Record inbound counts and any rejected inbound events; never store message bodies in evidence.
 
 **Evidence to record:** UTC start/end and stop reason, tick count, accepted/rejected inbound counts by category (no bodies), connection events, phone coexistence, ownership, errors and the stage token.
@@ -53,8 +53,8 @@ No step in this document authorizes a live action by itself. The Owner must name
 1. Generate the send-test manifest from [pilot-manifest.send-test.template.json](pilot-manifest.send-test.template.json) with the same exact account and single peer. Expiry ≤2 hours and ≤ the Owner window.
 2. Run `preflight` for `send-test`; same G5 bounds as observe.
 3. Start `run-send-test --acknowledge-pilot-risk` once. Only text to the allowlisted direct peer is permitted; attachments are refused before reservation and egress.
-4. Respect the durable 10-part/day budget and ≥2 s interval. Never resend an unknown result; stop the session and follow the unknown-work procedure.
-5. End at 10 parts, grant expiry, the 2-hour cap, a safety halt or the Owner stop command.
+4. Respect the durable 10-part/UTC-day and 10-part/grant budget and the ≥2 s interval. Never resend an unknown result; stop the session and follow the unknown-work procedure.
+5. End at 10 parts for the grant, any daily limit, grant expiry, the 2-hour runtime cap, a safety halt or the Owner stop command.
 
 **Evidence to record:** UTC start/end and stop reason, planned versus observed parts, provider IDs (aliases/redacted), accepted/failed/unknown counts, interval observations, the single recipient check, text-only check, phone coexistence, errors and the stage token.
 
@@ -64,7 +64,7 @@ No step in this document authorizes a live action by itself. The Owner must name
 
 1. Send `SIGTERM` to the connector container/process once; wait for exit. Do not restart, reconnect or start a replacement connector.
 2. Verify ownership is released/quarantined and the process is gone. A database lock cannot cancel an in-flight provider call; treat unverified termination as unknown.
-3. Revoke the provider session from the official phone (log out the pilot device/session). There is no automatic reauthentication or QR retry in this build.
+3. Revoke the provider session from the official phone (log out the pilot device/session). The connector performs one stored-credential login per process; there is no QR/password re-enrollment, retry loop or automatic replacement login.
 4. Stop the application worker if it could claim pilot work. Preserve the database and sanitized logs.
 5. If the pilot is ending, follow [PILOT-TEARDOWN.md](PILOT-TEARDOWN.md) for D7 deletion, inventory and backup disclosure.
 

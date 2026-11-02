@@ -20,7 +20,7 @@ The Owner approved this narrower scope for the staged G5 pilot. It is enforced i
 - a 2-hour wall-clock cap per activated observe/send-test session, after which the loop stops with `session-limit`;
 - text only: an outbound attachment request is refused before reservation or egress;
 - no automatic reconnect (`maxReconnectAttempts: 0`); a lost connection becomes one durable fault and aborts the session;
-- no automated reauthentication, no automatic resend after an unknown result and no concurrent connector owner;
+- one stored-credential login per process, with no QR/password re-enrollment or retry loop, no automatic resend after an unknown result and no concurrent connector owner;
 - `preflight` validates the exact stage manifest against these bounds offline, before any live command can start;
 - stage order `bootstrap` → `run-observe` → `run-send-test`, each with separate explicit Owner authorization.
 
@@ -113,7 +113,7 @@ Bootstrap writes the QR PNG only to the private view directory for the Owner to 
 ## Dispatch and inbound rules
 
 - A successful start publishes `provider_state.status='connected'` only after ownership, the UID-bound facade, transport start and `markActive`, inside a transaction holding the active owner row. Publication is refused while `reconciliation_required` is set. Normal shutdown invalidates ownership and returns the row to `disconnected` with reconciliation required, exactly like the generic connector.
-- Send-test reserves a durable per-account/day budget row before every external part. Accepted, failed and unknown attempts consume the reservation; refunds never occur. A repeat reservation for the same part is refused before egress; the worker marks that row terminally `failed` with a `reservation-already-consumed` audit and does not halt the pilot. It is never resent.
+- Send-test reserves a durable per-account/UTC-day budget row before every external part, and the ledger also caps each grant at 10 parts so a midnight rollover cannot double a short session. Accepted, failed and unknown attempts consume the reservation; refunds never occur. A repeat reservation for the same part is refused before egress; the worker marks that row terminally `failed` with a `reservation-already-consumed` audit and does not halt the pilot. It is never resent.
 - Only exact allowlisted direct peers (`threadType 0`) are dispatchable; groups and unlisted peers are refused before reservation. The worker claim itself is scoped to the grant peers, so mail for any other conversation is never claimed or marked failed.
 - The bound account's own UID can never appear in the peer allowlist; it is rejected by the grant parser, provider, connector and CLI.
 - Inbound persistence is limited to the bound account and the same allowlist. Unexpected direct peers, group events, a non-self sender that is not the peer, and a self sender that is not the bound account are dropped before persistence, without storing body, locator, identity or raw SDK error; the runtime reports only a count.
@@ -142,7 +142,9 @@ Back up the encrypted session file, the separate key, the binding/budget databas
 
 ## Owner activation gate
 
-Offline gate evidence: hosted CI 41386800622 on `a810087` (PR merge `2bd5e7f`) passed 273/273 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip, four-staff browser and 4/10/25/50 load, the encrypted restore drill (including a seeded interrupted-processing fixture quarantined to `unknown`), and the pilot dry-run/scan with the PR merge identity, UID 65532, no ports/private files and 0 HIGH/CRITICAL. Load p95 was 62.9/82.9/222.5/435.6 ms at 4/10/25/50 clients, 119.7 ms at 50×50 and 928.7/1661.8 ms at 100/200; **500 clients FAIL** at 3135.5 ms. The prior run 41385140560 on `e0e635d` reported 65.0/79.6/212.3/441.8 ms and 701.5/1525.0 ms. These are short synthetic API workloads; the 200-client result varies across runs. This establishes enforceable local boundaries only; no real login, phone interaction or provider delivery has occurred.
+Pre-G5 offline baseline (historical; not the G5-A activation artifact): hosted CI 41386800622 on `a810087` (PR merge `2bd5e7f`) passed 273/273 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip, four-staff browser and 4/10/25/50 load, the encrypted restore drill (including a seeded interrupted-processing fixture quarantined to `unknown`), and the pilot dry-run/scan with the PR merge identity, UID 65532, no ports/private files and 0 HIGH/CRITICAL. Load p95 was 62.9/82.9/222.5/435.6 ms at 4/10/25/50 clients, 119.7 ms at 50×50 and 928.7/1661.8 ms at 100/200; **500 clients FAIL** at 3135.5 ms. The prior run 41385140560 on `e0e635d` reported 65.0/79.6/212.3/441.8 ms and 701.5/1525.0 ms. These are short synthetic API workloads; the 200-client result varies across runs. This establishes enforceable local boundaries only; no real login, phone interaction or provider delivery has occurred.
+
+The current G5-A artifact and its offline evidence are recorded in [G5A-ACTIVATION-READINESS.md](../evidence/G5A-ACTIVATION-READINESS.md); the baseline above is retained only as history.
 
 No live item is activated. The Owner approved D1–D7 in scope on 2026-11-02 ([G5-SCOPE-APPROVAL.md](../evidence/G5-SCOPE-APPROVAL.md)), fixing one dedicated account, exactly one consenting direct peer, a private host with local-only QR, the staged order, 10 parts/day, ≥2 s, 2 hours, text-only and the risk acceptance. Live entry still requires a separate explicit authorization for each stage, starting at `G5A_AWAITING_OWNER_START` ([procedure](G5-LIVE-PILOT-PROCEDURE.md)).
 

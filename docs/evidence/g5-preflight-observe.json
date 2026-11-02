@@ -1,1 +1,1 @@
-{"command":"preflight","ok":true,"gate":"admitted","purpose":"observe","accountBound":true,"peerCount":1,"maxPartsPerDay":10,"minIntervalMs":2000,"lifetimeMs":7200000,"expiresAt":"2026-11-02T12:30:12.870Z"}
+{"command":"preflight","ok":true,"gate":"admitted","purpose":"observe","accountBound":true,"peerCount":1,"maxPartsPerDay":10,"minIntervalMs":2000,"lifetimeMs":7200000,"expiresAt":"2026-11-02T12:50:30.791Z"}
