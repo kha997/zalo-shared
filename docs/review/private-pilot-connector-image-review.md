@@ -19,8 +19,8 @@ Reviewed 2026-11-02. Scope: `connector/`, `tsconfig.connector.json`, `ops/Docker
 | `npm run build:connector` | PASS |
 | Connector image build (`ops/Dockerfile.connector`) | PASS locally |
 | In-container inventory | `uid=65532`, `zca-js=2.2.0`, `crypto-js=4.2.0`, resolved `/app/node_modules/zca-js/dist/cjs/index.cjs` |
-| Default dry-run with a synthetic manifest mounted read-only | PASS (`gate:"admitted"`, purpose `observe`) |
-| Connector scan assertions | PASS locally; hosted scan pending |
+| Default dry-run with a synthetic manifest mounted read-only | PASS locally and hosted (`gate:"admitted"`, purpose `observe`) |
+| Connector scan assertions | PASS locally and hosted: UID 65532, no exposed ports, Trivy 0 HIGH/CRITICAL, 0 fixable |
 
 ## Findings addressed in review
 
@@ -35,4 +35,4 @@ Reviewed 2026-11-02. Scope: `connector/`, `tsconfig.connector.json`, `ops/Docker
 - The image intentionally contains the unofficial SDK and its deprecated `crypto-js` transitive dependency. This is a deliberate live-promotion risk gate, not a clean application image.
 - The scan summary is a dated advisory snapshot. Trivy findings, base-image digests and SDK behavior must be re-checked before any live use.
 - No live login, provider call, QR scan or phone interaction is performed by CI. The dry-run proves manifest validation and image hygiene only.
-- Hosted evidence for this image and scan is still pending; do not cite it as passed until the run is green.
+- Hosted evidence: [CI 41377272040](https://github.com/kha997/zalo-shared/actions/runs/41377272040) on `105f2d7` passed both jobs. The first run (`f9ac8e5`) passed every substantive pilot step but failed evidence upload because the owner-only manifest was inside `docs/evidence/`; the manifest is now generated in `$RUNNER_TEMP`, outside the artifact, and the rerun is green.
