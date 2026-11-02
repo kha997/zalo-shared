@@ -272,12 +272,19 @@ export async function startPilotRuntime(input: {
   if (!manifest || typeof manifest !== "object") throw unavailable();
   // Re-validate the complete manifest: the runtime must never accept a bare
   // grant-shaped object that skipped the consent scope or build binding.
-  const grant = validatePilotGrant(
-    manifest.grant,
-    manifest.build,
-    manifest.consent,
-    new Date(),
-  );
+  // Collapse policy-module errors into the single boundary error so callers
+  // cannot distinguish grant, consent or identity failures.
+  let grant: ReturnType<typeof validatePilotGrant>;
+  try {
+    grant = validatePilotGrant(
+      manifest.grant,
+      manifest.build,
+      manifest.consent,
+      new Date(),
+    );
+  } catch {
+    throw unavailable();
+  }
   if (
     grant.purpose !== MODE_PURPOSE[mode] ||
     !grantShape(grant) ||
