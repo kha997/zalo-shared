@@ -74,18 +74,19 @@ Full output: [g4-offline-checks.txt](g4-offline-checks.txt), [g4-pilot-compose-c
 
 **Step 1 — stage the private deployment and re-verify (no login)**
 
+The private interpolation env file (mode 0600) must provide:
+
+| Variable | Value |
+| --- | --- |
+| `PILOT_CONNECTOR_IMAGE` | CI-built connector image reference or immutable digest |
+| `PILOT_ENV_FILE` | Private connector env file (mode 0600) containing `DATABASE_URL` and any required runtime settings |
+| `PILOT_MANIFEST_FILE` | Active stage manifest: `manifest.enroll.json`, then `manifest.observe.json`, then `manifest.send-test.json` |
+| `PILOT_KEY_FILE` | Private session key (mode 0600) |
+| `PILOT_STATE_DIR` | Private state directory for `session.enc` and the local QR view (0700) |
+| `PILOT_DB_NETWORK` | The application's internal database network name (for example `zalo-shared_private`) |
+
 1. Copy [ops/pilot-compose.example.yml](../../ops/pilot-compose.example.yml) outside the repository (for example `/home/zen/pilot-private/zalo-shared/pilot-compose.yml`), mode 0600. Never commit the copy, an env file or a filled manifest.
-2. Create the private interpolation env file (mode 0600) that the compose file requires:
-
-   | Variable | Value |
-   | --- | --- |
-   | `PILOT_CONNECTOR_IMAGE` | CI-built connector image reference or immutable digest |
-   | `PILOT_ENV_FILE` | Private connector env file (mode 0600) containing `DATABASE_URL` and any required runtime settings |
-   | `PILOT_MANIFEST_FILE` | Active stage manifest: `manifest.enroll.json`, then `manifest.observe.json`, then `manifest.send-test.json` |
-   | `PILOT_KEY_FILE` | Private session key (mode 0600) |
-   | `PILOT_STATE_DIR` | Private state directory for `session.enc` and the local QR view (0700) |
-   | `PILOT_DB_NETWORK` | The application's internal database network name (for example `zalo-shared_private`) |
-
+2. Create the private interpolation env file with the variables above; never write it into the repository.
 3. Copy [pilot-manifest.enroll.template.json](../operations/pilot-manifest.enroll.template.json) outside the repository for the enrollment stage. Keep `consent.expectedAccountId` null, `consent.allowedPurposes` exactly `["enroll-session"]` and `consent.allowedPeerIds` empty; set the grant purpose to `enroll-session` and its expiry at most 1 hour after issue, never after `consent.notAfter`. Do not pre-bind the UID you expect to discover.
 4. After bootstrap confirms the account, create separate observe and send-test manifests from [pilot-manifest.template.json](../operations/pilot-manifest.template.json), bound to that UID and peer B. The enrollment manifest must never be reused for observe or send.
 5. Fill all timestamps with millisecond precision (`YYYY-MM-DDTHH:MM:SS.sssZ`); the validator rejects second-only timestamps. Set each file `chmod 600`, owner 65532; keep `consentRef` nonsecret.
@@ -131,7 +132,6 @@ docker compose --env-file /home/zen/pilot-private/zalo-shared/pilot-interpolatio
 ```
 
 - Point `PILOT_MANIFEST_FILE` at `manifest.send-test.json` (account-bound, peer B, grant purpose `send-test`).
-
 - One agreed plain-text message to B only, within 10 parts/day and ≥2 s between parts.
 - Verify B receives it exactly once and that the provider acceptance ID/status is recorded.
 - Never retry an unknown/timeout automatically; classify and reconcile with external evidence.
