@@ -1,7 +1,7 @@
 # G4 — Live pilot activation package
 
 **Status:** OFFLINE READY — **NO LIVE ACTION PERFORMED**.
-**Baseline:** `feat/shared-inbox` @ `ea66d8b94dde26e67bcb438e114fdd2454401a2d` (G4 package); G3 functional evidence was collected at `adf8ceca9bd615004486b14ebc07da8475b71a3a`.
+**Baseline:** connector artifact source `ea66d8b94dde26e67bcb438e114fdd2454401a2d`; G3 functional evidence was collected at `adf8ceca9bd615004486b14ebc07da8475b71a3a`. Later commits are docs/ops-only and do not change the artifact.
 **Gate:** `G4_AWAITING_OWNER_LIVE_APPROVAL`. G5 is not authorized. PR #3 remains Draft.
 **Companion:** [PRIVATE-PILOT.md](../operations/PRIVATE-PILOT.md), [RUNBOOK.md](../operations/RUNBOOK.md), [OWNER-CONSENT-TEMPLATE.md](../operations/OWNER-CONSENT-TEMPLATE.md), [pilot-manifest.template.json](../operations/pilot-manifest.template.json), [pilot-manifest.enroll.template.json](../operations/pilot-manifest.enroll.template.json), [G3 acceptance](G3-OFFLINE-ACCEPTANCE.md).
 
@@ -11,7 +11,7 @@ No Zalo login, QR enrollment, account identifier, session, cookie, real peer or 
 
 | Item | Verified value |
 | --- | --- |
-| Source | `feat/shared-inbox` @ `ea66d8b94dde26e67bcb438e114fdd2454401a2d`; only docs/ops changed after the `adf8cec` G3 baseline |
+| Source | Connector artifact source `ea66d8b94dde26e67bcb438e114fdd2454401a2d`; G3 functional baseline `adf8ceca9bd615004486b14ebc07da8475b71a3a`; later commits are docs/ops-only |
 | Host | Windows 11 10.0.26100 + WSL2 Ubuntu-24.04; Node 24.19.0 / npm 11.17.0 for tooling |
 | Connector image | `zalo-shared-connector:g4-ea66d8b`, image ID `sha256:e8a002abbd5ac4e39b8cf6c24fa2ab07eee18fe28c746bc16f4e11a7d867b72c` |
 | Connector runtime | UID 65532, Node v24.22.1 inside the image, read-only root, cap-drop ALL, no ports |
@@ -94,7 +94,7 @@ The private interpolation env file (mode 0600) must provide:
 5. Fill all timestamps with millisecond precision (`YYYY-MM-DDTHH:MM:SS.sssZ`); the validator rejects second-only timestamps. Set each file `chmod 600`, owner 65532; keep `consentRef` nonsecret.
 6. Verify the image identity, lock and SDK integrity against the CI artifact.
 7. Run the default `dry-run` with networking disabled using the active manifest, for example `bash ops/local/dry-run-connector.sh "$PILOT_CONNECTOR_IMAGE" /home/zen/pilot-private/zalo-shared/pilot/manifest.observe.json`. The helper defaults to the synthetic manifest when the second argument is omitted. Require `gate":"admitted"` and the expected purpose.
-8. Run [check-connector-identity.sh](../../ops/local/check-connector-identity.sh) and confirm the embedded source commit, lock hash and SDK integrity.
+8. Run [check-connector-identity.sh](../../ops/local/check-connector-identity.sh) against the reviewed artifact commit, for example `bash ops/local/check-connector-identity.sh "$PILOT_CONNECTOR_IMAGE" ea66d8b94dde26e67bcb438e114fdd2454401a2d`, and confirm the embedded source commit, lock hash and SDK integrity. The helper defaults to HEAD; pass the artifact commit because later docs commits are not part of the image.
 9. Confirm `session.enc` is absent or quarantined and that no previous unknown work exists.
 
 **Step 2 — one-time bootstrap (Owner-controlled phone, separate ≤1 h enrollment grant)**

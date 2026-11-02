@@ -1,7 +1,7 @@
 # Pilot gate status
 
 **Date:** 2026-11-02
-**Branch:** `feat/shared-inbox` @ `ea66d8b94dde26e67bcb438e114fdd2454401a2d` (G4 package); G1–G3 evidence at `adf8cec`
+**Branch:** `feat/shared-inbox`; connector artifact source `ea66d8b94dde26e67bcb438e114fdd2454401a2d`; G1–G3 evidence at `adf8cec`
 **PR #3:** OPEN, **Draft** (not merged, not deployed)
 **Live pilot:** **NOT AUTHORIZED** — no Zalo login, QR scan, session, real account or external send performed.
 
@@ -19,6 +19,7 @@
 
 - Connector image `zalo-shared-connector:g4-ea66d8b`, image ID `sha256:e8a002abbd5ac4…`, UID 65532, `zca-js@2.2.0`, 0 HIGH/CRITICAL.
 - Embedded build identity matches `ea66d8b`, `connector/package-lock.json` and the locked SDK integrity; app image ID is unchanged from the G3 baseline.
+- `check-connector-identity.sh` accepts the reviewed artifact commit, so later docs/ops commits do not invalidate the image check.
 - Offline dry-run admitted with a synthetic manifest under `--network none`; five invalid-manifest variants, missing acknowledgement, wrong-purpose commands and unknown commands were denied.
 - Synthetic QR view wrote 0600 UID 65532, rejected non-PNG and cleared the file.
 - App/DB stay loopback/internal; connector publishes no ports and defaults to dry-run.
