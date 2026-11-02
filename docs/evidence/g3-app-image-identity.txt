@@ -1,0 +1,1 @@
+{"uid":65532,"sdkPresent":false,"connectorArtifacts":false}

@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "build": {
+    "sourceCommit": "<SOURCE_COMMIT_40_LOWERCASE_HEX>",
+    "lockSha256": "<CONNECTOR_LOCK_SHA256_64_HEX>",
+    "sdkIntegrity": "<ZCA_JS_SHA512_FROM_CONNECTOR_LOCK>"
+  },
+  "consent": {
+    "consentRef": "<CONSENT_REF>",
+    "notAfter": "<YYYY-MM-DDTHH:MM:SS.sssZ>",
+    "expectedAccountId": null,
+    "allowedPurposes": ["enroll-session"],
+    "allowedPeerIds": [],
+    "maxPartsPerDay": 10,
+    "minIntervalMs": 2000
+  },
+  "grant": {
+    "version": 1,
+    "grantId": "<GRANT_ID>",
+    "purpose": "enroll-session",
+    "sourceCommit": "<SOURCE_COMMIT_40_LOWERCASE_HEX>",
+    "lockSha256": "<CONNECTOR_LOCK_SHA256_64_HEX>",
+    "sdkIntegrity": "<ZCA_JS_SHA512_FROM_CONNECTOR_LOCK>",
+    "issuedAt": "<YYYY-MM-DDTHH:MM:SS.sssZ>",
+    "expiresAt": "<YYYY-MM-DDTHH:MM:SS.sssZ>",
+    "ownerConsentRef": "<CONSENT_REF>",
+    "dedicatedAccountAttested": true,
+    "unofficialClientRiskAccepted": true,
+    "expectedAccountId": null,
+    "allowedPeerIds": [],
+    "maxPartsPerDay": 10,
+    "minIntervalMs": 2000
+  }
+}

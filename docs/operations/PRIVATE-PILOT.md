@@ -60,29 +60,30 @@ A manifest contains exactly `version`, `build`, `consent` and `grant`. The grant
 - `issuedAt <= now + 30s` and `expiresAt > now`; enrollment grants last at most 1 hour, observe/send-test at most 8 hours;
 - `ownerConsentRef` matches the separate consent scope, and the purpose is allowed by that scope;
 - observe/send-test carry a non-null exact `expectedAccountId` and 1–4 unique exact direct-peer IDs;
+- an enrollment manifest may carry a null `expectedAccountId`, but its consent scope must then allow only `enroll-session` and may contain 0–4 peers; the enrollment manifest is never reused for observe or send;
 - `maxPartsPerDay` is 1–30 and `minIntervalMs` is 2000–60000, within the consent limits;
-- expiration never exceeds `consent.notAfter`.
+- expiration never exceeds `consent.notAfter`, and all timestamps use millisecond precision (`YYYY-MM-DDTHH:MM:SS.sssZ`).
 
 A routine reviewed rebuild may receive a refreshed technical grant under the same consent reference. Broadened account, peers, purposes, budget, interval or risk requires a new Owner decision.
 
 ## Commands
 
-Run inside the connector image (the Compose example mounts the private material):
+The repository ships only [`ops/pilot-compose.example.yml`](../../ops/pilot-compose.example.yml). Copy it to a private path outside the repository (mode 0600) and render it with a private interpolation env file that sets `PILOT_CONNECTOR_IMAGE`, `PILOT_ENV_FILE`, `PILOT_MANIFEST_FILE`, `PILOT_KEY_FILE`, `PILOT_STATE_DIR` and `PILOT_DB_NETWORK`. The connector joins the application's internal database network plus a non-internal egress network; it publishes no ports and PostgreSQL stays unpublished.
 
 ```bash
 # Default: offline gate only.
-docker compose -f pilot-compose.yml run --rm pilot-connector
+docker compose --env-file /private/pilot-interpolation.env -f /private/pilot-compose.yml run --rm pilot-connector
 
 # Explicit one-time enrollment under an Owner-controlled phone interaction.
-docker compose -f pilot-compose.yml run --rm pilot-connector \
+docker compose --env-file /private/pilot-interpolation.env -f /private/pilot-compose.yml run --rm pilot-connector \
   dist/connector/tools/pilot-connector.js bootstrap --acknowledge-pilot-risk
 
 # Observe only: no dispatcher is constructed.
-docker compose -f pilot-compose.yml run --rm pilot-connector \
+docker compose --env-file /private/pilot-interpolation.env -f /private/pilot-compose.yml run --rm pilot-connector \
   dist/connector/tools/pilot-connector.js run-observe --acknowledge-pilot-risk
 
 # Send-test: allowlisted direct peers only, reserved budget per part.
-docker compose -f pilot-compose.yml run --rm pilot-connector \
+docker compose --env-file /private/pilot-interpolation.env -f /private/pilot-compose.yml run --rm pilot-connector \
   dist/connector/tools/pilot-connector.js run-send-test --acknowledge-pilot-risk
 ```
 

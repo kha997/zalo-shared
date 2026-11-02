@@ -1,0 +1,12 @@
+timestamp=2026-11-02T06:44:57Z
+running=g3-worker status=Up 3 minutes
+running=g3-app status=Up 3 minutes
+before=6|3|4|5|5|0
+g3-worker
+g3-app
+g3-app
+g3-worker
+{"ok":true}
+3101/tcp -> 127.0.0.1:3101
+after=6|3|4|5|5|0
+row counts unchanged; clean restart PASS

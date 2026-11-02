@@ -1,0 +1,97 @@
+{
+  "recordedAt": "2026-11-02T06:32:32.880Z",
+  "environment": {
+    "base": "http://127.0.0.1:3101",
+    "node": "v24.19.0",
+    "platform": "linux",
+    "arch": "x64",
+    "logicalCpus": 56,
+    "availableParallelism": 56,
+    "totalMemoryBytes": 25186566144,
+    "operatorReportedLoginRateLimit": "3000",
+    "appMode": "local simulator; configuration supplied by operator"
+  },
+  "measurements": [
+    {
+      "namedConcurrentUsers": 4,
+      "rounds": 3,
+      "requests": 52,
+      "durationMs": 229.37686500000007,
+      "requestsPerSecond": 226.701154015685,
+      "p50Ms": 13.766141000000061,
+      "p95Ms": 68.75303999999994,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 12,
+      "idempotentRetriesVerified": 12
+    },
+    {
+      "namedConcurrentUsers": 10,
+      "rounds": 3,
+      "requests": 130,
+      "durationMs": 444.09417299999996,
+      "requestsPerSecond": 292.7307042148468,
+      "p50Ms": 22.58511499999986,
+      "p95Ms": 95.23812399999997,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 30,
+      "idempotentRetriesVerified": 30
+    },
+    {
+      "namedConcurrentUsers": 25,
+      "rounds": 3,
+      "requests": 325,
+      "durationMs": 824.7464469999995,
+      "requestsPerSecond": 394.0605033003558,
+      "p50Ms": 31.884907999999996,
+      "p95Ms": 238.9560049999991,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 75,
+      "idempotentRetriesVerified": 75
+    },
+    {
+      "namedConcurrentUsers": 50,
+      "rounds": 3,
+      "requests": 650,
+      "durationMs": 1514.4048980000007,
+      "requestsPerSecond": 429.2115014012585,
+      "p50Ms": 65.93693399999938,
+      "p95Ms": 394.9641080000001,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 150,
+      "idempotentRetriesVerified": 150
+    }
+  ],
+  "mockDispatchDrain": {
+    "status": "PASS",
+    "waitMs": 2840.6213399999997,
+    "pending": 0,
+    "unknown": 0,
+    "failed": 0
+  },
+  "latencyTargetPolicy": "Enforced: p95<=2000ms, zero errors.",
+  "limitations": "HTTP API concurrency; no browser rendering, physical workstations, real Zalo transport, soak, horizontal scaling or production capacity established. Setup excluded; request latencies include login hashing. All users start together; each runs serial requests."
+}

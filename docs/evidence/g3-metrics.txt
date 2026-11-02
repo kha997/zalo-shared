@@ -1,0 +1,12 @@
+timestamp=2026-11-02T06:44:56Z
+no-token=401 with-token=200
+body-bytes=314 body-lines=9
+zs_outbox_jobs{status="unknown"} 2
+zs_outbox_jobs{status="pending"} 1
+zs_http_requests_total 5
+zs_http_errors_total 0
+zs_http_duration_seconds_sum 0.07563865700000656
+zs_http_duration_seconds_count 5
+zs_outbox_oldest_pending_seconds 645.991158
+zs_provider_connected 0
+zs_provider_last_event_age_seconds 646.026686
