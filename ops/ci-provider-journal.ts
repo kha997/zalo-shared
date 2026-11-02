@@ -133,6 +133,14 @@ try {
     providerId: "ci-unresolved",
     text: "synthetic unresolved variant",
   });
+  await pool.query(
+    "INSERT INTO pilot_send_budget(account_id,day,max_parts,reserved_parts,last_reserved_at) VALUES($1,(now() AT TIME ZONE 'utc')::date,5,1,now()) ON CONFLICT DO NOTHING",
+    [ACCOUNT],
+  );
+  await pool.query(
+    "INSERT INTO pilot_part_ledger(account_id,day,message_id,part,grant_id,peer_id) VALUES($1,(now() AT TIME ZONE 'utc')::date,$2,0,'ci-grant','ci-synthetic-peer') ON CONFLICT DO NOTHING",
+    [ACCOUNT, mid],
+  );
   // Nonempty inbound media jobs: ready bytes, claimable pending/processing,
   // held, and expired metadata. Synthetic ciphertext only; no real locator.
   const linked = (

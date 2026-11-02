@@ -10,20 +10,36 @@
 
 This evidence supersedes the earlier statement that inbound receipt/jobs/private UI were unvalidated. It does not validate the completion patch below, a long-lived scheduler process, real CDN behavior, real phone coexistence or production.
 
-## Inbound media completion — local PASS, hosted gate pending
+## Inbound media completion — hosted PASS
 
-Working head after `05c8082` closes the review findings recorded in [inbound media completion review](review/inbound-media-completion-review.md): bounded ownership-fenced locator retention and one-step media scheduling, a `runMediaOnce()` seam on the owned runtime, queue-full degradation that preserves text ingress, a message-scoped media index, media jobs in counts/integrity, pending/processing restore quarantine, key-coverage refusal with a key-escrow runbook, and attachment authorization limited to `ready` provider media.
+[CI41370951223](https://github.com/kha997/zalo-shared/actions/runs/41370951223) on `c1289331493f7bde3439a902f337a18a526eaadd` closes the review findings recorded in [inbound media completion review](review/inbound-media-completion-review.md): bounded ownership-fenced locator retention and one-step media scheduling, a `runMediaOnce()` seam on the owned runtime, queue-full degradation that preserves text ingress, a message-scoped media index, media jobs in counts/integrity, pending/processing restore quarantine, key-coverage refusal with a key-escrow runbook, and attachment authorization limited to `ready` provider media.
 
-Local `npm run typecheck` PASS. Local full suite: 179 checks, **177 PASS, 2 FAIL**. Both failures are the same `vault.test.ts` POSIX `0600` mode assertion (`438` observed on Windows); the code is unchanged and Linux hosted CI must resolve this. New scheduler tests pass 6/6; the runtime media seam passes 2/2; media receipt/API suites pass.
+The hosted job passed **179/179** unit checks, **2/2** guarded offline SDK checks and **9 browser cases + 1 explicit skip, 0 failed**. Raw logs confirm the real-PostgreSQL receipt/journal/media-worker, ownership-fence, retention/scheduler, private-API and four-staff browser stages, the unclean-restart and encrypted restore drill (including quarantined media and restored fingerprints), monitoring checks and the nonroot/SDK-free image smoke. Trivy 0.76.1 reported **0 HIGH/CRITICAL**. The two Windows-only `vault.test.ts` mode failures observed locally did not reproduce on Linux.
+
+4/10/25/50-client p95≈52.9/66.5/177.9/308.0 ms; 50×50 rounds p95≈123.2 ms; 100/200/500-client p95≈1610.6/1498.2/4132.4 ms. **500 clients FAIL the 2 s target** in this run, with zero request errors and all three mock queue drains passing. These remain short synthetic API workloads, not provider throughput or staff-seat guarantees.
 
 | Claim | Status |
 |---|---|
-| Offline retention, scheduler, owner fence, quota degradation, restore quarantine, ready-only attachment access | PASS locally; hosted UNPROVEN |
+| Retention, scheduler, owner fence, quota degradation, restore quarantine, ready-only attachment access | PASS locally and hosted |
 | A production/pilot process actually drives `runMediaOnce()` | UNPROVEN — pilot runtime wiring gate |
 | Real CDN, cookie-free media, live locator schema | UNPROVEN |
 | Metadata/audit/attachment retention and duplicate-egress bounds | OPEN — Owner policy decision |
 | Album/multi-item media | NOT IMPLEMENTED |
 | Production readiness | NOT ESTABLISHED |
+
+## Private pilot contract — local PASS, hosted pending
+
+The working head after `c128933` adds `server/pilot-policy.ts` (exact-key grant/consent validation with expiry, lifetime, build-identity, account, peer, budget and interval bounds), `server/pilot-budget.ts` (transaction-required, advisory-locked, durable per-account/day part budget with idempotent `(message_id,part)` reservations and interval control), the two ledger tables in the provider schema plus backup/count/fingerprint fixtures, and an exact-UID guard in the guarded SDK facade (`expectedAccountId` validated before vault access/import; `getOwnId` checked after login and on every refresh before persistence or API exposure).
+
+Local `npm run typecheck` PASS; full local suite **201/203** (the two failures are the same Windows-only `vault.test.ts` POSIX `0600` assertions), including **8/8** policy tests, **8/8** budget tests against disposable PostgreSQL and **8/8** identity tests. The independent review is recorded in [private pilot policy review](review/private-pilot-policy-review.md); its P1 null-account consent finding and P2 idempotency/interval/binding findings were fixed with regressions. Hosted CI for this working head is pending. No QR enrollment, pilot host, live account or provider network path exists yet.
+
+| Claim | Status |
+|---|---|
+| Owner consent/grant scope, expiry, build identity and peer/account bounds | PASS locally; hosted pending |
+| Durable per-day budget, interval, idempotency and grant/day boundaries | PASS locally; hosted pending |
+| UID mismatch blocks persistence/API/listener/send and leaks nothing | PASS locally; hosted pending |
+| QR enrollment, private identity confirmation, pilot runtime/image | NOT IMPLEMENTED |
+| Live account behavior, phone coexistence, ban risk | UNPROVEN |
 
 ## Earlier verified source — operator acceptance, 2026-10-30
 

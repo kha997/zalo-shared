@@ -12,11 +12,28 @@ interface Options {
   };
   allowNetworkLogin?: boolean;
   loginTimeoutMs?: number;
+  /**
+   * The pilot host MUST supply this before any ordinary start. Omitting it is
+   * enrollment/offline-only and must never be treated as a bound pilot session.
+   */
+  expectedAccountId?: string;
   /** Injection is for offline tests; never pass an untrusted loader. */
   loader?: () => unknown | Promise<unknown>;
 }
 type RecordValue = Record<string, any>;
 const unavailable = () => new Error("SDK facade unavailable");
+const accountIdPattern = /^[A-Za-z0-9_-]{1,200}$/;
+function readUid(raw: RecordValue, expected: string) {
+  try {
+    if (typeof raw.getOwnId !== "function") throw unavailable();
+    const value = raw.getOwnId();
+    if (typeof value !== "string" || !accountIdPattern.test(value) || value !== expected)
+      throw unavailable();
+    return value;
+  } catch {
+    throw unavailable();
+  }
+}
 function record(value: unknown): RecordValue {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw unavailable();
@@ -66,9 +83,14 @@ function stop(raw: any) {
   }
 }
 /** Offline candidate only. No SDK load or vault access occurs without explicit authorization. */
-export function createSdkFacade(options: Options) {
-  const timeout = options.loginTimeoutMs ?? 30000;
+export function createSdkFacade(options: Options) {  const timeout = options.loginTimeoutMs ?? 30000;
   if (!Number.isInteger(timeout) || timeout < 1 || timeout > 60000)
+    throw unavailable();
+  const expected = options.expectedAccountId;
+  if (
+    expected !== undefined &&
+    (typeof expected !== "string" || !accountIdPattern.test(expected))
+  )
     throw unavailable();
   let closed = false,
     busy = false,
@@ -96,6 +118,7 @@ export function createSdkFacade(options: Options) {
   };
   async function persist(current: NonNullable<typeof active>, token: number) {
     if (closed || token !== generation) throw unavailable();
+    if (expected !== undefined) readUid(current.raw, expected);
     const jar = record(current.raw.getCookie());
     if (typeof jar.serializeSync !== "function") throw unavailable();
     const snapshot = record(boundedClone(jar.serializeSync()));
@@ -149,6 +172,7 @@ export function createSdkFacade(options: Options) {
       }
       try {
         record(raw);
+        if (expected !== undefined) readUid(raw, expected);
         const listener = record(raw.listener);
         for (const name of ["on", "off", "start", "stop"])
           if (typeof listener[name] !== "function") throw unavailable();
@@ -347,4 +371,15 @@ export function createSdkFacade(options: Options) {
       release();
     },
   };
+}
+
+/**
+ * Pilot-host entrypoint: the exact account ID is required at the type boundary
+ * so an ordinary session cannot be constructed without it.
+ */
+export function createBoundSdkFacade(
+  options: Options & { expectedAccountId: string },
+) {
+  if (typeof options?.expectedAccountId !== "string") throw unavailable();
+  return createSdkFacade(options);
 }

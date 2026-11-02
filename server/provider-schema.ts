@@ -48,6 +48,23 @@ CREATE TABLE IF NOT EXISTS provider_media_jobs(
 );
 CREATE INDEX IF NOT EXISTS provider_media_jobs_pending ON provider_media_jobs(account_id,status,next_attempt_at);
 CREATE INDEX IF NOT EXISTS provider_media_jobs_message ON provider_media_jobs(account_id,message_id,item_index,id) WHERE message_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS pilot_send_budget(
+ account_id uuid NOT NULL,day date NOT NULL,
+ max_parts integer NOT NULL CHECK(max_parts BETWEEN 1 AND 30),
+ reserved_parts integer NOT NULL DEFAULT 0 CHECK(reserved_parts>=0),
+ last_reserved_at timestamptz,
+ PRIMARY KEY(account_id,day)
+);
+CREATE TABLE IF NOT EXISTS pilot_part_ledger(
+ account_id uuid NOT NULL,day date NOT NULL,
+ message_id uuid NOT NULL REFERENCES messages ON DELETE RESTRICT,
+ part integer NOT NULL CHECK(part BETWEEN 0 AND 10000),
+ grant_id varchar(200) NOT NULL CHECK(grant_id ~ '^[A-Za-z0-9_-]{1,200}$'),
+ peer_id varchar(200) NOT NULL CHECK(peer_id ~ '^[A-Za-z0-9_-]{1,200}$'),
+ reserved_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(message_id,part)
+);
+CREATE INDEX IF NOT EXISTS pilot_part_ledger_day ON pilot_part_ledger(account_id,day);
 -- Older conflicts discarded their variants. Never imply that a later replay recovered all evidence.
 UPDATE provider_events e SET variant_evidence_missing=true WHERE conflict AND resolution_version=0
  AND NOT EXISTS(SELECT 1 FROM provider_event_variants v WHERE v.event_id=e.id);

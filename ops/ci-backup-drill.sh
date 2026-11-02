@@ -36,6 +36,8 @@ DO $$ BEGIN
  IF (SELECT count(*) FROM provider_media_jobs WHERE name IN ('ci-inbound-pending.txt','ci-inbound-processing.txt') AND status IN ('pending','processing'))<>2 THEN RAISE EXCEPTION 'claimable inbound media fixture missing'; END IF;
  IF NOT EXISTS(SELECT 1 FROM provider_media_jobs WHERE name='ci-inbound-held.txt' AND status='held' AND locator_envelope IS NOT NULL) THEN RAISE EXCEPTION 'held inbound media fixture missing'; END IF;
  IF NOT EXISTS(SELECT 1 FROM provider_media_jobs WHERE name='ci-inbound-expired.txt' AND status='unavailable' AND locator_envelope IS NULL) THEN RAISE EXCEPTION 'expired inbound metadata fixture missing'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM pilot_send_budget WHERE account_id='00000000-0000-4000-8000-000000000001' AND max_parts=5 AND reserved_parts=1) THEN RAISE EXCEPTION 'pilot budget fixture missing'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM pilot_part_ledger WHERE grant_id='ci-grant' AND peer_id='ci-synthetic-peer') THEN RAISE EXCEPTION 'pilot part ledger fixture missing'; END IF;
 END $$;
 SQL
 provider_digest_sql="SELECT encode(sha256(convert_to(string_agg(row_to_json(e)::text,E'\n' ORDER BY id),'UTF8')),'hex') FROM provider_events e"
@@ -75,6 +77,8 @@ DO $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM provider_media_jobs WHERE name='ci-inbound-pending.txt' AND status='held' AND locator_envelope IS NOT NULL) THEN RAISE EXCEPTION 'pending inbound media not held with locator'; END IF;
  IF NOT EXISTS(SELECT 1 FROM provider_media_jobs WHERE name='ci-inbound-processing.txt' AND status='held' AND locator_envelope IS NOT NULL) THEN RAISE EXCEPTION 'processing inbound media not held with locator'; END IF;
  IF NOT EXISTS(SELECT 1 FROM provider_media_jobs WHERE name='ci-inbound-expired.txt' AND status='unavailable' AND locator_envelope IS NULL) THEN RAISE EXCEPTION 'expired inbound metadata lost'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM pilot_send_budget WHERE account_id='00000000-0000-4000-8000-000000000001' AND max_parts=5 AND reserved_parts=1) THEN RAISE EXCEPTION 'pilot budget lost or reset during restore'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM pilot_part_ledger WHERE grant_id='ci-grant' AND peer_id='ci-synthetic-peer') THEN RAISE EXCEPTION 'pilot part ledger lost during restore'; END IF;
 END $$;
 SELECT 'sessions',count(*) FROM sessions;
 SELECT 'dispatchable',count(*) FROM outbox WHERE status IN ('pending','processing');
