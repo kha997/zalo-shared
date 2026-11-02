@@ -227,6 +227,133 @@ test("the scoped worker never claims or fails mail outside the grant peers", asy
   }
 });
 
+test("an empty or malformed worker scope is refused instead of widening the claim", async () => {
+  const database = await isolatedDatabase();
+  try {
+    const transportSpy = transport();
+    const provider = createSdkProvider(
+      database.pool,
+      transportSpy,
+      owner(),
+      { grant: grant(), now: () => new Date() },
+    );
+    const { mid } = await seed(database.pool, { outbox: true });
+    for (const scope of [
+      { peers: [] },
+      { peers: [""] },
+      { peers: ["peer-a", "peer-a"] },
+      { peers: ["bad peer"] },
+      {} as never,
+      null as never,
+    ])
+      await assert.rejects(
+        runWorkerOnce(database.pool, provider, scope),
+        /Worker scope must list exact direct peers/,
+      );
+    assert.equal(transportSpy.calls.length, 0);
+    assert.equal(
+      (
+        await database.pool.query(
+          "SELECT status FROM outbox WHERE message_id=$1",
+          [mid],
+        )
+      ).rows[0].status,
+      "pending",
+    );
+  } finally {
+    await database.close();
+  }
+});
+
+test("a scoped worker quarantines only interrupted mail inside its exact peers", async () => {
+  const database = await isolatedDatabase();
+  try {
+    const outside = await seed(database.pool, {
+      peer: "peer-z",
+      outbox: true,
+    });
+    const inside = await seed(database.pool, { peer: "peer-a", outbox: true });
+    const ids = [outside.mid, inside.mid];
+    await database.pool.query(
+      "UPDATE outbox SET status='processing' WHERE message_id=ANY($1::uuid[])",
+      [ids],
+    );
+    await database.pool.query(
+      "UPDATE messages SET status='processing' WHERE id=ANY($1::uuid[])",
+      [ids],
+    );
+    await database.pool.query(
+      "UPDATE delivery_parts SET status='processing' WHERE message_id=ANY($1::uuid[])",
+      [ids],
+    );
+    const result = await runWorkerOnce(
+      database.pool,
+      {
+        async connected() {
+          return false;
+        },
+        async sendPart() {
+          throw new Error("must not dispatch");
+        },
+      },
+      { peers: ["peer-a"] },
+    );
+    assert.deepEqual(result, { processed: false });
+    const statuses = (id: string) =>
+      database.pool
+        .query(
+          "SELECT m.status AS message,o.status AS outbox,p.status AS part FROM messages m JOIN outbox o ON o.message_id=m.id JOIN delivery_parts p ON p.message_id=m.id WHERE m.id=$1",
+          [id],
+        )
+        .then((r) => r.rows[0]);
+    assert.deepEqual(await statuses(inside.mid), {
+      message: "unknown",
+      outbox: "unknown",
+      part: "unknown",
+    });
+    assert.deepEqual(await statuses(outside.mid), {
+      message: "processing",
+      outbox: "processing",
+      part: "processing",
+    });
+  } finally {
+    await database.close();
+  }
+});
+
+test("a deferred destination returns processed:false so the caller backs off", async () => {
+  const database = await isolatedDatabase();
+  try {
+    const { mid } = await seed(database.pool, { outbox: true });
+    let sends = 0;
+    const result = await runWorkerOnce(database.pool, {
+      async connected() {
+        return true;
+      },
+      async prepareMessage() {
+        throw new ProviderNotDispatchedError();
+      },
+      async sendPart() {
+        sends++;
+        return null;
+      },
+    });
+    assert.deepEqual(result, { processed: false });
+    assert.equal(sends, 0);
+    assert.deepEqual(
+      (
+        await database.pool.query(
+          "SELECT m.status AS message,o.status AS outbox,p.status AS part FROM messages m JOIN outbox o ON o.message_id=m.id JOIN delivery_parts p ON p.message_id=m.id WHERE m.id=$1",
+          [mid],
+        )
+      ).rows[0],
+      { message: "pending", outbox: "pending", part: "pending" },
+    );
+  } finally {
+    await database.close();
+  }
+});
+
 test("a grant that allowlists the bound account cannot construct a provider", () => {
   assert.throws(
     () =>
@@ -706,6 +833,7 @@ test("the runtime build identity and database transport are verified", async () 
     "postgresql://u:p@[::1]:5432/zalo",
     "postgresql://u:p@db.internal:5432/zalo?sslmode=require",
     "postgresql://u:p@db.internal/zalo?sslmode=verify-full",
+    "postgresql://u:p@db.internal/zalo?sslmode=verify-full&application_name=pilot&connect_timeout=5",
   ])
     assert.doesNotThrow(() => requireTlsDatabaseUrl(url));
   for (const url of [
@@ -716,6 +844,14 @@ test("the runtime build identity and database transport are verified", async () 
     "postgresql://u:p@db.internal:5432/zalo?sslmode=disable",
     "postgresql://u:p@127.0.0.1:5432/zalo?ssl=false",
     "postgresql://u:p@db.internal:5432/zalo?sslmode=prefer",
+    "postgresql://u:p@db.internal/zalo?sslmode=require&sslmode=disable",
+    "postgresql://u:p@127.0.0.1/zalo?host=db.internal",
+    "postgresql://u:p@127.0.0.1/zalo?hostaddr=db.internal",
+    "postgresql://u:p@127.0.0.1/zalo?port=5432",
+    "postgresql://u:p@db%2Einternal/zalo?sslmode=require",
+    "postgresql://u:p@db.internal/zalo?sslmode=require#fragment",
+    "postgresql://u:p@db.internal?sslmode=require",
+    "postgresql://u:p@db.internal/zalo?SSLMODE=require",
   ])
     assert.throws(
       () => requireTlsDatabaseUrl(url),

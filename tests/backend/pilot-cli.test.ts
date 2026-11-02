@@ -258,7 +258,6 @@ test("safety halts exit non-zero and expose only bounded counters", async () => 
     "already-reserved",
     "reservation-denied",
     "dispatch-uncertain",
-    "future-unknown-halt",
   ]) {
     const result = await runPilotCli({
       argv: [
@@ -332,6 +331,34 @@ test("safety halts exit non-zero and expose only bounded counters", async () => 
   assert.equal(output.gate, "runtime-error");
   assert.equal("ticks" in output, false);
   assert.equal("rejectedInbound" in output, false);
+});
+
+test("an unknown runner halt never reaches operator-visible output", async () => {
+  for (const halt of [
+    "future-unknown-halt",
+    `leak-${account}`,
+    "cookies=abc",
+  ]) {
+    const result = await runPilotCli({
+      argv: [
+        "run-send-test",
+        "--manifest",
+        "/private/pilot/manifest.json",
+        "--acknowledge-pilot-risk",
+      ],
+      dependencies: {
+        readFile: async () => manifestText("send-test"),
+        now: () => now,
+        runCommand: async () => ({ halt, ticks: 1 }),
+      },
+    });
+    assert.equal(result.exitCode, 1);
+    const output = JSON.parse(result.stdout!);
+    assert.equal(output.gate, "runtime-error");
+    assert.equal(result.stdout!.includes(halt), false);
+    assert.equal(result.stdout!.includes(account), false);
+    assert.equal(result.stdout!.includes("cookies"), false);
+  }
 });
 
 test("runner failures, missing manifests and policy-invalid live manifests fail closed", async () => {

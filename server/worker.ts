@@ -41,12 +41,29 @@ export function createMockProvider(pool: pg.Pool): Provider {
     },
   };
 }
+const PEER_ID = /^[A-Za-z0-9_-]{1,200}$/;
+/** A provided scope is always exact: an empty or malformed list must never widen the claim. */
+function exactPeers(
+  scope: { peers: readonly string[] } | undefined,
+): readonly string[] | undefined {
+  if (scope === undefined) return undefined;
+  const peers = scope?.peers;
+  if (
+    !Array.isArray(peers) ||
+    peers.length === 0 ||
+    peers.some((peer) => typeof peer !== "string" || !PEER_ID.test(peer)) ||
+    new Set(peers).size !== peers.length
+  )
+    throw new TypeError("Worker scope must list exact direct peers");
+  return [...peers];
+}
 export async function runWorkerOnce(
   pool: pg.Pool,
   provider: Provider,
   /** Optional exact direct-peer scope; other conversations are never claimed. */
   scope?: { peers: readonly string[] },
 ) {
+  const peers = exactPeers(scope);
   const db = await pool.connect();
   let locked = false;
   try {
@@ -56,8 +73,10 @@ export async function runWorkerOnce(
     // Only the exclusive owner can quarantine an interrupted dispatch. Never retry these jobs.
     await db.query("BEGIN");
     const interrupted = await db.query(
-      "SELECT o.message_id FROM outbox o JOIN messages m ON m.id=o.message_id JOIN conversations c ON c.id=m.conversation_id WHERE o.status='processing' AND c.account_id=$1 FOR UPDATE OF o",
-      [ACCOUNT],
+      peers
+        ? "SELECT o.message_id FROM outbox o JOIN messages m ON m.id=o.message_id JOIN conversations c ON c.id=m.conversation_id WHERE o.status='processing' AND c.account_id=$1 AND c.provider_thread_type=0 AND c.provider_thread_id=ANY($2::text[]) FOR UPDATE OF o"
+        : "SELECT o.message_id FROM outbox o JOIN messages m ON m.id=o.message_id JOIN conversations c ON c.id=m.conversation_id WHERE o.status='processing' AND c.account_id=$1 FOR UPDATE OF o",
+      peers ? [ACCOUNT, peers] : [ACCOUNT],
     );
     for (const job of interrupted.rows) {
       await db.query("UPDATE messages SET status='unknown' WHERE id=$1", [
@@ -77,12 +96,12 @@ export async function runWorkerOnce(
     await db.query("COMMIT");
     if (!(await provider.connected(db))) return { processed: false };
     await db.query("BEGIN");
-    const scoped = Array.isArray(scope?.peers) && scope.peers.length > 0;
+    const scoped = peers !== undefined;
     const r = await db.query(
       scoped
         ? "SELECT o.* FROM outbox o JOIN messages m ON m.id=o.message_id JOIN conversations c ON c.id=m.conversation_id WHERE o.status='pending' AND c.account_id=$1 AND c.provider_thread_type=0 AND c.provider_thread_id=ANY($2::text[]) ORDER BY o.created_at,o.id FOR UPDATE OF o SKIP LOCKED LIMIT 1"
         : "SELECT o.* FROM outbox o JOIN messages m ON m.id=o.message_id JOIN conversations c ON c.id=m.conversation_id WHERE o.status='pending' AND c.account_id=$1 ORDER BY o.created_at,o.id FOR UPDATE OF o SKIP LOCKED LIMIT 1",
-      scoped ? [ACCOUNT, [...scope!.peers]] : [ACCOUNT],
+      scoped ? [ACCOUNT, peers] : [ACCOUNT],
     );
     if (!r.rowCount) {
       await db.query("COMMIT");
@@ -90,6 +109,7 @@ export async function runWorkerOnce(
     }
     const job = r.rows[0];
     let dispatched = false;
+    let deferredJob = false;
     try {
       const parts = (
         await db.query(
@@ -163,6 +183,7 @@ export async function runWorkerOnce(
       await db.query("ROLLBACK").catch(() => {});
       await db.query("BEGIN");
       const deferred = error instanceof ProviderNotDispatchedError;
+      if (deferred) deferredJob = true;
       const status = deferred ? "pending" : dispatched ? "unknown" : "failed";
       await db.query("UPDATE messages SET status=$2 WHERE id=$1", [
         job.message_id,
@@ -205,7 +226,9 @@ export async function runWorkerOnce(
     } finally {
       provider.releaseMessage?.(job.message_id);
     }
-    return { processed: true };
+    // A deferral is a no-op for this tick: the caller must back off instead of
+    // immediately reclaiming the same destination in a hot loop.
+    return { processed: !deferredJob };
   } catch (error) {
     await db.query("ROLLBACK").catch(() => {});
     throw error;

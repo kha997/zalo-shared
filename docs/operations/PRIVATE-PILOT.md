@@ -30,6 +30,8 @@ docker build --build-arg SOURCE_COMMIT="$(git rev-parse HEAD)" \
 
 At startup of every live command (bootstrap and both run modes), the runtime compares the embedded identity with the manifest's `build` block before reading the key, session, database URL or SDK. A manifest copied onto the host with a different commit, lock hash or SDK integrity is refused; the grant cannot be rebound to another artifact by editing the manifest alone. CI also asserts the image identity equals the checked-out commit and the connector lock.
 
+This identity is build-derived, not a cryptographic attestation of the image contents: anyone able to rebuild or replace the image can write a matching file. The trust anchor is the **CI-built image digest recorded in the pipeline**; record it with the grant and deploy only that digest. The runtime cannot verify its own image provenance from inside the container, and `dry-run` validates the manifest shape only without reading `/app/build-identity.json`.
+
 `connector/package.json` pins `zca-js@2.2.0`, `pg` and `ipaddr.js` exactly. The runtime stage installs only that lock with `--omit=dev --ignore-scripts`; it never copies or prunes the root development tree. `crypto-js@4.2.0` is a transitive, deprecated dependency of `zca-js`; this residual risk is recorded in the scan summary and remains an explicit live-promotion gate.
 
 ## Private files
@@ -113,6 +115,8 @@ The scanner records vulnerabilities, licenses, the resolved `zca-js` version, th
 Back up the encrypted session file, the separate key, the binding/budget database state and the current manifest/grant. A database backup without the key is not a session recovery proof. The offline restore drill (`tests/transport/pilot-recovery.test.ts`) copies the ciphertext and key into a fresh private directory, verifies the bound session reads back, and rejects a wrong key, a wrong account binding, corrupted ciphertext and a truncated envelope. Restored ownership and grants remain quarantined: an expired grant is refused before any vault or pool work, and an uncertain old owner requires external fence attestation before replacement. Ciphertext deletion on a healthy host does not erase offline or retained backups; retention policy remains an Owner decision.
 
 ## Owner activation gate
+
+Offline gate evidence: hosted CI 41379964911 on `a37935a` passed 258/258 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip, four-staff browser and 4/10/25/50 load, and the pilot dry-run/scan with build identity, UID 65532, no ports/private files and 0 HIGH/CRITICAL. This establishes enforceable local boundaries only; no real login, phone interaction or provider delivery has occurred.
 
 No item here is accepted or authorized yet. Before any live login, the Owner must explicitly approve:
 

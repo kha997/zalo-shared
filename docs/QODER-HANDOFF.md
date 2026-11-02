@@ -11,22 +11,36 @@ Continue only with synthetic/offline work until the Owner supplies and approves 
 
 The main application remains provider-disabled/mock and SDK-free in its production image. The pinned `zca-js@2.2.0` is only for development/research/guard tests; no authenticated session was used.
 
-## Latest evidenced hosted baseline — pilot runtime, image and restore drill
+## Latest evidenced hosted baseline — pilot review hardening
 
-Hosted CI **41374543813** on `ad036f60ae4fa4a8b00cbd72e584c0a0128e1784` passed **229/229** unit checks, **2/2** guarded offline SDK checks and **9 browser cases expected + 1 explicit skip, 0 failed**, including the full PostgreSQL, transport, recovery/restore, monitoring and SDK-free nonroot image stages. The prior inbound-media completion baseline is CI 41370951223 on `c128933` (179/179, 2/2, 9+1). Neither run demonstrates provider compatibility, physical-phone coexistence or production readiness.
+Hosted [CI 41379964911](https://github.com/kha997/zalo-shared/actions/runs/41379964911) on `a37935a` passed both jobs: **258/258** unit checks, **2/2** guarded offline SDK checks and **9 browser cases + 1 explicit skip, 0 failed**, including real-PostgreSQL durability, unclean restart, encrypted restore/quarantine, monitoring, the SDK-free nonroot application image, and the separate SDK-bearing pilot connector dry-run/scan with identity `b7fe5db`, UID 65532, no ports/private files and 0 HIGH/CRITICAL. Load p95 was 44.7/65.2/145.8/272.9 ms at 4/10/25/50 clients, 74.0 ms for 50×50 and 470.3/1155.1 ms at 100/200; **500 clients FAIL** at 3991.5 ms with zero request errors. The prior baseline is CI 41378053199 on `f84b777` (253/253, 2/2, 9+1). None of these runs demonstrates provider compatibility, physical-phone coexistence or production readiness.
 
-## Working slice — second-review hardening (local PASS, hosted pending)
+## Working slice — second-review hardening (hosted PASS)
 
-A second independent review of the committed pilot slice found one high-impact defect and several medium issues; all are fixed in the working tree.
+A second independent review of the committed pilot slice found one high-impact defect and several medium issues; all are fixed and hosted CI passed at `a37935a`/41379964911.
 
 - Policy halts take precedence over the abort they trigger; an ambiguous send can no longer exit 0 as `aborted`, and any halt outside `tick-limit`/`grant-expired`/`aborted` exits non-zero.
 - Send-test can dispatch: the owned connector publishes `provider_state='connected'` after ownership, the UID-bound facade, transport start and `markActive`, under the active owner row lock, refusing while reconciliation is required. Ownership shutdown still returns it to disconnected/quarantined.
 - Worker claims are scoped to the grant peers; out-of-scope mail is never claimed or failed, and a denied destination defers rather than fails.
 - The image now embeds `/app/build-identity.json` (commit, connector lock hash, SDK integrity) and the runtime refuses a manifest that does not match; `DATABASE_URL` requires TLS for non-loopback hosts.
 - The bound account is rejected in every peer allowlist; the scanner rejects private pilot files inside the image; CI asserts the image identity equals `GITHUB_SHA`.
-- `startPilotRuntime` validates the full manifest (build, consent, purpose, shape, freshness), not just the grant object.
+- `startPilotRuntime` validates the full manifest (build, consent, purpose, shape, freshness), not just the grant object, and normalizes policy validation failures into the single runtime boundary error.
 
-Local: typecheck/build/build:connector PASS; focused pilot/connector suites 47/47 PASS; full local suite 258 tests, 256 PASS, only the two Windows-only `vault.test.ts` failures. Connector image built locally with a real identity; inventory reports UID 65532, `zca-js@2.2.0`, `crypto-js@4.2.0`, no private files. Hosted CI for this slice is pending.
+Local: typecheck/build/build:connector PASS; focused pilot/connector suites 47/47 PASS; full local suite 258 tests, 256 PASS, only the two Windows-only `vault.test.ts` failures. Connector image built locally with a real identity; inventory reports UID 65532, `zca-js@2.2.0`, `crypto-js@4.2.0`, no private files. Hosted PASS at `a37935a`/41379964911: 258/258 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip, four-staff browser flow and 4/10/25/50 load within target (p95 44.7/65.2/145.8/272.9 ms; 500 clients FAIL at 3991.5 ms).
+
+## Working slice — third-pass review remediation (local PASS, hosted pending)
+
+A follow-up pass over the same slice raised seven issues; all are fixed in the working tree:
+
+- A provided worker scope is validated before any lock or query; empty/duplicate/malformed scopes throw instead of falling back to the account-wide claim.
+- A scoped worker's interrupted-dispatch sweep covers only its exact peers, leaving out-of-scope `processing` rows for the next unscoped owner.
+- A deferred destination returns `processed:false` so the caller backs off; the row stays pending and is never failed.
+- The CLI emits only reviewed halt literals and maps any unknown runner string to `runtime-error`.
+- Module loading and pool construction in `startPilotRuntime` are inside the single boundary error.
+- QR bootstrap validates the private key/session/view files before acquiring ownership.
+- Build identity remains build-derived, not content-hashed; deployment must pin the CI image digest. Dry-run intentionally verifies manifest shape only.
+
+Focused pilot/connector/worker suites 50/50 PASS; full local suite 266 tests, 264 PASS, 2 FAIL (only the Windows-only `vault.test.ts` mode assertions); hosted verification is pending in this slice.
 
 ## Work in the committed head — private pilot contract
 
@@ -65,7 +79,7 @@ Local typecheck passes; full local suite 201/203 (two Windows-only vault mode as
 
 1. Read this file, `docs/READINESS.md`, `docs/plans/private-pilot-activation.md`, and the inbound receipts/worker/private-UI reports. Confirm the exact remote commit and branch before editing.
 2. ~~Run hosted CI for the completion patch; inspect full logs.~~ Done: 41370951223. ~~Run hosted CI for the pilot contract.~~ Done: 41372493757. ~~Run hosted CI for QR enrollment/CLI.~~ Done: 41374543813.
-3. ~~Independently review inbound and pilot policy changes.~~ Done. ~~Review the pilot runtime/image slice.~~ Done; see the two pilot review documents. The hosted `pilot` job for the image/scan slice is still pending.
+3. ~~Independently review inbound and pilot policy changes.~~ Done. ~~Review the pilot runtime/image slice.~~ Done; see the two pilot review documents. The hosted `pilot` job passed at 41379964911.
 4. ~~Complete media backup/restore fixture coverage.~~ Done and hosted PASS.
 5. Admin retry remains deferred/open. Do not add it without an explicit policy (exact job/version, allowlisted retryable errors, capped attempts, no locator exposure, no accidental GET retry).
 6. ~~Add ownership-fenced retention and bounded worker scheduling.~~ Done, hosted PASS. The pilot loop still sets `media:false`; wiring real media download requires a private CDN drill and remains open.
@@ -79,6 +93,7 @@ Local typecheck passes; full local suite 201/203 (two Windows-only vault mode as
 - Private pilot policy/budget/UID gates: local and hosted PASS at `7e66b98`/41372493757.
 - QR enrollment, private files and CLI: hosted PASS at `ad036f6`/41374543813.
 - Pilot runtime, separate connector image, scan and review fixes: local and hosted PASS at `105f2d7`/41377272040.
-- Second-review hardening (halt precedence, real dispatch path, peer-scoped claims, image build identity, self-peer and TLS rules): local PASS, hosted pending.
+- Second-review hardening (halt precedence, real dispatch path, peer-scoped claims, image build identity, self-peer and TLS rules, boundary error): hosted PASS at `a37935a`/41379964911.
+- Third-pass hardening (exact-scope validation, scoped interrupted sweep, deferral backoff, CLI halt allowlist, preflight containment, bootstrap ordering): local PASS, hosted pending.
 - Long-lived pilot runtime live drill, media scheduling in the pilot loop, dedicated admin retry, metadata/attachment retention policy and duplicate-egress bounds: open.
 - Actual Zalo login, messaging/media, account health, phone coexistence, terms compliance and ban risk: UNPROVEN. Production readiness: NOT ESTABLISHED.

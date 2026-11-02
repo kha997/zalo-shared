@@ -312,15 +312,34 @@ export async function startPilotRuntime(input: {
     throw unavailable();
   requireTlsDatabaseUrl(databaseUrl);
 
-  const [pgModule, files, facadeModule, ownership] = await Promise.all([
-    import("pg"),
-    import("../server/private-pilot-files.js"),
-    import("../adapters/zalo/sdk-facade.js"),
-    import("../server/connector-ownership.js"),
-  ]);
-  const Pool = (pgModule as any).default?.Pool ?? (pgModule as any).Pool;
-  if (typeof Pool !== "function") throw unavailable();
-  const pool: pg.Pool = new Pool({ connectionString: databaseUrl, max: 4 });
+  // Preflight module loading and pool construction must also fail closed:
+  // a missing compiled module or a bad driver shape is indistinguishable to
+  // the caller from any other unavailable runtime.
+  let loaded: {
+    files: typeof import("../server/private-pilot-files.js");
+    facadeModule: typeof import("../adapters/zalo/sdk-facade.js");
+    ownership: typeof import("../server/connector-ownership.js");
+    pool: pg.Pool;
+  };
+  try {
+    const [pgModule, files, facadeModule, ownership] = await Promise.all([
+      import("pg"),
+      import("../server/private-pilot-files.js"),
+      import("../adapters/zalo/sdk-facade.js"),
+      import("../server/connector-ownership.js"),
+    ]);
+    const Pool = (pgModule as any).default?.Pool ?? (pgModule as any).Pool;
+    if (typeof Pool !== "function") throw unavailable();
+    loaded = {
+      files,
+      facadeModule,
+      ownership,
+      pool: new Pool({ connectionString: databaseUrl, max: 4 }),
+    };
+  } catch {
+    throw unavailable();
+  }
+  const { files, facadeModule, ownership, pool } = loaded;
   const controller = new AbortController();
   if (input.signal?.aborted) controller.abort();
   const forwardAbort = () => controller.abort();
@@ -344,6 +363,13 @@ export async function startPilotRuntime(input: {
         allowedPeerIds: grant.allowedPeerIds,
       },
       publishConnected: true,
+      guard: () => {
+        try {
+          return !controller.signal.aborted && fresh(grant, () => new Date());
+        } catch {
+          return false;
+        }
+      },
       ...(mode === "send-test"
         ? { dispatchPeers: grant.allowedPeerIds }
         : {}),

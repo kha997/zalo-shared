@@ -47,6 +47,8 @@ interface Options {
   inbound?: { accountId: string; allowedPeerIds: readonly string[] };
   /** Pilot-only: mark provider_state connected under the active owner fence. */
   publishConnected?: boolean;
+  /** Pilot-only: synchronous admission predicate checked before inbound, dispatch and publication. */
+  guard?: () => boolean;
   /** Pilot-only: restrict outbound claims to these exact direct peers. */
   dispatchPeers?: readonly string[];
   acquireOwnership?: typeof acquireConnectorOwnership;
@@ -126,6 +128,8 @@ export function createOwnedConnector(options: Options) {
     typeof options.publishConnected !== "boolean"
   )
     throw unavailable();
+  if (options.guard !== undefined && typeof options.guard !== "function")
+    throw unavailable();
   let rejectedInbound = 0;
   let status: "stopped" | "starting" | "active" | "blocked" = "stopped";
   let gap = false;
@@ -177,9 +181,37 @@ export function createOwnedConnector(options: Options) {
       await owner?.close();
     } catch {}
   };
+  const guardPasses = () => {
+    if (!options.guard) return true;
+    try {
+      return options.guard() === true;
+    } catch {
+      return false;
+    }
+  };
+  const admissible = () =>
+    !terminal && !gap && owner?.admitted === true && guardPasses();
+  const waitForConnected = async () => {
+    if (!transport) throw unavailable();
+    const deadline =
+      Date.now() +
+      Math.max(
+        1000,
+        (options.transportOptions?.handshakeTimeoutMs ?? 15000) + 1000,
+      );
+    while (transport.status !== "connected") {
+      if (!admissible() || transport.status !== "connecting")
+        throw unavailable();
+      if (Date.now() >= deadline) throw unavailable();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    if (!admissible()) throw unavailable();
+  };
   /** Publish app-observable provider state only under the active owner row lock. */
   const publishConnected = async () => {
     if (options.publishConnected !== true) return;
+    if (!transport || transport.status !== "connected" || !admissible())
+      throw unavailable();
     const db = await options.pool.connect();
     try {
       await db.query("BEGIN");
@@ -188,7 +220,12 @@ export function createOwnedConnector(options: Options) {
         "SELECT account_id FROM connector_ownership WHERE account_id=$1 AND owner_id=$2 AND epoch=$3 AND phase='active' FOR SHARE",
         [ACCOUNT, owner!.token.ownerId, owner!.token.epoch],
       );
-      if (!current.rowCount) throw unavailable();
+      if (
+        !current.rowCount ||
+        transport.status !== "connected" ||
+        !admissible()
+      )
+        throw unavailable();
       const published = await db.query(
         "UPDATE provider_state SET status='connected',last_event_at=now() WHERE account_id=$1 AND reconciliation_required=false",
         [ACCOUNT],
@@ -258,6 +295,10 @@ export function createOwnedConnector(options: Options) {
           approvedSdk: { createApi: approvedSdk },
           captureMedia: !!options.mediaCipher,
           onInbound: async (event) => {
+            if (!guardPasses()) {
+              rejectedInbound++;
+              return;
+            }
             await assertCurrent();
             if (
               inboundPeers &&
@@ -337,8 +378,11 @@ export function createOwnedConnector(options: Options) {
         await assertCurrent();
         await owner.markActive();
         await assertCurrent();
-        await publishConnected();
-        await assertCurrent();
+        if (options.publishConnected === true) {
+          await waitForConnected();
+          await publishConnected();
+          await assertCurrent();
+        }
         status = "active";
       } catch {
         terminal = true;
@@ -369,6 +413,7 @@ export function createOwnedConnector(options: Options) {
       await closeOwner();
     },
     async runOnce() {
+      if (!guardPasses()) return { processed: false };
       await assertCurrent();
       if (status !== "active" || !provider) throw unavailable();
       return runWorkerOnce(
@@ -379,6 +424,7 @@ export function createOwnedConnector(options: Options) {
     },
     /** One bounded media step under the same dispatch fence; never sends mail. */
     async runMediaOnce() {
+      if (!guardPasses()) return { processed: false };
       await assertCurrent();
       if (
         status !== "active" ||

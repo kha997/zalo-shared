@@ -33,6 +33,7 @@ Reviewed 2026-11-02. Scope: `connector/`, `tsconfig.connector.json`, `ops/Docker
 
 ## Residual risks
 
+- The build identity is derived at build time from `SOURCE_COMMIT`, the connector lock hash and the SDK integrity, but it is not a cryptographic attestation of the image contents. An operator who can replace the image can write a matching file. The trust anchor is the CI-built image digest recorded in the pipeline; that digest must be pinned with the grant, and the runtime cannot verify its own provenance from inside the container.
 - The image intentionally contains the unofficial SDK and its deprecated `crypto-js` transitive dependency. This is a deliberate live-promotion risk gate, not a clean application image.
 - The scan summary is a dated advisory snapshot. Trivy findings, base-image digests and SDK behavior must be re-checked before any live use.
 - No live login, provider call, QR scan or phone interaction is performed by CI. The dry-run proves manifest validation and image hygiene only.

@@ -381,6 +381,189 @@ test("late API discarded during stop retains an error sink after listener cleanu
     f.listener.emit("error", Error("private late sdk error")),
   );
 });
+test("pilot publication happens only after the transport reports connected", async () => {
+  const f = fixture();
+  const events: string[] = [];
+  const transport = {
+    status: "connecting",
+    async start() {
+      setTimeout(() => {
+        transport.status = "connected";
+        events.push("connected");
+      }, 20);
+    },
+    stop() {},
+    async sendText() {
+      return { status: "sent" as const, providerId: "synthetic" };
+    },
+  };
+  let published = 0;
+  const pool = {
+    async connect() {
+      return {
+        async query(text: string) {
+          if (text.includes("connector_ownership"))
+            return { rowCount: 1, rows: [{ account_id: ACCOUNT }] };
+          if (text.includes("UPDATE provider_state")) {
+            published++;
+            events.push("publish");
+            return { rowCount: 1, rows: [{}] };
+          }
+          return { rowCount: 1, rows: [{}] };
+        },
+        release() {},
+      };
+    },
+    async query() {
+      return { rowCount: 0, rows: [] };
+    },
+  } as any;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool,
+    publishConnected: true,
+    transportOptions: { handshakeTimeoutMs: 500 },
+    createTransport: () => transport as any,
+  });
+  await runtime.start();
+  assert.deepEqual(events, ["connected", "publish"]);
+  assert.equal(published, 1);
+  assert.equal(runtime.status, "active");
+  await runtime.stop();
+});
+
+test("pilot publication refuses when provider state still requires reconciliation", async () => {
+  const f = fixture();
+  const transport = {
+    status: "connected",
+    async start() {},
+    stop() {},
+    async sendText() {
+      return { status: "sent" as const, providerId: "synthetic" };
+    },
+  };
+  let published = 0;
+  const pool = {
+    async connect() {
+      return {
+        async query(text: string) {
+          if (text.includes("connector_ownership"))
+            return { rowCount: 1, rows: [{ account_id: ACCOUNT }] };
+          if (text.includes("UPDATE provider_state")) {
+            published++;
+            return { rowCount: 0, rows: [] };
+          }
+          return { rowCount: 1, rows: [{}] };
+        },
+        release() {},
+      };
+    },
+    async query() {
+      return { rowCount: 0, rows: [] };
+    },
+  } as any;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool,
+    publishConnected: true,
+    createTransport: () => transport as any,
+  });
+  await assert.rejects(
+    runtime.start(),
+    (e) => e instanceof Error && e.message === "Connector runtime unavailable",
+  );
+  assert.equal(published, 1);
+  assert.equal(runtime.status, "blocked");
+  await runtime.stop();
+});
+
+test("the pilot guard stops inbound and dispatch once it fails", async () => {
+  const f = fixture();
+  let allowed = true;
+  let connects = 0;
+  let sends = 0;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool: {
+      async connect() {
+        connects++;
+        throw new Error("must not persist");
+      },
+      async query() {
+        return { rowCount: 0, rows: [] };
+      },
+    } as any,
+    inbound: { accountId: "me", allowedPeerIds: ["peer-a"] },
+    guard: () => allowed,
+    createProvider: () => ({
+      async connected() {
+        return true;
+      },
+      async sendPart() {
+        sends++;
+        return "synthetic";
+      },
+    }),
+  });
+  await runtime.start();
+  allowed = false;
+  f.listener.emit("message", {
+    threadId: "peer-a",
+    type: 0,
+    isSelf: false,
+    data: { msgId: "m-1", uidFrom: "peer-a", msgType: "webchat" },
+  });
+  for (let i = 0; i < 20 && runtime.rejectedInbound < 1; i++)
+    await new Promise((r) => setImmediate(r));
+  assert.equal(runtime.rejectedInbound, 1);
+  assert.equal(connects, 0);
+  assert.deepEqual(await runtime.runOnce(), { processed: false });
+  assert.equal(sends, 0);
+  assert.equal(runtime.status, "active");
+  await runtime.stop();
+});
+
+test("the pilot guard blocks publication when admission is already lost", async () => {
+  const f = fixture();
+  const transport = {
+    status: "connected",
+    async start() {},
+    stop() {},
+    async sendText() {
+      return { status: "sent" as const, providerId: "synthetic" };
+    },
+  };
+  let published = 0;
+  const pool = {
+    async connect() {
+      return {
+        async query() {
+          published++;
+          return { rowCount: 1, rows: [{}] };
+        },
+        release() {},
+      };
+    },
+    async query() {
+      return { rowCount: 0, rows: [] };
+    },
+  } as any;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool,
+    publishConnected: true,
+    guard: () => false,
+    createTransport: () => transport as any,
+  });
+  await assert.rejects(
+    runtime.start(),
+    (e) => e instanceof Error && e.message === "Connector runtime unavailable",
+  );
+  assert.equal(published, 0);
+  assert.equal(runtime.status, "blocked");
+  await runtime.stop();
+});
+
 test("pilot inbound gate admits only exact direct peers with a consistent sender", () => {
   const peers = new Set(["peer-a"]);
   const direct = {

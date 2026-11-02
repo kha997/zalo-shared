@@ -44,7 +44,27 @@ export async function readBuildIdentity(path = BUILD_IDENTITY_PATH) {
 /**
  * Remote database connections must negotiate TLS. Loopback is permitted for a
  * same-host private deployment where the operator controls the socket.
+ *
+ * pg-connection-string lets query parameters override the host and takes the
+ * last duplicate sslmode, so the URL is admitted only when it contains no
+ * target/credential/TLS override. The remaining parameters cannot change the
+ * destination or disable TLS.
  */
+const DATABASE_PARAMETERS = new Set([
+  "sslmode",
+  "application_name",
+  "connect_timeout",
+  "keepalives",
+  "keepalives_idle",
+  "keepalives_interval",
+  "keepalives_count",
+  "tcp_user_timeout",
+  "options",
+  "statement_timeout",
+  "lock_timeout",
+  "idle_in_transaction_session_timeout",
+  "target_session_attrs",
+]);
 export function requireTlsDatabaseUrl(value: string | undefined) {
   if (typeof value !== "string" || !/^postgres(ql)?:\/\//.test(value))
     throw unavailable();
@@ -54,8 +74,20 @@ export function requireTlsDatabaseUrl(value: string | undefined) {
   } catch {
     throw unavailable();
   }
-  if (!url.hostname || !/^\d{1,5}$/.test(url.port || "5432"))
+  if (
+    !url.hostname ||
+    url.hostname.includes("%") ||
+    url.hash ||
+    !url.pathname ||
+    url.pathname === "/" ||
+    !/^\d{1,5}$/.test(url.port || "5432")
+  )
     throw unavailable();
+  const modes = url.searchParams.getAll("sslmode");
+  if (modes.length > 1) throw unavailable();
+  for (const [key] of url.searchParams) {
+    if (!DATABASE_PARAMETERS.has(key)) throw unavailable();
+  }
   const loopback =
     url.hostname === "localhost" ||
     url.hostname === "127.0.0.1" ||
@@ -63,11 +95,8 @@ export function requireTlsDatabaseUrl(value: string | undefined) {
     url.hostname === "::1";
   if (
     !loopback &&
-    !["require", "verify-ca", "verify-full"].includes(
-      url.searchParams.get("sslmode") ?? "",
-    )
+    !["require", "verify-ca", "verify-full"].includes(modes[0] ?? "")
   )
     throw unavailable();
-  if (url.searchParams.get("ssl") === "false") throw unavailable();
   return value;
 }

@@ -178,8 +178,16 @@ export function parsePilotManifest(text: string, now: Date): PilotManifest {
 }
 
 // Any halt not listed here is treated as a safety failure so a new or unknown
-// reason can never produce a successful exit.
+// reason can never produce a successful exit. The gate echoed to stdout is
+// restricted to these literals: a future runner string must not leak details.
 const COMPLETION_HALTS = new Set(["tick-limit", "grant-expired", "aborted"]);
+const KNOWN_HALTS = new Set([
+  ...COMPLETION_HALTS,
+  "runtime-error",
+  "already-reserved",
+  "reservation-denied",
+  "dispatch-uncertain",
+]);
 const counter = (value: unknown) =>
   Number.isInteger(value) && (value as number) >= 0
     ? (value as number)
@@ -270,8 +278,16 @@ export async function runPilotCli(options: {
       returned !== null && typeof returned === "object"
         ? (returned as PilotCommandOutcome)
         : undefined;
-    const halt =
+    const rawHalt =
       outcome && typeof outcome.halt === "string" ? outcome.halt : undefined;
+    // Only the reviewed literals may reach the operator-visible gate. A future
+    // or corrupted reason is collapsed into the generic safety failure.
+    const halt = rawHalt !== undefined && KNOWN_HALTS.has(rawHalt) ? rawHalt : undefined;
+    if (rawHalt !== undefined && halt === undefined)
+      return {
+        exitCode: 1,
+        stdout: safeOutcome(command, false, "runtime-error", manifest, outcome),
+      };
     if (halt !== undefined && !COMPLETION_HALTS.has(halt))
       return {
         exitCode: 1,
@@ -334,10 +350,8 @@ async function liveBootstrap(input: {
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
   try {
-    owner = await ownership.acquireConnectorOwnership(pool, {
-      ownerLabel: "pilot-enrollment",
-      onRevoked: () => controller.abort(),
-    });
+    // Private-file validation must precede ownership: a typo in a key or
+    // session path must not bump the epoch or quarantine provider state.
     const key = await files.readPrivateKeyFile(keyPath);
     const sessionStore = new files.PrivateSessionFile({
       path: sessionPath,
@@ -345,6 +359,10 @@ async function liveBootstrap(input: {
       keyId: env.PILOT_KEY_ID ?? "v1",
     });
     const view = new files.PrivateQrFileView({ directory: viewDirectory });
+    owner = await ownership.acquireConnectorOwnership(pool, {
+      ownerLabel: "pilot-enrollment",
+      onRevoked: () => controller.abort(),
+    });
     await qr.bootstrapPilotSession({
       grant: manifest.grant,
       owner,

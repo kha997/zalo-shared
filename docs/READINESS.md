@@ -2,22 +2,41 @@
 
 **NOT PRODUCTION-READY. No live Zalo login, production deployment, real customer data or public application endpoint has been used.** The repository is public; runtime credentials and unlicensed upstream application snapshots are excluded.
 
-## Private pilot review hardening — local PASS, hosted pending
+## Private pilot review hardening — hosted PASS
 
-A second independent review of the committed pilot runtime, CLI, connector image and CI job found one high-impact defect and several medium issues. All are fixed in the working slice; hosted CI is pending.
+A second independent review of the committed pilot runtime, CLI, connector image and CI job found one high-impact defect and several medium issues. All are fixed and the slice passed hosted CI.
 
 - Policy halts now win over the abort they trigger, so an ambiguous send cannot exit 0 as `aborted`. Any halt outside `tick-limit`, `grant-expired` and `aborted` exits non-zero.
 - Send-test can actually dispatch: the owned connector publishes `provider_state.status='connected'` after ownership, the UID-bound facade, transport start and `markActive`, in a transaction holding the active owner row `FOR SHARE`, and refuses while `reconciliation_required` is set. Before this fix the provider could never report connected.
 - Worker claims are scoped to the grant's exact direct peers, so an out-of-scope staff message is never claimed or marked failed. A denied destination now defers instead of failing.
 - The image embeds `/app/build-identity.json` derived from `SOURCE_COMMIT`, the connector lock and the pinned SDK integrity; the runtime refuses a manifest whose build block does not match. `DATABASE_URL` requires TLS for non-loopback hosts.
 - The bound account is rejected in every peer allowlist. The scanner walks the image for manifest/key/session/QR files, and CI asserts the embedded identity equals the checked-out commit.
-- `startPilotRuntime` re-validates the full manifest (build, consent scope, purpose, shape, freshness) instead of accepting a bare grant-shaped object.
+- `startPilotRuntime` re-validates the full manifest (build, consent scope, purpose, shape, freshness) instead of accepting a bare grant-shaped object, and collapses validation errors into the single runtime boundary error.
 
-Local evidence: typecheck and both builds PASS; focused pilot/connector suites **47/47** PASS; full local suite **258 tests, 256 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions. The connector image built locally with a real identity; the inventory reported UID 65532, `zca-js@2.2.0`, `crypto-js@4.2.0`, the commit identity and no private files. [Review and dispositions](review/private-pilot-runtime-review.md).
+Hosted [CI 41379964911](https://github.com/kha997/zalo-shared/actions/runs/41379964911) on `a37935a` passed both jobs: **258/258** unit checks, **2/2** guarded offline SDK checks and **9 browser cases + 1 explicit skip, 0 failed**, including the four-staff browser/administrator flow, real-PostgreSQL durability, unclean restart, encrypted restore/quarantine, monitoring and the SDK-free nonroot application image. The pilot job built the separate connector image, admitted the synthetic dry-run, verified `/app/build-identity.json` against the checked-out PR merge commit `b7fe5db` and the connector lock, and reported UID 65532, `zca-js@2.2.0`, `crypto-js@4.2.0`, no private files, no exposed ports and **0 HIGH/CRITICAL (0 fixable)**. The preceding run `39a83ea`/41379789878 exposed one Linux-only boundary-error assertion (257/258); it is fixed in `a37935a` and covered by the hosted run above.
+
+Four-staff acceptance and capacity remained within the short-workload target at the required scale: 4/10/25/50-client p95 **44.7/65.2/145.8/272.9 ms**, 50×50 p95 74.0 ms (10,050 requests, 2,500 idempotent retries verified), 100-client 470.3 ms and 200-client 1155.1 ms; **500 clients FAIL** at 3991.5 ms. There were zero request errors and every mock queue drained. The application has no hardcoded seat cap (the load run creates 10/25/50 accounts); the 1–4 peer bound is a pilot provider allowlist, not a staff limit.
+
+Local evidence for the same source: typecheck and both builds PASS; focused pilot/connector suites **47/47** PASS; full local suite **258 tests, 256 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions that pass on Linux. The Linux-only runtime branch was also exercised locally with a forced `process.platform`. The connector image built locally with a real identity; the inventory reported UID 65532, `zca-js@2.2.0`, `crypto-js@4.2.0`, the commit identity and no private files. [Review and dispositions](review/private-pilot-runtime-review.md).
+
+### Third-pass review remediation — local PASS, hosted pending
+
+A follow-up independent pass over the same slice raised seven additional issues; all are fixed in the working tree and covered by focused regressions.
+
+- A provided worker scope is now validated before any lock or query: an empty, duplicate, malformed or absent `peers` list throws instead of silently widening the claim to the whole account. The interrupted-dispatch sweep is also limited to the scope, so a pilot no longer quarantines out-of-scope staff mail; the normal owner recovers those rows.
+- A deferred destination now returns `processed:false`, so the main worker backs off instead of reclaiming the same row in a hot loop. The row and its parts remain `pending` and are never marked failed.
+- The CLI restricts the operator-visible `gate` to the reviewed halt literals and maps any unknown or corrupted runner string to `runtime-error`, so a future reason cannot leak identifiers to stdout.
+- `startPilotRuntime` now contains module loading and pool construction inside its single boundary error, matching the rest of the preflight.
+- QR bootstrap validates the private key, session and view paths before acquiring ownership, so a typo cannot bump the connector epoch or quarantine provider state.
+- The in-image build identity remains build-derived, not content-hashed: the trust anchor is the CI-built image digest recorded externally, and the runtime cannot attest its own provenance from inside the container. Deployment must pin that digest. Dry-run remains shape-only and intentionally reads no image file. This limitation is recorded in the review.
+
+Local evidence for the working slice: typecheck and both builds PASS; focused pilot/connector/worker suites **50/50** PASS; full local suite **266 tests, 264 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions that pass on Linux. Hosted CI is pending.
 
 | Claim | Status |
 |---|---|
-| Policy-halt exit, real dispatch path, peer-scoped claims, image build identity, self-peer rejection, TLS rule | PASS locally; hosted pending |
+| Policy-halt exit, real dispatch path, peer-scoped claims, image build identity, self-peer rejection, TLS rule, boundary error | PASS locally and hosted at `a37935a` |
+| Exact-scope validation, scoped interrupted sweep, deferral backoff, CLI halt allowlist, preflight containment, bootstrap ordering | PASS locally; hosted pending |
+| Four-staff browser acceptance and 4/10/25/50 capacity | PASS hosted; 500-client p95 FAIL |
 | Live send-test against a real account or peer | UNPROVEN — requires Owner activation |
 | Production readiness | NOT ESTABLISHED |
 
