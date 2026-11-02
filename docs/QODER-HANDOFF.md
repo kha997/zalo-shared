@@ -11,9 +11,9 @@ Continue only with synthetic/offline work until the Owner supplies and approves 
 
 The main application remains provider-disabled/mock and SDK-free in its production image. The pinned `zca-js@2.2.0` is only for development/research/guard tests; no authenticated session was used.
 
-## Latest evidenced hosted baseline — whole-branch remediation
+## Latest evidenced hosted baseline — restore re-audit
 
-Hosted [CI 41385140560](https://github.com/kha997/zalo-shared/actions/runs/41385140560) on `e0e635d` (PR merge `3684f27`) passed both jobs: **273/273** unit checks, **2/2** guarded offline SDK checks, **9 browser cases + 1 explicit skip, 0 unexpected**, including real-PostgreSQL durability, unclean restart, encrypted restore/quarantine, monitoring, the SDK-free nonroot application image, and the separate SDK-bearing pilot connector dry-run/scan with UID 65532, no ports/private files and 0 HIGH/CRITICAL. Load p95 was 65.0/79.6/212.3/441.8 ms at 4/10/25/50 clients, 111.2 ms for 50×50, 701.5/1525.0 ms at 100/200; **500 clients FAIL** at 3669.4 ms with zero request errors. The previous baseline was CI 41382664808 on `cc6614c` (268/268, 2/2, 9+1). None of these runs demonstrates provider compatibility, physical-phone coexistence or production readiness.
+Hosted [CI 41386800622](https://github.com/kha997/zalo-shared/actions/runs/41386800622) on `a810087` (PR merge `2bd5e7f`) passed both jobs: **273/273** unit checks, **2/2** guarded offline SDK checks, **9 browser cases + 1 explicit skip, 0 unexpected**, and the pilot job. The restore drill now seeds an interrupted `processing` outbox/message/part fixture, asserts it before backup, and verifies all three rows become `unknown` after restore; the remaining `dispatchable|1` is the never-attempted pending fixture preserved by design. The no-network dry-run was admitted; the connector identity matched the PR merge commit and connector lock; inventory reported UID 65532, no ports/private files and both images **0 HIGH/CRITICAL (0 fixable)**. Load p95 was 62.9/82.9/222.5/435.6 ms at 4/10/25/50 clients, 119.7 ms for 50×50, 928.7/1661.8 ms at 100/200; **500 clients FAIL** at 3135.5 ms with zero request errors. The prior baseline was CI 41385140560 on `e0e635d` (273/273, 2/2, 9+1). None of these runs demonstrates provider compatibility, physical-phone coexistence or production readiness.
 
 ## Working slice — second-review hardening (hosted PASS)
 
@@ -67,6 +67,16 @@ An independent whole-branch review of `cc6614c` found no P1, two P2 liveness def
 - The threat model records that PostgreSQL RLS is not enabled for attachment/media reads; scan docs state the filename/path-only scope.
 
 Local: typecheck, both builds and the connector build PASS; focused suites **77/77**; full local suite **273/273** PASS (the Windows-only `vault.test.ts` mode assertions are now POSIX-guarded; Linux CI still exercises them). Hosted [CI 41385140560](https://github.com/kha997/zalo-shared/actions/runs/41385140560) on `e0e635d` (PR merge `3684f27`) passed both jobs: **273/273** unit checks, **2/2** guarded SDK checks, **9 browser cases + 1 skip, 0 unexpected**, restore/restart/monitoring/image gates, and the pilot job. Image identity matched the PR merge commit; UID 65532, `zca-js` 2.2.0, `crypto-js` 4.2.0, no private files/ports, and 0 HIGH/CRITICAL (0 fixable) for both images. Load p95 65.0/79.6/212.3/441.8 ms at 4/10/25/50, 111.2 ms at 50×50, 701.5/1525.0 ms at 100/200; **500 FAIL** at 3669.4 ms with zero request errors. [Retained measurements](evidence/ci-pilot-whole-branch-results.json).
+
+## Restore re-audit (hosted PASS)
+
+A targeted re-audit of `e0e635d` found no P1 and one P2 evidence gap: the restore drill's "no `processing` row survives" assertions were vacuous because no fixture ever seeded a `processing` row. The slice at `a810087` fixes it and documents two bounds:
+
+- `ops/ci-provider-journal.ts` seeds an interrupted `processing` outbox/message/part fixture; `ops/ci-backup-drill.sh` asserts all three before backup and asserts they become `unknown` after restore, while the never-attempted pending fixture survives as `pending`.
+- A wrong-key media deferral preserves the locator only within the remaining 24-hour retention window; the runbook now requires the keyring fix inside it.
+- The pilot guide describes the terminal `reservation-already-consumed` failure rather than an `already-reserved` halt.
+
+Hosted [CI 41386800622](https://github.com/kha997/zalo-shared/actions/runs/41386800622) on `a810087` (PR merge `2bd5e7f`) passed both jobs with the drill reporting `Restore quarantine and runtime audit privilege assertions PASS`; the remaining `dispatchable|1` is the preserved pending fixture. 273/273 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip. Load p95 62.9/82.9/222.5/435.6 ms at 4/10/25/50, 119.7 ms at 50×50, 928.7/1661.8 ms at 100/200; **500 FAIL** at 3135.5 ms, zero request errors. [Retained measurements](evidence/ci-pilot-restore-reaudit-results.json).
 
 ## Work in the committed head — private pilot contract
 
@@ -122,5 +132,6 @@ Local typecheck passes; full local suite 201/203 (two Windows-only vault mode as
 - Second-review hardening (halt precedence, real dispatch path, peer-scoped claims, image build identity, self-peer and TLS rules, boundary error): hosted PASS at `a37935a`/41379964911.
 - Third-pass hardening (exact-scope validation, scoped interrupted sweep, deferral backoff, CLI halt allowlist, preflight containment, bootstrap ordering): hosted PASS at `44b677f`/41381303200.
 - Whole-branch hardening (reservation liveness, restore pending preservation, post-fence regression, any-severity/UID scan gates, wrong-key media deferral, private-file parent/inode checks, literal search, gap-ack pending rule): hosted PASS at `e0e635d`/41385140560.
+- Restore re-audit (non-vacuous interrupted-processing fixture with pre/post assertions; wrong-key retention bound and reservation-failure wording documented): hosted PASS at `a810087`/41386800622.
 - Long-lived pilot runtime live drill, media scheduling in the pilot loop, dedicated admin retry, metadata/attachment retention policy and duplicate-egress bounds: open.
 - Actual Zalo login, messaging/media, account health, phone coexistence, terms compliance and ban risk: UNPROVEN. Production readiness: NOT ESTABLISHED.
