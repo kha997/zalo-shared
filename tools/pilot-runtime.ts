@@ -264,6 +264,8 @@ export async function startPilotRuntime(input: {
   const grant = input.manifest?.grant;
   if (!grantShape(grant) || grant.purpose !== MODE_PURPOSE[mode])
     throw unavailable();
+  // Deny an expired grant before any vault, pool or SDK work.
+  if (!fresh(grant, () => new Date())) throw unavailable();
   const env = input.env ?? {};
   const databaseUrl = env.DATABASE_URL;
   const keyPath = env.PILOT_KEY_FILE;

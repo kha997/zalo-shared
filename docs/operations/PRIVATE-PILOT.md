@@ -37,7 +37,7 @@ Keep all material outside the repository, on the private pilot host:
 
 The container runs as UID 65532, so bind-mounted files must be owned by that UID (or a host user with the same numeric UID). The connector rejects symlinks, non-regular files, wrong owners/modes and escaping directories on POSIX.
 
-The session key and any media locator encryption key are separate capabilities with separate files. Select the envelope key identifier explicitly with `PILOT_KEY_ID` (default `v1`); it is bound into both the ciphertext envelope and the AES-GCM associated data, so a record written under one id cannot be read under another. Rotate by installing a new key file, selecting a new id, verifying decryption of a new session write, and only then retiring the old file after the agreed transition. There is no silent migration and no automatic key deletion.
+The session key and any media locator encryption key are separate capabilities with separate files. Select the envelope key identifier explicitly with `PILOT_KEY_ID` (default `v1`); it is bound into both the ciphertext envelope and the AES-GCM associated data, so a record written under one id cannot be read under another. Rotate by installing a new key file, selecting a new id, verifying decryption of a new session write, and only then retiring the old file after the agreed transition. There is no silent migration and no automatic key deletion. The pilot session path uses this private file store; the application's general credential vault is unchanged and is not used by the pilot connector.
 
 ## Binding the grant
 
@@ -96,7 +96,19 @@ The scanner records vulnerabilities, licenses, the resolved `zca-js` version and
 
 ## Backup and restore
 
-Back up the encrypted session file, the separate key, the binding/budget database state and the current manifest/grant. A database backup without the key is not a session recovery proof. Restored ownership and grants remain quarantined: an expired grant cannot start work, and an uncertain old owner requires external fence attestation before replacement. Ciphertext deletion on a healthy host does not erase offline or retained backups; retention policy remains an Owner decision.
+Back up the encrypted session file, the separate key, the binding/budget database state and the current manifest/grant. A database backup without the key is not a session recovery proof. The offline restore drill (`tests/transport/pilot-recovery.test.ts`) copies the ciphertext and key into a fresh private directory, verifies the bound session reads back, and rejects a wrong key, a wrong account binding, corrupted ciphertext and a truncated envelope. Restored ownership and grants remain quarantined: an expired grant is refused before any vault or pool work, and an uncertain old owner requires external fence attestation before replacement. Ciphertext deletion on a healthy host does not erase offline or retained backups; retention policy remains an Owner decision.
+
+## Owner activation gate
+
+No item here is accepted or authorized yet. Before any live login, the Owner must explicitly approve:
+
+1. one dedicated legitimate test account and its official phone, with the account not used for production or customers;
+2. 1–4 consenting direct-message test peer IDs and the exact test window;
+3. a private pilot host that can show the QR locally to the Owner, with controlled egress and no public ports;
+4. the staged command order — `bootstrap` once, then `run-observe`, then `run-send-test` only if the same approved scope includes sending — and the 1–30 part/day, ≥2 s interval limits;
+5. acceptance of the unofficial-client, platform-terms, account-restriction and ban risks, recorded by consent reference rather than secret material.
+
+After approval, the Engineering Lead records the approved scope, provisions the private files outside the repository, verifies build/lock/integrity identity, and starts observe-only under direct Owner participation. Any change to account, peers, purposes, budget, interval, risk or window requires a new Owner decision. Never request cookies, passwords or QR images through chat.
 
 ## Stop conditions
 
