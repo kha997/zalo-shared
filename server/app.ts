@@ -37,6 +37,7 @@ const mediaErrorCodes = new Set([
   "retry-limit",
   "key-unavailable",
   "storage-budget",
+  "queue-full",
   "unsupported-echo",
   "unavailable",
 ]);
@@ -689,8 +690,15 @@ export async function buildApp({
   });
   app.get("/api/attachments/:id", async (req: any, reply) => {
     const id = uuid.parse(req.params.id);
+    // Provider media is readable only while its job is ready. Non-ready jobs
+    // retain rows for audit but must not expose already-materialized bytes.
     const r = await pool.query(
-      "SELECT * FROM attachments WHERE id=$1 AND account_id=$2 AND (message_id IS NOT NULL OR owner_id=$3)",
+      `SELECT a.* FROM attachments a WHERE a.id=$1 AND a.account_id=$2 AND (
+        (a.message_id IS NOT NULL AND (
+          NOT EXISTS(SELECT 1 FROM provider_media_jobs j WHERE j.attachment_id=a.id AND j.account_id=a.account_id)
+          OR EXISTS(SELECT 1 FROM provider_media_jobs j WHERE j.attachment_id=a.id AND j.account_id=a.account_id AND j.status='ready')
+        )) OR a.owner_id=$3
+      )`,
       [id, ACCOUNT, req.staff.id],
     );
     if (!r.rowCount) fail(404, "Attachment not found");

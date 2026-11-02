@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS provider_media_jobs(
  UNIQUE(event_id,item_index),CHECK(status<>'ready' OR (attachment_id IS NOT NULL AND locator_envelope IS NULL))
 );
 CREATE INDEX IF NOT EXISTS provider_media_jobs_pending ON provider_media_jobs(account_id,status,next_attempt_at);
+CREATE INDEX IF NOT EXISTS provider_media_jobs_message ON provider_media_jobs(account_id,message_id,item_index,id) WHERE message_id IS NOT NULL;
 -- Older conflicts discarded their variants. Never imply that a later replay recovered all evidence.
 UPDATE provider_events e SET variant_evidence_missing=true WHERE conflict AND resolution_version=0
  AND NOT EXISTS(SELECT 1 FROM provider_event_variants v WHERE v.event_id=e.id);

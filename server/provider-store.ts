@@ -312,7 +312,7 @@ export async function ingestProviderEvent(
         !!row.resolved_at && !overflow && !row.variant_evidence_missing;
       if (newEvidence || !resolved) {
         await db.query(
-          "UPDATE provider_media_jobs SET status='held',version=version+1 WHERE event_id=$1 AND status IN ('pending','processing')",
+          "UPDATE provider_media_jobs SET status='held',version=CASE WHEN version<9223372036854775807 THEN version+1 ELSE version END WHERE event_id=$1 AND status IN ('pending','processing')",
           [row.id],
         );
         await recordProviderFault(db, "provider_event_conflict");

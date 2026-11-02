@@ -248,7 +248,7 @@ test("early exact staff media echoes reuse private bytes while native media stay
     await d.close();
   }
 });
-test("media quota, encryption failure and stale ownership roll back complete receipt intentions", async () => {
+test("media quota degrades only media while encryption failure and stale ownership roll back complete receipt intentions", async () => {
   const d = await isolatedDatabase(),
     c = cipher();
   const e = {
@@ -265,13 +265,29 @@ test("media quota, encryption failure and stale ownership roll back complete rec
       mediaCipher: c,
       maxPendingMedia: 1,
     });
-    await assert.rejects(
-      ingestProviderEvent(
-        d.pool,
-        { ...e, providerId: "overquota" },
-        { mediaCipher: c, maxPendingMedia: 1 },
-      ),
-      /Private media receipt unavailable/,
+    const over = await ingestProviderEvent(
+      d.pool,
+      { ...e, providerId: "overquota" },
+      { mediaCipher: c, maxPendingMedia: 1 },
+    );
+    assert.equal(over.duplicate, false);
+    const overJob = (
+      await d.pool.query(
+        "SELECT * FROM provider_media_jobs WHERE event_id=$1",
+        [over.eventId],
+      )
+    ).rows[0];
+    assert.equal(overJob.status, "unavailable");
+    assert.equal(overJob.error_code, "queue-full");
+    assert.equal(overJob.locator_envelope, null);
+    assert.equal(overJob.message_id, over.messageId);
+    assert.equal(
+      (
+        await d.pool.query("SELECT text FROM messages WHERE id=$1", [
+          over.messageId,
+        ])
+      ).rows[0].text,
+      "[Unsupported Zalo message]",
     );
     await assert.rejects(
       ingestProviderEvent(
@@ -284,6 +300,7 @@ test("media quota, encryption failure and stale ownership roll back complete rec
               throw Error(candidate.url);
             },
           },
+          maxPendingMedia: 2,
         },
       ),
       /Private media receipt unavailable/,
@@ -306,7 +323,7 @@ test("media quota, encryption failure and stale ownership roll back complete rec
     for (const table of ["provider_events", "provider_media_jobs", "messages"])
       assert.equal(
         (await d.pool.query(`SELECT count(*)::int n FROM ${table}`)).rows[0].n,
-        1,
+        2,
       );
     const before = (await d.pool.query("SELECT * FROM provider_media_jobs"))
       .rows;

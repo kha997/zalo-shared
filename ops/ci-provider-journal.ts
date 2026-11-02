@@ -133,6 +133,49 @@ try {
     providerId: "ci-unresolved",
     text: "synthetic unresolved variant",
   });
+  // Nonempty inbound media jobs: ready bytes, claimable pending/processing,
+  // held, and expired metadata. Synthetic ciphertext only; no real locator.
+  const linked = (
+    await pool.query(
+      "SELECT id,message_id FROM provider_events WHERE provider_id='ci-linked' AND account_id=$1 AND state='linked'",
+      [ACCOUNT],
+    )
+  ).rows[0];
+  if (!linked?.message_id) throw new Error("Linked fixture message missing");
+  const inboundAttachment = (
+    await pool.query(
+      "INSERT INTO attachments(account_id,owner_id,name,mime,data,message_id) VALUES($1,NULL,'ci-inbound-ready.png','image/png',$2,$3) RETURNING id",
+      [
+        ACCOUNT,
+        Buffer.from("synthetic inbound ready media fixture"),
+        linked.message_id,
+      ],
+    )
+  ).rows[0].id;
+  const envelope = JSON.stringify({
+    keyId: "ci-synthetic-locator",
+    nonce: "AAAAAAAAAAAAAAAA",
+    ciphertext: "c3ludGhldGlj",
+    tag: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  });
+  await pool.query(
+    `INSERT INTO provider_media_jobs(account_id,event_id,item_index,category,name,locator_fingerprint,locator_envelope,status,message_id,attachment_id,attempts,created_at)
+     VALUES
+      ($1,$2,0,'photo','ci-inbound-ready.png',$3,NULL,'ready',$4,$5,1,now()),
+      ($1,$2,1,'file','ci-inbound-pending.txt',$6,$7,'pending',$4,NULL,0,now()),
+      ($1,$2,2,'file','ci-inbound-processing.txt',$6,$7,'processing',$4,NULL,1,now()-interval '1 minute'),
+      ($1,$2,3,'file','ci-inbound-held.txt',$6,$7,'held',$4,NULL,0,now()-interval '2 hours'),
+      ($1,$2,4,'file','ci-inbound-expired.txt',$6,NULL,'unavailable',$4,NULL,3,now()-interval '30 hours')`,
+    [
+      ACCOUNT,
+      linked.id,
+      "a".repeat(64),
+      linked.message_id,
+      inboundAttachment,
+      "b".repeat(64),
+      envelope,
+    ],
+  );
   const states = (
     await pool.query(
       "SELECT DISTINCT state FROM provider_events WHERE thread_id=$1",

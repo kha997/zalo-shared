@@ -194,6 +194,23 @@ test("four staff read only private bounded media metadata and refresh an older r
       assert.equal(bytes.body, "synthetic private bytes");
       assert.equal(bytes.headers["x-content-type-options"], "nosniff");
     }
+    await pool.query(
+      "UPDATE provider_media_jobs SET status='unavailable',error_code='conflict',version=version+1 WHERE event_id=$1",
+      [receipt.eventId],
+    );
+    assert.equal(
+      (
+        await app.inject({
+          url: `/api/attachments/${aid}`,
+          headers: staff[0],
+        })
+      ).statusCode,
+      404,
+    );
+    await pool.query(
+      "UPDATE provider_media_jobs SET status='ready',error_code=NULL,version=version+1 WHERE event_id=$1",
+      [receipt.eventId],
+    );
     const upload = await app.inject({
       method: "POST",
       url: "/api/attachments",

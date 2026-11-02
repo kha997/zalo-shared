@@ -7,6 +7,7 @@ UNION ALL SELECT 'messages', count(*) FROM messages
 UNION ALL SELECT 'outbox', count(*) FROM outbox
 UNION ALL SELECT 'provider_events', count(*) FROM provider_events
 UNION ALL SELECT 'provider_event_variants', count(*) FROM provider_event_variants
+UNION ALL SELECT 'provider_media_jobs', count(*) FROM provider_media_jobs
 UNION ALL SELECT 'provider_ledger', count(*) FROM provider_ledger
 UNION ALL SELECT 'provider_state', count(*) FROM provider_state
 UNION ALL SELECT 'read_cursors', count(*) FROM read_cursors

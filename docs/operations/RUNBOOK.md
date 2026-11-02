@@ -35,6 +35,19 @@ Restore only on a separate isolated PostgreSQL instance with no app or worker ac
 
 Verify attachment byte hashes against source, audit history, actor/role restrictions and authenticated media access; verify every previously sent job stays sent and no restored unknown/pending job dispatches. Keep dispatch profile off and provider disabled. Restored DB CONNECT remains denied to runtime; test zs_app connection rejection. Only after verification and operator reconciliation may owner rerun runtime grants and explicitly GRANT CONNECT for the intended runtime role. Never enable while unknown jobs remain unresolved. Record dump UTC, source boundary, start/end times, bytes/counts/hash results, simulated lost transactions and measured RPO/RTO in a private drill report. Restore application configuration separately; do not restore live sessions or enable dispatch by copying old settings. A successful pg_restore alone is not a completed drill.
 
+Restore quarantines pending/processing inbound media jobs to `held` and bumps their version; ready attachment bytes remain linked and expire only through an explicit Owner retention policy. Table counts and content fingerprints include `provider_media_jobs`, so row or binding loss fails the drill instead of passing silently.
+
+### Locator key escrow
+
+Inbound locator envelopes are encrypted with an account/key-ID keyring that is not inside the database archive. Before any restore or failover:
+
+- keep an independently tested recovery copy of every key ID still referenced by `provider_media_jobs` (`pending`, `processing`, `held`), plus the separate fingerprint key;
+- store keys outside the repository and not beside the backup archive, with parent `0700` and file `0600` (or a reviewed secret manager);
+- start the media scheduler before enabling downloads. It reports only `key-missing` and refuses GETs when an envelope's key is absent; it never logs envelopes or locators;
+- treat a missing key as a failed media recovery gate. Do not delete or rewrite jobs to hide the gap.
+
+Rotation: add the new key, keep the old key until all envelopes using it are `ready` or expired, then retire it through an explicit reviewed change. No automatic destructive key deletion is implemented.
+
 ## Capacity and live acceptance gate
 
 Record machine resources, dataset, workload, duration, 4/10/25/50 user latency percentiles, errors, message throughput and queue age. Four browser contexts establish session concurrency only. No unlimited capacity or physical workstation claim is supported. Set limits based on measured results and business targets.

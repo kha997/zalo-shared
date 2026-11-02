@@ -132,7 +132,28 @@ export async function enqueueEventMedia(
         [ACCOUNT],
       )
     ).rows[0].n;
-    if (count + media.items.length > maxPending) throw unavailable();
+    if (count + media.items.length > maxPending) {
+      // Preserve the event and text ingress; never store a locator past the
+      // queue budget. The UI shows an honest unavailable media item.
+      for (const item of media.items) {
+        await db.query(
+          "INSERT INTO provider_media_jobs(account_id,event_id,item_index,category,name,locator_fingerprint,locator_envelope,status,error_code) VALUES($1,$2,$3,$4,$5,$6,NULL,'unavailable','queue-full')",
+          [
+            ACCOUNT,
+            eventId,
+            item.index,
+            item.category,
+            item.name,
+            media.descriptors[item.index].locatorFingerprint,
+          ],
+        );
+      }
+      await db.query(
+        "INSERT INTO audit(account_id,action,target_id,metadata) VALUES($1,'media.queue_full',$2,$3)",
+        [ACCOUNT, eventId, { items: media.items.length }],
+      );
+      return;
+    }
     for (const item of media.items) {
       const envelope = media.cipher.seal(
         item.url,
@@ -182,6 +203,12 @@ async function linkEventMediaInternal(
     ).rowCount
   )
     throw unavailable();
+  // Unavailable jobs still need message linkage so the private UI can show an
+  // honest media item without ever exposing a locator.
+  await db.query(
+    "UPDATE provider_media_jobs SET message_id=$2,version=CASE WHEN version<9223372036854775807 THEN version+1 ELSE version END WHERE event_id=$1 AND account_id=$3 AND message_id IS NULL",
+    [eventId, e.message_id, ACCOUNT],
+  );
   const part = (
     await db.query(
       "SELECT p.attachment_id,a.id AS valid_attachment FROM delivery_parts p JOIN messages m ON m.id=p.message_id LEFT JOIN attachments a ON a.id=p.attachment_id AND a.message_id=m.id AND a.account_id=$3 WHERE p.message_id=$1 AND p.provider_id=$2 AND p.status='sent'",
@@ -190,7 +217,7 @@ async function linkEventMediaInternal(
   ).rows[0];
   if (part) {
     await db.query(
-      "UPDATE provider_media_jobs SET message_id=$2,status=$3,attachment_id=$4,locator_envelope=NULL,error_code=$5,version=version+1 WHERE event_id=$1 AND account_id=$6 AND status IN ('held','pending')",
+      "UPDATE provider_media_jobs SET message_id=$2,status=$3,attachment_id=$4,locator_envelope=NULL,error_code=$5,version=CASE WHEN version<9223372036854775807 THEN version+1 ELSE version END WHERE event_id=$1 AND account_id=$6 AND status IN ('held','pending')",
       [
         eventId,
         e.message_id,
@@ -202,7 +229,7 @@ async function linkEventMediaInternal(
     );
   } else {
     await db.query(
-      "UPDATE provider_media_jobs SET message_id=$2,status='pending',version=version+1 WHERE event_id=$1 AND account_id=$3 AND status='held'",
+      "UPDATE provider_media_jobs SET message_id=$2,status='pending',version=CASE WHEN version<9223372036854775807 THEN version+1 ELSE version END WHERE event_id=$1 AND account_id=$3 AND status='held'",
       [eventId, e.message_id, ACCOUNT],
     );
   }

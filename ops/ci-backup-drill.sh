@@ -32,6 +32,10 @@ DO $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM connector_ownership WHERE phase='uncertain' AND epoch=17 AND owner_label='ci-synthetic-owner' AND owner_id IS NOT NULL) THEN RAISE EXCEPTION 'uncertain ownership fixture missing'; END IF;
  IF NOT EXISTS(SELECT 1 FROM connector_ownership WHERE account_id='00000000-0000-4000-8000-000000000002' AND phase='idle' AND owner_id IS NULL) THEN RAISE EXCEPTION 'idle ownership fixture missing'; END IF;
  IF NOT EXISTS(SELECT 1 FROM delivery_parts p JOIN attachments a ON a.id=p.attachment_id AND a.message_id=p.message_id WHERE p.part=1 AND p.provider_id='ci-bound-media' AND a.data=convert_to('synthetic bound media recovery fixture','UTF8')) THEN RAISE EXCEPTION 'bound media recovery fixture missing'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM provider_media_jobs WHERE name='ci-inbound-ready.png' AND status='ready' AND locator_envelope IS NULL AND attachment_id IS NOT NULL) THEN RAISE EXCEPTION 'ready inbound media fixture missing'; END IF;
+ IF (SELECT count(*) FROM provider_media_jobs WHERE name IN ('ci-inbound-pending.txt','ci-inbound-processing.txt') AND status IN ('pending','processing'))<>2 THEN RAISE EXCEPTION 'claimable inbound media fixture missing'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM provider_media_jobs WHERE name='ci-inbound-held.txt' AND status='held' AND locator_envelope IS NOT NULL) THEN RAISE EXCEPTION 'held inbound media fixture missing'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM provider_media_jobs WHERE name='ci-inbound-expired.txt' AND status='unavailable' AND locator_envelope IS NULL) THEN RAISE EXCEPTION 'expired inbound metadata fixture missing'; END IF;
 END $$;
 SQL
 provider_digest_sql="SELECT encode(sha256(convert_to(string_agg(row_to_json(e)::text,E'\n' ORDER BY id),'UTF8')),'hex') FROM provider_events e"
@@ -43,6 +47,9 @@ variant_digest_before=$(psql -X -v ON_ERROR_STOP=1 -At -c "$variant_digest_sql")
 [[ -n "$variant_digest_before" ]] || { echo 'Empty conflict variant digest' >&2; exit 1; }
 gap_before=$(psql -X -v ON_ERROR_STOP=1 -At -c "SELECT gap_version FROM provider_state WHERE account_id='00000000-0000-4000-8000-000000000001'")
 [[ "$gap_before" =~ ^[0-9]{1,19}$ ]] || { echo 'Invalid gap version' >&2; exit 1; }
+media_pending_before=$(psql -X -v ON_ERROR_STOP=1 -At -c "SELECT count(*) FROM provider_media_jobs WHERE name IN ('ci-inbound-pending.txt','ci-inbound-processing.txt') AND status IN ('pending','processing')")
+media_held_before=$(psql -X -v ON_ERROR_STOP=1 -At -c "SELECT count(*) FROM provider_media_jobs WHERE name='ci-inbound-held.txt' AND status='held'")
+[[ "$media_pending_before" == 2 && "$media_held_before" == 1 ]] || { echo 'Unexpected inbound media fixture counts' >&2; exit 1; }
 bash /tmp/zalo-ops/backup.sh "$work/backup.age"
 export AGE_IDENTITY_FILE="$work/identity" RESTORE_QUARANTINE=yes
 restore_started=$(date +%s)
@@ -62,6 +69,12 @@ DO $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM connector_ownership WHERE account_id='00000000-0000-4000-8000-000000000002' AND phase='uncertain' AND owner_id IS NOT NULL AND epoch=0 AND owner_label='restored-quarantine') THEN RAISE EXCEPTION 'idle owner restoration admitted a connector'; END IF;
  IF has_database_privilege('zs_ci_runtime',current_database(),'CONNECT') THEN RAISE EXCEPTION 'runtime can connect to restore'; END IF;
  IF NOT EXISTS(SELECT 1 FROM delivery_parts p JOIN attachments a ON a.id=p.attachment_id AND a.message_id=p.message_id WHERE p.part=1 AND p.provider_id='ci-bound-media' AND a.data=convert_to('synthetic bound media recovery fixture','UTF8')) THEN RAISE EXCEPTION 'bound media recovery fixture lost'; END IF;
+ IF EXISTS(SELECT 1 FROM provider_media_jobs WHERE status IN ('pending','processing')) THEN RAISE EXCEPTION 'restored inbound media can download'; END IF;
+ IF (SELECT count(*) FROM provider_media_jobs WHERE name IN ('ci-inbound-held.txt','ci-inbound-pending.txt','ci-inbound-processing.txt') AND status='held')<>3 THEN RAISE EXCEPTION 'restored inbound media not quarantined'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM provider_media_jobs j JOIN attachments a ON a.id=j.attachment_id AND a.message_id=j.message_id WHERE j.name='ci-inbound-ready.png' AND j.status='ready' AND j.locator_envelope IS NULL AND a.data=convert_to('synthetic inbound ready media fixture','UTF8')) THEN RAISE EXCEPTION 'ready inbound media bytes lost'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM provider_media_jobs WHERE name='ci-inbound-pending.txt' AND status='held' AND locator_envelope IS NOT NULL) THEN RAISE EXCEPTION 'pending inbound media not held with locator'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM provider_media_jobs WHERE name='ci-inbound-processing.txt' AND status='held' AND locator_envelope IS NOT NULL) THEN RAISE EXCEPTION 'processing inbound media not held with locator'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM provider_media_jobs WHERE name='ci-inbound-expired.txt' AND status='unavailable' AND locator_envelope IS NULL) THEN RAISE EXCEPTION 'expired inbound metadata lost'; END IF;
 END $$;
 SELECT 'sessions',count(*) FROM sessions;
 SELECT 'dispatchable',count(*) FROM outbox WHERE status IN ('pending','processing');

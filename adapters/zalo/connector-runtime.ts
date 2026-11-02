@@ -7,6 +7,11 @@ import {
 import { ACCOUNT } from "../../server/db.js";
 import { ingestProviderEvent } from "../../server/provider-store.js";
 import { runWorkerOnce, type Provider } from "../../server/worker.js";
+import { runMediaScheduler } from "../../server/media-scheduler.js";
+import type {
+  downloadMedia,
+  MediaNetworkPolicy,
+} from "../../server/private-media-download.js";
 import { createSdkProvider } from "./provider.js";
 import { createZaloTransport } from "./transport.js";
 import { recordProviderFault } from "../../server/provider-faults.js";
@@ -22,6 +27,13 @@ interface Options {
   /** Explicit private encryption capability, not provider/download activation. */
   mediaCipher?: LocatorCipher;
   maxPendingMedia?: number;
+  /** Opt-in bounded media scheduling; absent means no download work is run. */
+  media?: {
+    policy: MediaNetworkPolicy;
+    download?: typeof downloadMedia;
+    maxDownloadedBytes?: number;
+    retention?: { retentionMs?: number; maxJobs?: number };
+  };
   createFacade(): Facade | Promise<Facade>;
   createTransport?: (
     options: TransportOptions,
@@ -51,7 +63,8 @@ export function createOwnedConnector(options: Options) {
   let owner: OwnershipHandle | undefined,
     facade: Facade | undefined,
     transport: Transport | undefined,
-    provider: Provider | undefined;
+    provider: Provider | undefined,
+    governedOwner: OwnershipHandle | undefined;
   let disposedFacade: Facade | undefined,
     disposedTransport: Transport | undefined;
   const cleanup = () => {
@@ -202,6 +215,7 @@ export function createOwnedConnector(options: Options) {
           invalidate: (reason) => owner!.invalidate(reason),
           close: () => owner!.close(),
         };
+        governedOwner = dispatchOwner;
         provider = (options.createProvider ?? createSdkProvider)(
           options.pool,
           transport,
@@ -216,6 +230,7 @@ export function createOwnedConnector(options: Options) {
         terminal = true;
         block();
         cleanup();
+        governedOwner = undefined;
         try {
           await owner?.invalidate("initialization-failed");
         } catch {}
@@ -236,12 +251,45 @@ export function createOwnedConnector(options: Options) {
       status = "stopped";
       cancel?.();
       cleanup();
+      governedOwner = undefined;
       await closeOwner();
     },
     async runOnce() {
       await assertCurrent();
       if (status !== "active" || !provider) throw unavailable();
       return runWorkerOnce(options.pool, provider);
+    },
+    /** One bounded media step under the same dispatch fence; never sends mail. */
+    async runMediaOnce() {
+      await assertCurrent();
+      if (
+        status !== "active" ||
+        !governedOwner ||
+        !options.mediaCipher ||
+        !options.media?.policy
+      )
+        throw unavailable();
+      return runMediaScheduler({
+        pool: options.pool,
+        worker: {
+          owner: governedOwner,
+          cipher: options.mediaCipher,
+          policy: options.media.policy,
+          ...(options.media.download
+            ? { download: options.media.download }
+            : {}),
+          ...(options.media.maxDownloadedBytes !== undefined
+            ? { maxDownloadedBytes: options.media.maxDownloadedBytes }
+            : {}),
+        },
+        ...(options.media.retention
+          ? { retention: options.media.retention }
+          : {}),
+        maintenanceEvery: 1,
+        maxIterations: 1,
+        idleDelayMs: 0,
+        sleep: async () => {},
+      });
     },
     async persistSession() {
       await assertCurrent();

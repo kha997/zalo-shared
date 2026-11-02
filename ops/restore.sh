@@ -31,6 +31,9 @@ DELETE FROM sessions;
 UPDATE outbox SET status='unknown' WHERE status IN ('pending','processing');
 UPDATE messages SET status='unknown' WHERE direction='outbound' AND status IN ('pending','processing');
 UPDATE delivery_parts SET status='unknown' WHERE status IN ('pending','processing');
+UPDATE provider_media_jobs SET status='held',claimed_at=NULL,
+ version=CASE WHEN version<9223372036854775807 THEN version+1 ELSE version END
+ WHERE status IN ('pending','processing');
 UPDATE provider_state SET status='disconnected',reconciliation_required=true,
  fault_code=CASE WHEN gap_version=9223372036854775807 THEN 'version-exhausted' ELSE 'restore-quarantine' END,
  gap_version=CASE WHEN gap_version<9223372036854775807 THEN gap_version+1 ELSE gap_version END;

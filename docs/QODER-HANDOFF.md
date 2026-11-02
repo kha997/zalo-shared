@@ -11,36 +11,42 @@ Continue only with synthetic/offline work until the Owner supplies and approves 
 
 The main application remains provider-disabled/mock and SDK-free in its production image. The pinned `zca-js@2.2.0` is only for development/research/guard tests; no authenticated session was used.
 
-## Latest evidenced baseline before inbound-media work
+## Latest evidenced hosted baseline — inbound media
 
-The latest accepted hosted CI was run **41026456993** on source `4dd6f300`: 145 unit checks, 2 SDK-isolation checks, 9 browser checks passed, 1 intentionally skipped; encrypted backup/restore, integrated four-staff/admin operations flow, monitoring and image scan passed. Sustained 50-client synthetic load p95 was 67 ms; 100/200/500-client observational p95 was about 531/985/2205 ms, so the 500-client latency gate failed at 2 seconds. This does not demonstrate provider compatibility, physical-phone coexistence, or production readiness.
+Hosted CI **41076902601** on merge `e1cc3d9` (branch head `05c8082`) passed **171/171** unit checks, **2/2** guarded offline SDK checks and **9 browser cases expected + 1 explicit skip, 0 unexpected**. Raw logs confirm real-PostgreSQL inbound receipt/journal/media-worker and private-UI tests, four-staff browser flow, ownership/recovery, encrypted backup/restore, monitoring and SDK-free nonroot image smoke. Trivy reported 0 HIGH/CRITICAL at scan time. Sustained 50×50 load p95≈108.6 ms; 100/200/500-client observational p95≈1117/1767/4749 ms, so **500 clients FAIL the 2 s target** with zero request errors and all mock queues drained. This does not demonstrate provider compatibility, physical-phone coexistence or production readiness.
 
-New inbound-media receipt, worker, and private UI changes in the current handoff were not part of that run. Treat their database/whole-flow gates as UNPROVEN until CI on the new commit completes. Local database-backed verification was unavailable in this environment; do not mark these gates passed based on authored tests or reports.
+## Work in the current working head — completion patch
 
-## Work now included in this snapshot
+- Bounded ownership-fenced locator retention and one-step media scheduling; `createOwnedConnector` exposes `runMediaOnce()` under the same gap/terminal fence.
+- Quota exhaustion now persists the event and degrades only that receipt's media to `queue-full` instead of rolling back text ingress.
+- Media jobs are indexed by message, included in counts/integrity, and quarantined on restore.
+- Key coverage is checked before downloads; the runbook now requires locator-key escrow and explicit rotation/retirement.
+- Attachment bytes for provider media are served only while the job is `ready`.
+- Independent findings and PASS/FAIL/UNPROVEN dispositions: [inbound media completion review](review/inbound-media-completion-review.md).
+
+Local typecheck passes; full local suite is 177/179 with two Windows-only POSIX file-mode assertions. Hosted CI for this patch is pending. It is still an engineering snapshot, not a live provider integration.
+
+## Historical snapshot
 
 - Encrypted inbound media locator receipts and semantic-conflict evidence, scoped to the owning connector generation.
-- A bounded, injected media download worker. It has no scheduler and no real-network test path; it cannot send messages.
+- A bounded, injected media download worker. It has no real-network test path and cannot send messages.
 - A private, account-scoped media status/read API and staff UI that never returns locator URLs or ciphertext.
-- Offline pilot research/implementation plan and updated readiness evidence for the preceding accepted operator-flow run.
-
-These changes are an engineering snapshot for review, not a live provider integration.
 
 ## Next steps for Qoder
 
 1. Read this file, `docs/READINESS.md`, `docs/plans/private-pilot-activation.md`, and the inbound receipts/worker/private-UI reports. Confirm the exact remote commit and branch before editing.
-2. Run hosted CI for the new head; inspect full logs. Fix failures and retain raw safe summaries. Specifically verify PostgreSQL migration/schema, receipt ingestion and conflict/echo behavior, worker concurrency/owner loss/expiry/quota/restore, private API authorization/redaction, and UI refresh behavior. Do not describe authored-but-unrun SQL cases as PASS.
-3. Independently review the current inbound changes and close review findings. Add missing database index for account/message/item media lookup if query plan supports it. Keep review status explicit.
-4. Complete media backup/restore fixture coverage using fake cipher, synthetic URLs, and injected downloader only. Verify pending/processing quarantine and ready attachment durability without network access. Document that offline backups can retain encrypted locators after online TTL cleanup.
-5. Add bounded, audited admin retry only if the policy is explicit: exact job ID/version, allowlisted retryable errors, attempts remain capped, no bulk/reset, no locator exposure, and no accidental GET-triggered retry. Otherwise defer and mark it open.
-6. Add an explicit, reviewed maintenance/retention path for expired locator envelopes and bounded worker scheduling; scheduler must use ownership/fencing and must never retry ambiguous sends. Test with synthetic data.
+2. Run hosted CI for the completion patch; inspect full logs. Fix failures and retain raw safe summaries. Verify PostgreSQL migration/schema, receipt ingestion, worker concurrency/owner loss/expiry/quota, retention/scheduler, private API authorization and UI refresh. Do not describe authored-but-unrun SQL cases as PASS.
+3. ~~Independently review the current inbound changes and close review findings; add the media lookup index.~~ Done in the working head; see the completion review. Re-review after CI.
+4. ~~Complete media backup/restore fixture coverage.~~ Done in the working head; hosted drill remains pending.
+5. Admin retry remains deferred/open. Do not add it without an explicit policy (exact job/version, allowlisted retryable errors, capped attempts, no locator exposure, no accidental GET retry).
+6. ~~Add ownership-fenced retention and bounded worker scheduling.~~ Done in the working head. The pilot runtime must still own the long-lived loop; the main app stays provider-disabled.
 7. Re-run full hosted CI, four-staff browser flow, recovery/backup restore, SDK isolation, and larger observational load. Update readiness and PR description with exact commit and PASS/FAIL/UNPROVEN.
 8. Continue the private test-account harness in `docs/plans/private-pilot-activation.md` only after offline gates are reviewed. Keep QR enrollment separate, private, locally displayed, deny-by-default and UID-bound before session persistence. Owner approval is needed for account/resources and material risk scope; ordinary technical fixes within the same approved scope do not need a repeated approval.
 9. Keep PR #3 draft, do not merge, publish, or deploy. Ask the Owner only for the dedicated real test resources/risk acceptance or a production decision after a concrete reviewed offline result is ready.
 
 ## Honest status at handoff
 
-- Synthetic core operator/ownership/media-outbound evidence through `4dd6f300`: hosted PASS with the 500-client latency FAIL stated above.
-- Inbound receipt/worker/private UI code: present in this snapshot; latest hosted CI and independent integrated review: pending.
-- Database-backed local tests, full restore coverage for inbound locator jobs, bounded retention scheduling, and dedicated admin retry: UNPROVEN / open.
+- Inbound receipt/worker/private UI: hosted PASS at `05c8082`/`e1cc3d9`; 500-client latency FAIL remains.
+- Completion patch (retention/scheduler/runtime seam/restore/index/healthy attachment gating): local PASS, hosted CI pending.
+- Long-lived pilot runtime wiring, dedicated admin retry, metadata/attachment retention policy and duplicate-egress bounds: open.
 - Actual Zalo login, messaging/media, account health, phone coexistence, terms compliance and ban risk: UNPROVEN. Production readiness: NOT ESTABLISHED.

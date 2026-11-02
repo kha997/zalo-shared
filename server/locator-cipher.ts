@@ -14,6 +14,8 @@ export interface LocatorCipher {
   seal(url: string, aad: string): LocatorEnvelope;
   open(value: LocatorEnvelope, aad: string): string;
   fingerprint(url: string): string;
+  /** Non-secret key identifier availability; used to fail closed before downloads. */
+  hasKey?(keyId: string): boolean;
 }
 interface Options {
   activeKeyId: string;
@@ -190,6 +192,9 @@ export function createLocatorCipher(options: Options): LocatorCipher {
       } catch {
         throw unavailable();
       }
+    },
+    hasKey(id: string): boolean {
+      return typeof id === "string" && keys.has(id);
     },
   });
 }

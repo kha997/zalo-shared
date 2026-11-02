@@ -2,13 +2,36 @@
 
 **NOT PRODUCTION-READY. No live Zalo login, production deployment, real customer data or public application endpoint has been used.** The repository is public; runtime credentials and unlicensed upstream application snapshots are excluded.
 
-## Latest verified source — operator acceptance, 2026-10-30
+## Inbound media hosted acceptance — 2026-10-31
+
+[CI41076902601](https://github.com/kha997/zalo-shared/actions/runs/41076902601) on merge `e1cc3d9` (branch head `05c8082d200a78a7017f5a823277e7aa1a7cfe1e` into `787777e`): **171/171** unit checks, **2/2** guarded offline SDK checks, **9 browser cases expected + 1 explicit skip, 0 unexpected**. Raw logs confirm the real-PostgreSQL inbound receipt, provider journal, media worker, private-UI authorization/redaction, four-staff browser flow, ownership/recovery and encrypted backup/restore stages passed. Monitoring and SDK-free nonroot image smoke passed; Trivy 0.76.1 reported 0 HIGH/CRITICAL at scan time.
+
+50×50 rounds measured 10,050 requests at p95≈108.6 ms; 100/200/500-client observational p95≈1117/1767/4749 ms. **500 clients FAIL the 2 s latency target**, with zero request errors, 2500 idempotent retries verified and all mock queues drained. These remain short synthetic API workloads, not provider throughput or staff-seat guarantees.
+
+This evidence supersedes the earlier statement that inbound receipt/jobs/private UI were unvalidated. It does not validate the completion patch below, a long-lived scheduler process, real CDN behavior, real phone coexistence or production.
+
+## Inbound media completion — local PASS, hosted gate pending
+
+Working head after `05c8082` closes the review findings recorded in [inbound media completion review](review/inbound-media-completion-review.md): bounded ownership-fenced locator retention and one-step media scheduling, a `runMediaOnce()` seam on the owned runtime, queue-full degradation that preserves text ingress, a message-scoped media index, media jobs in counts/integrity, pending/processing restore quarantine, key-coverage refusal with a key-escrow runbook, and attachment authorization limited to `ready` provider media.
+
+Local `npm run typecheck` PASS. Local full suite: 179 checks, **177 PASS, 2 FAIL**. Both failures are the same `vault.test.ts` POSIX `0600` mode assertion (`438` observed on Windows); the code is unchanged and Linux hosted CI must resolve this. New scheduler tests pass 6/6; the runtime media seam passes 2/2; media receipt/API suites pass.
+
+| Claim | Status |
+|---|---|
+| Offline retention, scheduler, owner fence, quota degradation, restore quarantine, ready-only attachment access | PASS locally; hosted UNPROVEN |
+| A production/pilot process actually drives `runMediaOnce()` | UNPROVEN — pilot runtime wiring gate |
+| Real CDN, cookie-free media, live locator schema | UNPROVEN |
+| Metadata/audit/attachment retention and duplicate-egress bounds | OPEN — Owner policy decision |
+| Album/multi-item media | NOT IMPLEMENTED |
+| Production readiness | NOT ESTABLISHED |
+
+## Earlier verified source — operator acceptance, 2026-10-30
 
 [Source4dd6f300](https://github.com/kha997/zalo-shared/commit/4dd6f3009ef5f02ff9e0d9ed2145be0dd5b45b93), [CI41026456993](https://github.com/kha997/zalo-shared/actions/runs/41026456993):145/145units,2/2guardedSDK cases,9browser cases (1skip), including four actual authenticated staff browsers and administrator recovery through private HTTP/PostgreSQL. Exact-ID confirmation preserves original staff attribution without another send. Conflict/gap/fence role/CSRF/session/CAS tests and positive resolved/admin/MAX-version restart/restore fixtures passed. Monitoring and SDK-free image gates passed, Trivy0HIGH/CRITICAL at scan time. [Retained measurements](evidence/ci-connector-operations-results.json).
 
 50×50rounds10,050requests p95≈67ms;100/200/500-user p95≈531/985/2205ms.500FAILS the2s target, zero request errors and all mock drains passed. Runner variability prevents a stable200-seat guarantee; these remain short synthetic API workloads.
 
-The first operator run passed145units but failed one browser assertion; the corrected canonical text/checksum DOM passed the rerun. Skipped recovery/image stages in that failed run were not passes. Inbound receipt/jobs/private file UI are now under development and are NOT validated by this source. Actual Zalo/phone/CDN, private activation and soak remain open.
+The first operator run passed145units but failed one browser assertion; the corrected canonical text/checksum DOM passed the rerun. Skipped recovery/image stages in that failed run were not passes. Inbound receipt/jobs/private file UI were not validated by that source; the newer 41076902601 section above validates them. Actual Zalo/phone/CDN, private activation and soak remain open.
 
 ## Previous verified foundation — 2026-10-30
 
