@@ -16,6 +16,7 @@
   "include": [
     "server",
     "client",
+    "tools",
     "tests",
     "vite.config.ts",
     "playwright.config.ts"

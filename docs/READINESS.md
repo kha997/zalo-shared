@@ -27,19 +27,25 @@ The hosted job passed **179/179** unit checks, **2/2** guarded offline SDK check
 | Album/multi-item media | NOT IMPLEMENTED |
 | Production readiness | NOT ESTABLISHED |
 
-## Private pilot contract — local PASS, hosted pending
+## Private pilot contract — hosted PASS
 
-The working head after `c128933` adds `server/pilot-policy.ts` (exact-key grant/consent validation with expiry, lifetime, build-identity, account, peer, budget and interval bounds), `server/pilot-budget.ts` (transaction-required, advisory-locked, durable per-account/day part budget with idempotent `(message_id,part)` reservations and interval control), the two ledger tables in the provider schema plus backup/count/fingerprint fixtures, and an exact-UID guard in the guarded SDK facade (`expectedAccountId` validated before vault access/import; `getOwnId` checked after login and on every refresh before persistence or API exposure).
+The committed head `7e66b98a7781bd59cbe3a14ba11d8329d80a8dfe` adds `server/pilot-policy.ts` (exact-key grant/consent validation with expiry, lifetime, build-identity, account, peer, budget and interval bounds), `server/pilot-budget.ts` (transaction-required, advisory-locked, durable per-account/day part budget with idempotent `(message_id,part)` reservations and interval control), the two ledger tables in the provider schema plus backup/count/fingerprint fixtures, and an exact-UID guard in the guarded SDK facade (`expectedAccountId` validated before vault access/import; `getOwnId` checked after login and on every refresh before persistence or API exposure).
 
-Local `npm run typecheck` PASS; full local suite **201/203** (the two failures are the same Windows-only `vault.test.ts` POSIX `0600` assertions), including **8/8** policy tests, **8/8** budget tests against disposable PostgreSQL and **8/8** identity tests. The independent review is recorded in [private pilot policy review](review/private-pilot-policy-review.md); its P1 null-account consent finding and P2 idempotency/interval/binding findings were fixed with regressions. Hosted CI for this working head is pending. No QR enrollment, pilot host, live account or provider network path exists yet.
+Local `npm run typecheck` PASS and the full local suite is **201/203** only because Windows does not honor POSIX `0600` in `vault.test.ts`; the Linux hosted job passed without those failures. [CI 41372493757](https://github.com/kha997/zalo-shared/actions/runs/41372493757) on `7e66b98` passed **203/203** unit checks, **2/2** guarded offline SDK checks and **9 browser cases + 1 explicit skip, 0 failed**, including the policy, budget and identity suites, real-PostgreSQL budget/ledger fixtures, unclean restart, encrypted restore quarantine, monitoring and nonroot SDK-free image smoke. Trivy 0.76.1 reported **0 HIGH/CRITICAL**. Hosted p95 was 88.3/64.5/169.3/351.3 ms at 4/10/25/50 clients and 168.6 ms for 50×50; 100/200/500-client p95 was 705.3/1819.8/2814.4 ms, so **500 clients FAIL the 2 s target** with zero request errors and all mock queues drained. The independent review is recorded in [private pilot policy review](review/private-pilot-policy-review.md); its P1 null-account consent finding and P2 idempotency/interval/binding findings were fixed with regressions. QR enrollment, pilot runtime/image and live host remain unimplemented or unproven; the working tree now contains the next offline QR bootstrap work, which is not part of this hosted result.
 
 | Claim | Status |
 |---|---|
-| Owner consent/grant scope, expiry, build identity and peer/account bounds | PASS locally; hosted pending |
-| Durable per-day budget, interval, idempotency and grant/day boundaries | PASS locally; hosted pending |
-| UID mismatch blocks persistence/API/listener/send and leaks nothing | PASS locally; hosted pending |
-| QR enrollment, private identity confirmation, pilot runtime/image | NOT IMPLEMENTED |
+| Owner consent/grant scope, expiry, build identity and peer/account bounds | PASS locally and hosted |
+| Durable per-day budget, interval, idempotency and grant/day boundaries | PASS locally and hosted |
+| UID mismatch blocks persistence/API/listener/send and leaks nothing | PASS locally and hosted |
+| QR enrollment, private identity confirmation, pilot runtime/image | NOT IMPLEMENTED in this hosted result |
 | Live account behavior, phone coexistence, ban risk | UNPROVEN |
+
+## Private pilot QR enrollment and CLI — local PASS, hosted pending
+
+The working tree adds `adapters/zalo/qr-bootstrap.ts` (owner-checked, expiring-grant QR enrollment: bounded canonical PNG decoding, no `qrPath`, no `saveToFile`/retry, no listener start/send, staged encrypted session write, final-UID and final-cookie-jar checks, synchronous TTY identity confirmation and quarantine signalling), `server/private-pilot-files.ts` (AES-256-GCM session envelope, exclusive temp+rename installs, 0700/0600/non-symlink checks including POSIX ancestor realpath, stale-temp sweep and a private manifest reader) and `tools/pilot-connector.ts` (dry-run default; live commands require `--acknowledge-pilot-risk`, an absolute private manifest, matching grant purpose, Linux host; output carries no account, peer, grant or consent ID). `tsconfig.json` now includes `tools`.
+
+Local evidence: `npm run typecheck` and `npm run build` PASS; focused QR/CLI suites **26/26** PASS; full local suite **229 tests, 227 PASS, 2 FAIL**, with both failures the known Windows-only `vault.test.ts` POSIX mode/rename assertions that pass on Linux. The independent review is recorded in [private pilot QR bootstrap review](review/private-pilot-qr-bootstrap-review.md); its P2 view-race and win32/no-follow findings, and all five P3 findings, were fixed. This remains synthetic and offline: no real SDK login, phone scan, session interoperability, runtime dispatch or connector image has been exercised.
 
 ## Earlier verified source — operator acceptance, 2026-10-30
 

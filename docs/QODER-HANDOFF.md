@@ -15,14 +15,21 @@ The main application remains provider-disabled/mock and SDK-free in its producti
 
 Hosted CI **41370951223** on `c1289331493f7bde3439a902f337a18a526eaadd` passed **179/179** unit checks, **2/2** guarded offline SDK checks and **9 browser cases expected + 1 explicit skip, 0 failed**. Raw logs confirm real-PostgreSQL inbound receipt/journal/media-worker, retention/scheduler, ownership/recovery, encrypted backup/restore with media quarantine, monitoring and SDK-free nonroot image smoke. Trivy reported 0 HIGH/CRITICAL. Sustained 50×50 load p95≈123.2 ms; 4/10/25/50-client p95≈52.9/66.5/177.9/308.0 ms; 100/200/500-client p95≈1610.6/1498.2/4132.4 ms, so **500 clients FAIL the 2 s target** with zero request errors and all mock queues drained. This does not demonstrate provider compatibility, physical-phone coexistence or production readiness.
 
-## Work in the current working head — private pilot contract
+## Work in the committed head — private pilot contract
 
 - Expiring grant and Owner-consent scope validation, including build identity, bound account, peers, purposes, daily part budget and minimum interval.
 - Transaction-required, advisory-locked, durable per-account/day budget with idempotent `(message_id,part)` reservations and no reset on restart, day rollover or a new grant.
 - Exact-UID facade binding: `expectedAccountId` is validated before vault access/import, and `getOwnId` is checked after login and every refresh before cookie persistence or API/listener exposure.
 - Budget/ledger tables are included in counts, integrity fingerprints, the representative journal and restore drill.
 
-Local typecheck passes; full local suite 201/203 (two Windows-only vault mode assertions), including policy 8/8, budget 8/8 against disposable PostgreSQL and identity 8/8. Independent review findings and dispositions: [private pilot policy review](review/private-pilot-policy-review.md). Hosted CI for this head is pending. No QR enrollment, pilot host or live account exists yet.
+Local typecheck passes; full local suite 201/203 (two Windows-only vault mode assertions). Hosted [CI 41372493757](https://github.com/kha997/zalo-shared/actions/runs/41372493757) on `7e66b98` passed 203/203 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip, restore/restart, monitoring and nonroot SDK-free image smoke with 0 HIGH/CRITICAL; 500-client p95 2814.4 ms FAILS the 2 s target. Independent review findings and dispositions: [private pilot policy review](review/private-pilot-policy-review.md).
+
+## Work in the uncommitted tree — QR enrollment and private files
+
+- `adapters/zalo/qr-bootstrap.ts`: ownership-checked, expiring-grant QR enrollment. It decodes only bounded canonical PNGs, passes no `qrPath`, never calls `saveToFile`/retry, never starts the listener or sends, ignores the GotLoginInfo cookie, requires the final `getOwnId` and final serialized jar, requires synchronous TTY identity confirmation, stages one encrypted write and signals `quarantine-unconfirmed` if quarantine cannot be confirmed.
+- `server/private-pilot-files.ts`: AES-256-GCM session envelope and atomic install; 0700/0600/non-symlink checks with POSIX ancestor realpath; stale ciphertext-temp sweep; bounded private manifest reader.
+- `tools/pilot-connector.ts`: dry-run default that never imports the SDK, touches DB/network or reads the vault; live commands require `--acknowledge-pilot-risk`, an absolute private manifest, the matching grant purpose and a Linux host; all output is fixed status JSON with no account, peer, grant or consent identifiers.
+- Local evidence: typecheck/build PASS, focused suites 26/26 PASS, full local suite 227/229 (only the two Windows-only `vault.test.ts` POSIX assertions). Review and dispositions: [private pilot QR bootstrap review](review/private-pilot-qr-bootstrap-review.md). Hosted CI for this slice is pending.
 
 ## Historical snapshot
 
@@ -45,6 +52,7 @@ Local typecheck passes; full local suite 201/203 (two Windows-only vault mode as
 ## Honest status at handoff
 
 - Inbound receipt/worker/private UI and completion patch: hosted PASS at `c128933`/41370951223; 500-client latency FAIL remains.
-- Private pilot policy/budget/UID gates: local PASS, hosted CI pending; QR enrollment, runtime wiring and separate image still open.
+- Private pilot policy/budget/UID gates: local and hosted PASS at `7e66b98`/41372493757.
+- QR enrollment and private files/CLI: local synthetic PASS pending hosted CI; runtime dispatch, separate image and live scan still open.
 - Long-lived pilot runtime wiring, dedicated admin retry, metadata/attachment retention policy and duplicate-egress bounds: open.
 - Actual Zalo login, messaging/media, account health, phone coexistence, terms compliance and ban risk: UNPROVEN. Production readiness: NOT ESTABLISHED.
