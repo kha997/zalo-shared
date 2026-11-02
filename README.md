@@ -4,7 +4,7 @@ Inbox tập trung cho một tài khoản Zalo cá nhân và nhiều nhân viên,
 
 > **Trạng thái: đang phát triển và kiểm chứng trên provider giả lập. Chưa PRODUCTION-READY.** Chưa kết nối Zalo thật, chưa chứng minh điện thoại chính hoạt động đồng thời. Không triển khai production hoặc sử dụng dữ liệu khách hàng.
 
-[Bằng chứng CI đã kiểm chứng](docs/READINESS.md): 268/268 kiểm thử, 2 ca SDK thực offline và 9 trường hợp trình duyệt + 1 skip trên revision đã ghi nhận; tải HTTP 4–500 tài khoản đã đo, 500 vượt mục tiêu độ trễ, chưa phải Zalo thật.
+[Bằng chứng CI đã kiểm chứng](docs/READINESS.md): 273/273 kiểm thử, 2 ca SDK thực offline và 9 trường hợp trình duyệt + 1 skip trên revision đã ghi nhận; tải HTTP 4–500 tài khoản đã đo, 500 vượt mục tiêu độ trễ, chưa phải Zalo thật.
 
 ## Đã triển khai
 

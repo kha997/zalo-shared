@@ -52,11 +52,12 @@ Hosted [CI 41382664808](https://github.com/kha997/zalo-shared/actions/runs/41382
 | Policy-halt exit, real dispatch path, peer-scoped claims, image build identity, self-peer rejection, TLS rule, boundary error | PASS locally and hosted at `a37935a` |
 | Exact-scope validation, scoped interrupted sweep, deferral backoff, CLI halt allowlist, preflight containment, bootstrap ordering | PASS locally and hosted at `44b677f` |
 | Non-string halt rejection, pre-ownership directory validation, commit-time publication re-check, observe scoping, post-fence inbound guard | PASS locally and hosted at `cc6614c` |
+| Stale-reservation liveness, pending restore preservation, wrong-key media deferral, private-file parent/inode checks, literal search, gap-ack pending rule, any-severity scan gates | PASS locally and hosted at `e0e635d` |
 | Four-staff browser acceptance and 4/10/25/50 capacity | PASS hosted; 500-client p95 FAIL |
 | Live send-test against a real account or peer | UNPROVEN — requires Owner activation |
 | Production readiness | NOT ESTABLISHED |
 
-### Whole-branch review remediation — local PASS, hosted verification pending
+### Whole-branch review remediation — hosted PASS
 
 An independent whole-branch review of `cc6614c` (the complete diff against base, including migrations, worker, media, pilot, ops and CI) found no P1, two P2 liveness defects, one P2 evidence gap, one P2 CI-gate mismatch and several hardening gaps. All are fixed in the working slice:
 
@@ -69,7 +70,9 @@ An independent whole-branch review of `cc6614c` (the complete diff against base,
 - Conversation search treats `%`, `_` and `\` literally; gap acknowledgement admits provably pending work but still blocks `unknown`/`processing`.
 - The threat model now records the accepted residual that PostgreSQL row-level security is **not** enabled for attachment/media reads; the scan documentation states its filename/path-only scope.
 
-Local evidence: typecheck, both builds and the connector build PASS; focused suites **77/77**; full local suite **273/273** PASS. The previously reported Windows-only `vault.test.ts` mode failures were fixed as a test-portability issue by guarding POSIX mode assertions; Linux CI still exercises them. Hosted CI verification is pending. [Review and dispositions](review/private-pilot-runtime-review.md#whole-branch-review--pr-3-head-cc6614c).
+Local evidence: typecheck, both builds and the connector build PASS; focused suites **77/77**; full local suite **273/273** PASS. The previously reported Windows-only `vault.test.ts` mode failures were fixed as a test-portability issue by guarding POSIX mode assertions; Linux CI still exercises them.
+
+Hosted [CI 41385140560](https://github.com/kha997/zalo-shared/actions/runs/41385140560) on `e0e635d` (PR merge `3684f27`) passed both jobs: **273/273** unit checks, **2/2** guarded offline SDK checks, **9 browser cases + 1 explicit skip, 0 unexpected**, all durability/restart/restore/monitoring/image gates, and the pilot job. The dry-run was admitted; the image identity was verified against the checked-out PR merge commit `3684f27670bf8ffcb6c5920d4216aaabc28ede3a` and the connector lock; the inventory reported UID 65532, `zca-js@2.2.0`, `crypto-js@4.2.0`, no private files and no exposed ports; both the connector and the application image reported **0 HIGH/CRITICAL (0 fixable)**. The restore drill passed with sessions 0 and all in-flight `processing` work quarantined, while the never-attempted pending fixture remained `pending/pending/pending`. Load p95 was **65.0/79.6/212.3/441.8 ms** at 4/10/25/50 clients and **111.2 ms** for 50×50; 100/200-client p95 was 701.5/1525.0 ms (both within the 2 s target in this run); **500 clients FAIL** at 3669.4 ms with zero request errors and all mock queues drained. The 200-client result is run-dependent (it failed in two earlier runs), so no stable 200-seat or provider capacity is claimed. [Retained measurements](evidence/ci-pilot-whole-branch-results.json). [Review and dispositions](review/private-pilot-runtime-review.md#whole-branch-review--pr-3-head-cc6614c).
 
 ## Private pilot runtime, connector image and gate review — hosted PASS
 
