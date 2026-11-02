@@ -100,6 +100,12 @@ Bootstrap writes the QR PNG only to the private view directory for the Owner to 
 - The 1–4 peer allowlist is a pilot safety scope, not a product seat limit. The application itself has no seat cap.
 - An expired grant, quota stop, lost ownership or uncertain result stops the loop. Local ownership gap state stays closed; do not add a permissive resume shortcut. Ownership recovery requires the reviewed admin reconciliation and externally verified old-owner termination.
 
+## Media scope
+
+The pilot runs with media scheduling disabled (`media:false`). Inbound media events are journaled only as unsupported metadata: no locator is captured, no CDN download is attempted and no bytes are stored. The locator key described above is provisioned separately and is not passed to the pilot connector in this mode.
+
+Outbound media dispatch exists in the shared worker/provider code, but the pilot has no operator path to enqueue media and it has not been exercised against a provider. Real inbound media, CDN hosts, cookie-free downloads and outbound media delivery remain UNPROVEN; enabling media requires a separately reviewed private host policy and an Owner decision.
+
 ## Scanning and CI
 
 ```bash
@@ -116,7 +122,7 @@ Back up the encrypted session file, the separate key, the binding/budget databas
 
 ## Owner activation gate
 
-Offline gate evidence: hosted CI 41379964911 on `a37935a` passed 258/258 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip, four-staff browser and 4/10/25/50 load, and the pilot dry-run/scan with build identity, UID 65532, no ports/private files and 0 HIGH/CRITICAL. This establishes enforceable local boundaries only; no real login, phone interaction or provider delivery has occurred.
+Offline gate evidence: hosted CI 41385140560 on `e0e635d` (PR merge `3684f27`) passed 273/273 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip, four-staff browser and 4/10/25/50 load, and the pilot dry-run/scan with the PR merge identity, UID 65532, no ports/private files and 0 HIGH/CRITICAL. Load p95 was 65.0/79.6/212.3/441.8 ms at 4/10/25/50 clients, 111.2 ms at 50×50 and 701.5/1525.0 ms at 100/200; **500 clients FAIL** at 3669.4 ms. These are short synthetic API workloads; the 200-client result varies across runs. This establishes enforceable local boundaries only; no real login, phone interaction or provider delivery has occurred.
 
 No item here is accepted or authorized yet. Before any live login, the Owner must explicitly approve:
 
@@ -124,7 +130,11 @@ No item here is accepted or authorized yet. Before any live login, the Owner mus
 2. 1–4 consenting direct-message test peer IDs and the exact test window;
 3. a private pilot host that can show the QR locally to the Owner, with controlled egress and no public ports;
 4. the staged command order — `bootstrap` once, then `run-observe`, then `run-send-test` only if the same approved scope includes sending — and the 1–30 part/day, ≥2 s interval limits;
-5. acceptance of the unofficial-client, platform-terms, account-restriction and ban risks, recorded by consent reference rather than secret material.
+5. acceptance of the unofficial-client, platform-terms, account-restriction and ban risks, recorded by consent reference rather than secret material;
+6. the pilot media scope — text-only first with inbound media scheduling disabled (the current code path), or a separately reviewed private media host policy before any media test;
+7. post-pilot retention/deletion of test messages, media and private session material; the proposed engineering default is to delete them after the window and retain only sanitized evidence.
+
+Proposed engineering defaults, not adopted until the Owner records them: observe-only first with one consenting peer; up to four peers for the four-staff acceptance; a 2-hour observe/send-test session followed by a 7-day low-volume soak; an initial cap of 10 parts/day (below the 30 hard maximum) and a ≥2 s interval; text-only. These are conservative engineering proposals, not Zalo-approved limits or ban-safety claims.
 
 After approval, the Engineering Lead records the approved scope, provisions the private files outside the repository, verifies build/lock/integrity identity, and starts observe-only under direct Owner participation. Any change to account, peers, purposes, budget, interval, risk or window requires a new Owner decision. Never request cookies, passwords or QR images through chat.
 

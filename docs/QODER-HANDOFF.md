@@ -11,9 +11,9 @@ Continue only with synthetic/offline work until the Owner supplies and approves 
 
 The main application remains provider-disabled/mock and SDK-free in its production image. The pinned `zca-js@2.2.0` is only for development/research/guard tests; no authenticated session was used.
 
-## Latest evidenced hosted baseline — pilot review hardening
+## Latest evidenced hosted baseline — whole-branch remediation
 
-Hosted [CI 41379964911](https://github.com/kha997/zalo-shared/actions/runs/41379964911) on `a37935a` passed both jobs: **258/258** unit checks, **2/2** guarded offline SDK checks and **9 browser cases + 1 explicit skip, 0 failed**, including real-PostgreSQL durability, unclean restart, encrypted restore/quarantine, monitoring, the SDK-free nonroot application image, and the separate SDK-bearing pilot connector dry-run/scan with identity `b7fe5db`, UID 65532, no ports/private files and 0 HIGH/CRITICAL. Load p95 was 44.7/65.2/145.8/272.9 ms at 4/10/25/50 clients, 74.0 ms for 50×50 and 470.3/1155.1 ms at 100/200; **500 clients FAIL** at 3991.5 ms with zero request errors. The prior baseline is CI 41378053199 on `f84b777` (253/253, 2/2, 9+1). None of these runs demonstrates provider compatibility, physical-phone coexistence or production readiness.
+Hosted [CI 41385140560](https://github.com/kha997/zalo-shared/actions/runs/41385140560) on `e0e635d` (PR merge `3684f27`) passed both jobs: **273/273** unit checks, **2/2** guarded offline SDK checks, **9 browser cases + 1 explicit skip, 0 unexpected**, including real-PostgreSQL durability, unclean restart, encrypted restore/quarantine, monitoring, the SDK-free nonroot application image, and the separate SDK-bearing pilot connector dry-run/scan with UID 65532, no ports/private files and 0 HIGH/CRITICAL. Load p95 was 65.0/79.6/212.3/441.8 ms at 4/10/25/50 clients, 111.2 ms for 50×50, 701.5/1525.0 ms at 100/200; **500 clients FAIL** at 3669.4 ms with zero request errors. The previous baseline was CI 41382664808 on `cc6614c` (268/268, 2/2, 9+1). None of these runs demonstrates provider compatibility, physical-phone coexistence or production readiness.
 
 ## Working slice — second-review hardening (hosted PASS)
 
@@ -52,6 +52,21 @@ An independent re-audit of `44b677f` found no P1 or introduced regression, with 
 - Observe mode passes the grant peer scope, and inbound re-checks the guard after the ownership await before persistence.
 
 Focused pilot/connector/worker suites 52/52 PASS; full local suite 268 tests, 266 PASS, 2 FAIL (only the Windows-only `vault.test.ts` mode assertions). Hosted [CI 41382664808](https://github.com/kha997/zalo-shared/actions/runs/41382664808) on `cc6614c` passed both jobs: **268/268** unit checks, **2/2** guarded SDK checks, **9 browser cases + 1 skip, 0 failed**, pilot dry-run/scan with image identity `fee2b21`, UID 65532, no ports/private files and 0 HIGH/CRITICAL. Load p95 42.5/54.4/150.9/273.9 ms at 4/10/25/50, 80.2 ms for 50×50, 657.9/993.4 ms at 100/200; 500 FAIL at 2370.5 ms with zero request errors. The 200-client result varies across runs, so no stable 200-seat or provider capacity is claimed.
+
+## Whole-branch review remediation (hosted PASS)
+
+An independent whole-branch review of `cc6614c` found no P1, two P2 liveness defects, one P2 evidence gap, one P2 CI-gate mismatch and several hardening gaps. All are fixed in `e0e635d`:
+
+- A spent pilot reservation now fails its row terminally instead of returning it to `pending` forever; the reserve check recognizes the worker's own `processing` part as a repeat only, and the next message still dispatches.
+- Restore quarantines only `processing` work and preserves never-attempted `pending` work; the CI journal seeds a pending fixture and the drill asserts both outcomes.
+- The post-fence inbound guard has a live regression (guard flipped during the deferred ownership check; event rejected with zero database access).
+- Both image scans fail on any high/critical finding and the connector scan requires UID 65532; the pilot dry-run runs with `--network none`.
+- A wrong key under a recognized key id defers and preserves the locator; a correct-key retry completes the download.
+- Private key/manifest reads require a non-writable non-symlink parent and verify the opened inode/owner/mode.
+- Conversation search escapes `%`, `_` and `\`; gap acknowledgement admits provably pending work but still blocks `unknown`/`processing`.
+- The threat model records that PostgreSQL RLS is not enabled for attachment/media reads; scan docs state the filename/path-only scope.
+
+Local: typecheck, both builds and the connector build PASS; focused suites **77/77**; full local suite **273/273** PASS (the Windows-only `vault.test.ts` mode assertions are now POSIX-guarded; Linux CI still exercises them). Hosted [CI 41385140560](https://github.com/kha997/zalo-shared/actions/runs/41385140560) on `e0e635d` (PR merge `3684f27`) passed both jobs: **273/273** unit checks, **2/2** guarded SDK checks, **9 browser cases + 1 skip, 0 unexpected**, restore/restart/monitoring/image gates, and the pilot job. Image identity matched the PR merge commit; UID 65532, `zca-js` 2.2.0, `crypto-js` 4.2.0, no private files/ports, and 0 HIGH/CRITICAL (0 fixable) for both images. Load p95 65.0/79.6/212.3/441.8 ms at 4/10/25/50, 111.2 ms at 50×50, 701.5/1525.0 ms at 100/200; **500 FAIL** at 3669.4 ms with zero request errors. [Retained measurements](evidence/ci-pilot-whole-branch-results.json).
 
 ## Work in the committed head — private pilot contract
 
@@ -106,5 +121,6 @@ Local typecheck passes; full local suite 201/203 (two Windows-only vault mode as
 - Pilot runtime, separate connector image, scan and review fixes: local and hosted PASS at `105f2d7`/41377272040.
 - Second-review hardening (halt precedence, real dispatch path, peer-scoped claims, image build identity, self-peer and TLS rules, boundary error): hosted PASS at `a37935a`/41379964911.
 - Third-pass hardening (exact-scope validation, scoped interrupted sweep, deferral backoff, CLI halt allowlist, preflight containment, bootstrap ordering): hosted PASS at `44b677f`/41381303200.
+- Whole-branch hardening (reservation liveness, restore pending preservation, post-fence regression, any-severity/UID scan gates, wrong-key media deferral, private-file parent/inode checks, literal search, gap-ack pending rule): hosted PASS at `e0e635d`/41385140560.
 - Long-lived pilot runtime live drill, media scheduling in the pilot loop, dedicated admin retry, metadata/attachment retention policy and duplicate-egress bounds: open.
 - Actual Zalo login, messaging/media, account health, phone coexistence, terms compliance and ban risk: UNPROVEN. Production readiness: NOT ESTABLISHED.
