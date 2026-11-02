@@ -238,6 +238,16 @@ test("preflight denies a scope outside the approved G5 bounds", async () => {
         expiresAt: "2026-11-02T02:00:00.000Z",
       }),
     ),
+    JSON.stringify(
+      manifestFor("enroll-session", { expectedAccountId: account }, {
+        expectedAccountId: account,
+      }),
+    ),
+    JSON.stringify(
+      manifestFor("enroll-session", { allowedPeerIds: [peer] }, {
+        allowedPeerIds: [peer],
+      }),
+    ),
   ];
   for (const text of cases) {
     const result = await runPilotCli({
