@@ -357,8 +357,9 @@ export async function runMediaDownloadOnce(
           } catch {
             // A recognized key id can still map to the wrong key bytes (or the
             // envelope can be corrupt). Never make that a terminal `unavailable`
-            // row: retention would eventually erase the only locator. Defer and
-            // leave the ciphertext for an operator to fix the keyring.
+            // row immediately: defer so an operator can fix the keyring within
+            // the remaining locator retention window. The normal 24h retention
+            // boundary still erases the envelope if the key is not fixed.
             await deferJob(job, "key-unavailable");
             await query("COMMIT");
             return { processed: false };

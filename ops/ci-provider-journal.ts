@@ -159,6 +159,24 @@ try {
     "INSERT INTO delivery_parts(message_id,part) VALUES($1,0)",
     [pendingMid],
   );
+  // Interrupted outbound work: the stopped worker had marked all three rows
+  // processing before an egress attempt it never finished. Restore must move
+  // every one to unknown so none remains dispatchable.
+  const processingMid = (
+    await pool.query(
+      `WITH m AS (
+         INSERT INTO messages(conversation_id,direction,text,status)
+         SELECT conversation_id,'outbound','synthetic interrupted processing fixture','processing'
+           FROM messages WHERE id=$1 RETURNING id
+       )
+       INSERT INTO outbox(message_id,status) SELECT id,'processing' FROM m RETURNING message_id`,
+      [mid],
+    )
+  ).rows[0].message_id;
+  await pool.query(
+    "INSERT INTO delivery_parts(message_id,part,status) VALUES($1,0,'processing')",
+    [processingMid],
+  );
   // Nonempty inbound media jobs: ready bytes, claimable pending/processing,
   // held, and expired metadata. Synthetic ciphertext only; no real locator.
   const linked = (

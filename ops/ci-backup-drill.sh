@@ -39,6 +39,7 @@ DO $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM pilot_send_budget WHERE account_id='00000000-0000-4000-8000-000000000001' AND max_parts=5 AND reserved_parts=1) THEN RAISE EXCEPTION 'pilot budget fixture missing'; END IF;
  IF NOT EXISTS(SELECT 1 FROM pilot_part_ledger WHERE grant_id='ci-grant' AND peer_id='ci-synthetic-peer') THEN RAISE EXCEPTION 'pilot part ledger fixture missing'; END IF;
  IF NOT EXISTS(SELECT 1 FROM outbox o JOIN messages m ON m.id=o.message_id JOIN delivery_parts p ON p.message_id=m.id WHERE m.text='synthetic never-attempted pending fixture' AND o.status='pending' AND m.status='pending' AND p.status='pending') THEN RAISE EXCEPTION 'never-attempted pending fixture missing'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM outbox o JOIN messages m ON m.id=o.message_id JOIN delivery_parts p ON p.message_id=m.id WHERE m.text='synthetic interrupted processing fixture' AND o.status='processing' AND m.status='processing' AND p.status='processing') THEN RAISE EXCEPTION 'interrupted processing fixture missing'; END IF;
 END $$;
 SQL
 provider_digest_sql="SELECT encode(sha256(convert_to(string_agg(row_to_json(e)::text,E'\n' ORDER BY id),'UTF8')),'hex') FROM provider_events e"
@@ -65,6 +66,7 @@ DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM outbox WHERE status='processing') THEN RAISE EXCEPTION 'restored processing job remains'; END IF;
  IF EXISTS(SELECT 1 FROM messages WHERE direction='outbound' AND status='processing') THEN RAISE EXCEPTION 'restored processing message remains'; END IF;
  IF EXISTS(SELECT 1 FROM delivery_parts WHERE status='processing') THEN RAISE EXCEPTION 'restored processing part remains'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM outbox o JOIN messages m ON m.id=o.message_id JOIN delivery_parts p ON p.message_id=m.id WHERE m.text='synthetic interrupted processing fixture' AND o.status='unknown' AND m.status='unknown' AND p.status='unknown') THEN RAISE EXCEPTION 'interrupted work was not quarantined to unknown'; END IF;
  IF NOT EXISTS(SELECT 1 FROM outbox o JOIN messages m ON m.id=o.message_id JOIN delivery_parts p ON p.message_id=m.id WHERE m.text='synthetic never-attempted pending fixture' AND o.status='pending' AND m.status='pending' AND p.status='pending') THEN RAISE EXCEPTION 'never-attempted pending work was quarantined or lost'; END IF;
  IF EXISTS(SELECT 1 FROM provider_state WHERE status<>'disconnected') THEN RAISE EXCEPTION 'provider not quarantined'; END IF;
  IF EXISTS(SELECT 1 FROM provider_state WHERE NOT reconciliation_required) THEN RAISE EXCEPTION 'provider gap not quarantined'; END IF;

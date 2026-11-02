@@ -45,6 +45,7 @@ Inbound locator envelopes are encrypted with an account/key-ID keyring that is n
 - store keys outside the repository and not beside the backup archive, with parent `0700` and file `0600` (or a reviewed secret manager);
 - start the media scheduler before enabling downloads. It reports only `key-missing` and refuses GETs when an envelope's key is absent; it never logs envelopes or locators;
 - treat a missing key as a failed media recovery gate. Do not delete or rewrite jobs to hide the gap.
+- a recognized key ID with wrong key bytes defers the job for 5 minutes and leaves the envelope intact, but the normal 24-hour locator retention boundary still applies. Fix the keyring within that window; after it, the locator is erased and the job becomes `unavailable` by design. This is bounded retention, not an indefinite recovery guarantee.
 
 Rotation: add the new key, keep the old key until all envelopes using it are `ready` or expired, then retire it through an explicit reviewed change. No automatic destructive key deletion is implemented.
 
