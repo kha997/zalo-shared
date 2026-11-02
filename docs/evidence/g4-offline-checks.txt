@@ -1,6 +1,6 @@
 == image identity ==
-image=[zalo-shared-connector:g2- zalo-shared-connector:g2-adf8ceca9bd6] id=sha256:fba2882d3330760e529e4aca9957c597d5d831c7d0895c8621fc2a178a7889e2
-{"uid":65532,"zcaJs":"2.2.0","buildIdentity":{"version":1,"sourceCommit":"adf8ceca9bd615004486b14ebc07da8475b71a3a","lockSha256":"17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b","sdkIntegrity":"sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA=="},"sourceCommitMatchesHead":true,"lockMatches":true,"sdkMatches":true}
+image=[zalo-shared-connector:g4-ea66d8b] id=sha256:e8a002abbd5ac4e39b8cf6c24fa2ab07eee18fe28c746bc16f4e11a7d867b72c
+{"uid":65532,"zcaJs":"2.2.0","buildIdentity":{"version":1,"sourceCommit":"ea66d8b94dde26e67bcb438e114fdd2454401a2d","lockSha256":"17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b","sdkIntegrity":"sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA=="},"sourceCommitMatchesHead":true,"lockMatches":true,"sdkMatches":true}
 
 == private permissions ==
 path=/home/zen/pilot-private/zalo-shared/pilot mode=700 uid=65532 gid=65532 size=4096
@@ -15,7 +15,7 @@ path=/home/zen/pilot-private/zalo-shared/pilot/session.key mode=600 uid=65532 gi
 {"ok":true}
 
 == synthetic dry-run ==
-admitted exit=0 {"command":"dry-run","ok":true,"gate":"admitted","purpose":"observe","expiresAt":"2026-11-02T07:25:51.964Z"} 
+admitted exit=0 {"command":"dry-run","ok":true,"gate":"admitted","purpose":"observe","expiresAt":"2026-11-02T08:04:33.158Z"} 
 
 == negative manifests ==
 malformed exit=1 {"command":"dry-run","ok":false,"gate":"denied"} 
@@ -26,8 +26,8 @@ wrong-lock exit=1 {"command":"dry-run","ok":false,"gate":"denied"}
 
 == command gating (no live action) ==
 observe-without-ack exit=1 {"command":"run-observe","ok":false,"gate":"denied"} 
-bootstrap-wrong-purpose exit=1 {"command":"bootstrap","ok":false,"gate":"denied","purpose":"observe","expiresAt":"2026-11-02T07:25:51.964Z"} 
-send-test-wrong-purpose exit=1 {"command":"run-send-test","ok":false,"gate":"denied","purpose":"observe","expiresAt":"2026-11-02T07:25:51.964Z"} 
+bootstrap-wrong-purpose exit=1 {"command":"bootstrap","ok":false,"gate":"denied","purpose":"observe","expiresAt":"2026-11-02T08:04:33.158Z"} 
+send-test-wrong-purpose exit=1 {"command":"run-send-test","ok":false,"gate":"denied","purpose":"observe","expiresAt":"2026-11-02T08:04:33.158Z"} 
 unknown-command exit=2 Pilot CLI denied: expected [dry-run|bootstrap|run-observe|run-send-test] [--manifest <private-path>] [--acknowledge-pilot-risk] 
 
 == synthetic QR view ==
@@ -37,9 +37,8 @@ view-mode=700 uid=65532 gid=65532
 qr.png cleared after synthetic view
 
 == parameterized dry-run helper (explicit manifest) ==
-command: bash ops/local/dry-run-connector.sh zalo-shared-connector:g2-adf8ceca9bd6 /home/zen/pilot-private/zalo-shared/pilot/manifest.synthetic.json
-exit=0 {"command":"dry-run","ok":true,"gate":"admitted","purpose":"observe","expiresAt":"2026-11-02T07:25:51.964Z"}
+helper-explicit-manifest exit=0 {"command":"dry-run","ok":true,"gate":"admitted","purpose":"observe","expiresAt":"2026-11-02T08:04:33.158Z"}
 
 == enrollment manifest shape (synthetic, null account) ==
-enroll-null-account exit=0 {"command":"dry-run","ok":true,"gate":"admitted","purpose":"enroll-session"}
+enroll-null-account exit=0 {"command":"dry-run","ok":true,"gate":"admitted","purpose":"enroll-session","expiresAt":"2026-11-02T08:05:08.123Z"}
 enroll-null-with-observe exit=1 {"command":"dry-run","ok":false,"gate":"denied"}

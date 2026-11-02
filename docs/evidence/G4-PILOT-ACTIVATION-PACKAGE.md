@@ -1,7 +1,7 @@
 # G4 — Live pilot activation package
 
 **Status:** OFFLINE READY — **NO LIVE ACTION PERFORMED**.
-**Baseline:** `feat/shared-inbox` @ `adf8ceca9bd615004486b14ebc07da8475b71a3a`.
+**Baseline:** `feat/shared-inbox` @ `ea66d8b94dde26e67bcb438e114fdd2454401a2d` (G4 package); G3 functional evidence was collected at `adf8ceca9bd615004486b14ebc07da8475b71a3a`.
 **Gate:** `G4_AWAITING_OWNER_LIVE_APPROVAL`. G5 is not authorized. PR #3 remains Draft.
 **Companion:** [PRIVATE-PILOT.md](../operations/PRIVATE-PILOT.md), [RUNBOOK.md](../operations/RUNBOOK.md), [OWNER-CONSENT-TEMPLATE.md](../operations/OWNER-CONSENT-TEMPLATE.md), [pilot-manifest.template.json](../operations/pilot-manifest.template.json), [pilot-manifest.enroll.template.json](../operations/pilot-manifest.enroll.template.json), [G3 acceptance](G3-OFFLINE-ACCEPTANCE.md).
 
@@ -11,19 +11,21 @@ No Zalo login, QR enrollment, account identifier, session, cookie, real peer or 
 
 | Item | Verified value |
 | --- | --- |
-| Source | `feat/shared-inbox` @ `adf8ceca9bd615004486b14ebc07da8475b71a3a` |
+| Source | `feat/shared-inbox` @ `ea66d8b94dde26e67bcb438e114fdd2454401a2d`; only docs/ops changed after the `adf8cec` G3 baseline |
 | Host | Windows 11 10.0.26100 + WSL2 Ubuntu-24.04; Node 24.19.0 / npm 11.17.0 for tooling |
-| Connector image | `zalo-shared-connector:g2-adf8ceca9bd6`, image ID `sha256:fba2882d3330760e529e4aca9957c597d5d831c7d0895c8621fc2a178a7889e2` |
+| Connector image | `zalo-shared-connector:g4-ea66d8b`, image ID `sha256:e8a002abbd5ac4e39b8cf6c24fa2ab07eee18fe28c746bc16f4e11a7d867b72c` |
 | Connector runtime | UID 65532, Node v24.22.1 inside the image, read-only root, cap-drop ALL, no ports |
 | SDK | `zca-js@2.2.0`; transitive `crypto-js@4.2.0` |
-| Build identity | `sourceCommit` = HEAD; `lockSha256` = `17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b`; `sdkIntegrity` = `sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA==` |
-| Application image | `zalo-shared:g2-adf8ceca9bd6`, ID `sha256:9d3454015db1d8c6558c2d461fde86a2f71de0a26193d997432352115a890d65`, SDK-free |
+| Build identity | `sourceCommit` = `ea66d8b94dde26e67bcb438e114fdd2454401a2d` (matches HEAD); `lockSha256` = `17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b`; `sdkIntegrity` = `sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA==` |
+| Application image | `zalo-shared:g2-adf8ceca9bd6`, ID `sha256:9d3454015db1d8c6558c2d461fde86a2f71de0a26193d997432352115a890d65`, SDK-free; byte-identical because app sources did not change after `adf8cec` |
 | Database | PostgreSQL 17 `postgres:17-bookworm@sha256:858bb5e98eed02eb8cafbcdc007f9a65d1b613972028944a8ec2133ccaf80d27`, internal network only |
 | App exposure | `127.0.0.1:3100` only (G2 compose); G3 mock stack additionally on loopback `3101` for tests |
 | Private state | `pilot/` 0700 UID 65532; `manifest.synthetic.json` 0600 1357 bytes; `session.key` 0600 32 bytes; `state/view/` 0700 UID 65532 |
 | Pilot deploy config | [ops/pilot-compose.example.yml](../../ops/pilot-compose.example.yml) — copy outside the repository; no published ports, UID 65532, read-only root, default `dry-run` |
 
-Evidence: [connector identity](g4-offline-checks.txt), [G3 image scan](connector-image-scan-summary.json), [G3 app scan](container-scan-summary.json), [compose topology](g3-topology-check.txt).
+Evidence: [connector identity and offline checks](g4-offline-checks.txt), [connector scan](connector-image-scan-summary.json), [app scan](container-scan-summary.json), [pilot compose](g4-pilot-compose-check.txt), [G3 app topology](g3-topology-check.txt).
+
+**Provenance.** The published commits after `adf8cec` touch only docs and ops; application and connector TypeScript sources are unchanged. The connector was rebuilt at `ea66d8b` with the same lock and SDK integrity, and the app image ID is unchanged. G3 runtime results therefore still describe the same application code, while the G4 identity below is the artifact to deploy.
 
 **Artifact-digest caveat.** The image ID above is a local build identity, not a registry digest and not a signed attestation. A live pilot must deploy the immutable digest recorded by the CI pipeline for the reviewed commit; the runtime cannot verify its own provenance. `dry-run` validates manifest shape only; it does not read `/app/build-identity.json`.
 
