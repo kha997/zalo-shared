@@ -93,12 +93,12 @@ summary = {
 }
 Path("docs/evidence/connector-image-scan-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 print(json.dumps(summary))
-if summary["fixableHighCriticalCount"]:
-    raise SystemExit("Fixable high/critical connector image vulnerabilities remain")
+if summary["highCriticalCount"]:
+    raise SystemExit("High/critical connector image vulnerabilities remain")
 if summary["exposedPorts"]:
     raise SystemExit("Pilot connector image must not expose ports")
-if inventory.get("uid") == 0:
-    raise SystemExit("Pilot connector image must run as non-root")
+if inventory.get("uid") != 65532:
+    raise SystemExit("Pilot connector image must run as the reviewed UID 65532")
 if inventory.get("zcaJs") != "2.2.0" or not inventory.get("zcaResolved"):
     raise SystemExit("Pilot connector image must pin and resolve zca-js 2.2.0")
 if inventory.get("cryptoJs") != "4.2.0":

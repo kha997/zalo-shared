@@ -108,7 +108,7 @@ docker build --build-arg SOURCE_COMMIT="$(git rev-parse HEAD)" \
 bash ops/pilot-scan.sh zalo-shared-connector:pilot
 ```
 
-The scanner records vulnerabilities, licenses, the resolved `zca-js` version, the embedded build identity and the runtime UID. It fails on fixable high/critical findings, any exposed port, non-root execution, an unexpected SDK version, a missing/malformed build identity or any manifest/key/session/QR file inside the image. Hosted CI runs the image default `dry-run` with a synthetic manifest and fake-only evidence; it never imports the real SDK for a login.
+The scanner records vulnerabilities, licenses, the resolved `zca-js` version, the embedded build identity and the runtime UID. It fails on any high/critical finding, any exposed port, a UID other than 65532, an unexpected SDK version, a missing/malformed build identity or any of the four known private filenames (`manifest.json`, `session.key`, `session.enc`, `qr.png`) under `/app` or `/run` (excluding `node_modules` and `.cache`); it is a filename/path scan, not a content scan of arbitrary artifacts. Hosted CI runs the image default `dry-run` with a synthetic manifest, no network namespace and fake-only evidence; it never imports the real SDK for a login.
 
 ## Backup and restore
 

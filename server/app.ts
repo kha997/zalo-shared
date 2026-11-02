@@ -428,8 +428,10 @@ export async function buildApp({
     const vals: any[] = [ACCOUNT];
     let where = "account_id=$1";
     if (q.search) {
-      vals.push(`%${q.search}%`);
-      where += ` AND (contact_name ILIKE $${vals.length} OR contact_id ILIKE $${vals.length})`;
+      // Treat user input as a literal substring: escape LIKE metacharacters so
+      // `%`/`_` cannot force unbounded scans or change match semantics.
+      vals.push(`%${q.search.replace(/[\\%_]/g, "\\$&")}%`);
+      where += ` AND (contact_name ILIKE $${vals.length} ESCAPE '\\' OR contact_id ILIKE $${vals.length} ESCAPE '\\')`;
     }
     if (q.status) {
       vals.push(q.status);

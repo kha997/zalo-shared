@@ -10,6 +10,7 @@ import {
 } from "../../adapters/zalo/provider.js";
 import {
   ProviderNotDispatchedError,
+  ProviderReservationConsumedError,
   runWorkerOnce,
 } from "../../server/worker.js";
 import type { PilotGrant } from "../../server/pilot-policy.js";
@@ -431,9 +432,92 @@ test("a known failed dispatch consumes budget but is never automatically resent"
       "UPDATE delivery_parts SET status='pending' WHERE message_id=$1",
       [mid],
     );
-    await assert.rejects(send(database.pool, provider, mid), ProviderNotDispatchedError);
+    // The durable reservation is spent: retrying must fail terminally rather
+    // than resend, and must not halt the whole pilot.
+    await assert.rejects(
+      send(database.pool, provider, mid),
+      ProviderReservationConsumedError,
+    );
     assert.equal(transportSpy.calls.length, 1);
-    assert.deepEqual(halts, ["already-reserved"]);
+    assert.deepEqual(halts, []);
+  } finally {
+    await database.close();
+  }
+});
+
+test("a stale reservation fails one row and never wedges later outbound work", async () => {
+  const database = await isolatedDatabase();
+  try {
+    const calls: string[] = [];
+    let outcome: DeliveryResult = { status: "failed" };
+    const transportSpy: TextTransport = {
+      status: "connected",
+      async sendText(peer) {
+        calls.push(peer);
+        return outcome;
+      },
+    };
+    const provider = createSdkProvider(
+      database.pool,
+      transportSpy,
+      owner(),
+      { grant: grant(), now: () => new Date() },
+    );
+    await database.pool.query(
+      "UPDATE provider_state SET status='connected' WHERE account_id=$1",
+      [ACCOUNT],
+    );
+    const first = await seed(database.pool, { outbox: true });
+    const second = await seed(database.pool, { outbox: true, peer: "peer-b" });
+    // Pin claim order so the head row is unambiguous.
+    await database.pool.query(
+      "UPDATE outbox SET created_at=now()-interval '2 seconds' WHERE message_id=$1",
+      [first.mid],
+    );
+    await database.pool.query(
+      "UPDATE outbox SET created_at=now()-interval '1 second' WHERE message_id=$1",
+      [second.mid],
+    );
+    // First tick reserves and attempts part 0; the transport reports a known
+    // non-dispatch, so the worker returns the row to pending.
+    assert.deepEqual(await runWorkerOnce(database.pool, provider), {
+      processed: false,
+    });
+    assert.equal(calls.length, 1);
+    // Second tick re-selects the same head row, finds its reservation spent and
+    // must fail it terminally without a second egress.
+    assert.deepEqual(await runWorkerOnce(database.pool, provider), {
+      processed: true,
+    });
+    assert.equal(calls.length, 1);
+    const firstState = (
+      await database.pool.query(
+        "SELECT m.status AS message,o.status AS outbox,p.status AS part FROM messages m JOIN outbox o ON o.message_id=m.id JOIN delivery_parts p ON p.message_id=m.id WHERE m.id=$1",
+        [first.mid],
+      )
+    ).rows[0];
+    assert.deepEqual(firstState, {
+      message: "failed",
+      outbox: "failed",
+      part: "failed",
+    });
+    // Later work is not starved: the next tick can reserve and send.
+    await database.pool.query(
+      "UPDATE pilot_send_budget SET last_reserved_at=now()-interval '10 seconds'",
+    );
+    outcome = { status: "sent", providerId: "sdk-2" };
+    assert.deepEqual(await runWorkerOnce(database.pool, provider), {
+      processed: true,
+    });
+    assert.equal(calls.length, 2);
+    assert.equal(
+      (
+        await database.pool.query("SELECT status FROM messages WHERE id=$1", [
+          second.mid,
+        ])
+      ).rows[0].status,
+      "sent",
+    );
   } finally {
     await database.close();
   }
@@ -456,10 +540,10 @@ test("an ambiguous result consumes budget and a repeat is not dispatched", async
       send(database.pool, provider, mid),
       /Provider execution uncertain/,
     );
-    await assert.rejects(send(database.pool, provider, mid), ProviderNotDispatchedError);
+    await assert.rejects(send(database.pool, provider, mid), ProviderReservationConsumedError);
     assert.equal(transportSpy.calls.length, 1);
     assert.equal(await ledgerCount(database.pool), 1);
-    assert.deepEqual(halts, ["dispatch-uncertain", "already-reserved"]);
+    assert.deepEqual(halts, ["dispatch-uncertain"]);
   } finally {
     await database.close();
   }

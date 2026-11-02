@@ -8,6 +8,7 @@ import {
 import type { PilotGrant } from "../../server/pilot-policy.js";
 import {
   ProviderNotDispatchedError,
+  ProviderReservationConsumedError,
   type Provider,
 } from "../../server/worker.js";
 type Delivery =
@@ -293,8 +294,14 @@ export function createSdkProvider(
           if (!db) client.release();
         }
         if (reservation.status !== "reserved") {
-          halt(dispatch, "already-reserved");
-          throw new ProviderNotDispatchedError();
+          // reservePilotPart only returns this when the stored ledger row still
+          // belongs to a pending or in-flight part; accepted or ambiguous parts
+          // are refused. That makes a retry safe in principle, but the reviewed
+          // budget policy allows exactly one egress attempt per reservation.
+          // Fail the row terminally instead of returning it to pending, which
+          // would re-select the same reservation every tick and wedge the queue
+          // head.
+          throw new ProviderReservationConsumedError();
         }
         if (ownership) {
           try {

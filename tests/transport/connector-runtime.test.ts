@@ -571,6 +571,60 @@ test("the pilot guard stops inbound and dispatch once it fails", async () => {
   await runtime.stop();
 });
 
+test("inbound is rejected when admission is lost across the owner fence await", async () => {
+  const f = fixture();
+  let allowed = true;
+  let connects = 0;
+  let queries = 0;
+  let entered = 0;
+  let deferFence = false;
+  const fence = deferred<void>();
+  const original = f.owner.assertCurrent.bind(f.owner);
+  f.owner.assertCurrent = async () => {
+    if (deferFence) {
+      deferFence = false;
+      entered++;
+      await fence.promise;
+    }
+    return original();
+  };
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool: {
+      async connect() {
+        connects++;
+        throw new Error("must not persist");
+      },
+      async query() {
+        queries++;
+        return { rowCount: 0, rows: [] };
+      },
+    } as any,
+    inbound: { accountId: "me", allowedPeerIds: ["peer-a"] },
+    guard: () => allowed,
+  });
+  await runtime.start();
+  deferFence = true;
+  f.listener.emit("message", {
+    threadId: "peer-a",
+    type: 0,
+    isSelf: false,
+    data: { msgId: "m-fence", uidFrom: "peer-a", msgType: "webchat" },
+  });
+  for (let i = 0; i < 20 && entered < 1; i++)
+    await new Promise((r) => setImmediate(r));
+  assert.equal(entered, 1);
+  allowed = false;
+  fence.resolve();
+  for (let i = 0; i < 20 && runtime.rejectedInbound < 1; i++)
+    await new Promise((r) => setImmediate(r));
+  assert.equal(runtime.rejectedInbound, 1);
+  assert.equal(connects, 0);
+  assert.equal(queries, 0);
+  assert.equal(runtime.status, "active");
+  await runtime.stop();
+});
+
 test("the pilot guard blocks publication when admission is already lost", async () => {
   const f = fixture();
   const transport = {

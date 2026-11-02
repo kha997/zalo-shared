@@ -125,11 +125,13 @@ export async function reservePilotPart(
     ).rows[0];
     if (prior) {
       // A verified repeat consumes nothing further. Accepted or ambiguous
-      // work must never look like a fresh reservation.
+      // work must never look like a fresh reservation. `processing` is the
+      // caller's own in-flight part marked just before this admission check,
+      // so it is still a repeat rather than new permission to egress.
       if (
         prior.account_id !== ACCOUNT ||
         prior.peer_id !== peerId ||
-        prior.status !== "pending"
+        (prior.status !== "pending" && prior.status !== "processing")
       )
         throw unavailable();
       return Object.freeze({ status: "already-reserved" as const });

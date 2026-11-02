@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { CredentialVault } from "../../adapters/zalo/vault.js";
+const POSIX = process.platform !== "win32";
 test("vault roundtrip encrypted, 0600, overwrite, wrong key and tamper rejected", async () => {
   const dir = await mkdtemp(join(tmpdir(), "zalo-vault-"));
   const path = join(dir, "session");
@@ -16,7 +17,7 @@ test("vault roundtrip encrypted, 0600, overwrite, wrong key and tamper rejected"
       cookie: "private-cookie",
       imei: "private-imei",
     });
-    assert.equal((await stat(path)).mode & 0o777, 0o600);
+    if (POSIX) assert.equal((await stat(path)).mode & 0o777, 0o600);
     assert.equal(
       (await readFile(path, "utf8")).includes("private-cookie"),
       false,
@@ -45,7 +46,7 @@ test("vault fresh nonce and concurrent replacement leave complete private envelo
     assert.notEqual(first.nonce, second.nonce);
     await Promise.all([vault.write({ n: 2 }), vault.write({ n: 3 })]);
     assert.ok([2, 3].includes(((await vault.read()) as { n: number }).n));
-    assert.equal((await stat(path)).mode & 0o777, 0o600);
+    if (POSIX) assert.equal((await stat(path)).mode & 0o777, 0o600);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

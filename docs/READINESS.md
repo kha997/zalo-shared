@@ -56,6 +56,21 @@ Hosted [CI 41382664808](https://github.com/kha997/zalo-shared/actions/runs/41382
 | Live send-test against a real account or peer | UNPROVEN — requires Owner activation |
 | Production readiness | NOT ESTABLISHED |
 
+### Whole-branch review remediation — local PASS, hosted verification pending
+
+An independent whole-branch review of `cc6614c` (the complete diff against base, including migrations, worker, media, pilot, ops and CI) found no P1, two P2 liveness defects, one P2 evidence gap, one P2 CI-gate mismatch and several hardening gaps. All are fixed in the working slice:
+
+- A spent pilot reservation now fails its row terminally instead of returning it to `pending` and re-selecting it forever, so one stale reservation cannot wedge the queue head. The reserve check recognises the worker's own `processing` part as a repeat only; a regression proves the next message still dispatches.
+- Restore now quarantines only `processing` work. Never-attempted `pending` work is preserved for recovery rather than rewritten to `unknown` with no confirmation path; the CI journal seeds a pending fixture and the backup drill asserts both outcomes.
+- The post-fence inbound guard now has a regression: the guard flips during the deferred ownership check and the event is rejected with zero database access.
+- Image scans fail on any high/critical finding (not only fixable ones) and require the reviewed UID 65532; the pilot dry-run runs with no network namespace.
+- A wrong key under a recognized key id defers and preserves the locator instead of terminally erasing it; a correct-key retry completes the download.
+- Private key/manifest reads require a non-writable, non-symlink parent and verify the opened inode, owner and mode.
+- Conversation search treats `%`, `_` and `\` literally; gap acknowledgement admits provably pending work but still blocks `unknown`/`processing`.
+- The threat model now records the accepted residual that PostgreSQL row-level security is **not** enabled for attachment/media reads; the scan documentation states its filename/path-only scope.
+
+Local evidence: typecheck, both builds and the connector build PASS; focused suites **77/77**; full local suite **273/273** PASS. The previously reported Windows-only `vault.test.ts` mode failures were fixed as a test-portability issue by guarding POSIX mode assertions; Linux CI still exercises them. Hosted CI verification is pending. [Review and dispositions](review/private-pilot-runtime-review.md#whole-branch-review--pr-3-head-cc6614c).
+
 ## Private pilot runtime, connector image and gate review — hosted PASS
 
 The `f9ac8e5` slice adds a bounded pilot driver (`tools/pilot-runtime.ts`): a single-lifetime owned connector, pre-start abort handling, grant shape/lifetime/peer/budget/interval validation, observe mode that never constructs a dispatcher, send-test ticks at `max(2000 ms, grant.minIntervalMs)`, policy-halt propagation, and an exact direct-peer inbound gate bound to the grant account. Session envelopes carry an explicit `keyId` bound into AES-GCM AAD, so key rotation is explicit and cross-id reads fail. The CLI now maps safety halts (`runtime-error`, `already-reserved`, `reservation-denied`, `dispatch-uncertain`) to exit 1 and exposes only bounded tick/rejection counters. A separate SDK-bearing connector image (`ops/Dockerfile.connector`) uses a dedicated exact lock, runs as UID 65532 with no ports, and defaults to dry-run; a hosted `pilot` CI job builds it, runs the dry-run with a synthetic owner-only manifest, inventories `zca-js`/`crypto-js`, and scans it.

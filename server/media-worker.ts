@@ -226,6 +226,24 @@ export async function runMediaDownloadOnce(
         { reason },
       );
     };
+    const deferJob = async (job: Job, reason: string) => {
+      if (
+        !(
+          await query(
+            `UPDATE provider_media_jobs SET status='pending',error_code=$3,next_attempt_at=now()+interval '5 minutes',claimed_at=NULL,version=${nextVersion} WHERE id=$1 AND account_id=$2 AND version=$4`,
+            [job.id, ACCOUNT, reason, job.version],
+          )
+        ).rowCount
+      )
+        throw unavailable();
+      await audit(
+        { query } as any,
+        null,
+        "media.download_deferred",
+        job.id,
+        { reason },
+      );
+    };
     const rows = (
       await query(
         `SELECT j.id FROM provider_media_jobs j JOIN provider_events e ON e.id=j.event_id AND e.account_id=j.account_id
@@ -337,9 +355,13 @@ export async function runMediaDownloadOnce(
             if (options.cipher.fingerprint(locator) !== job.locator_fingerprint)
               throw unavailable();
           } catch {
-            await stopJob(job, "key-unavailable");
+            // A recognized key id can still map to the wrong key bytes (or the
+            // envelope can be corrupt). Never make that a terminal `unavailable`
+            // row: retention would eventually erase the only locator. Defer and
+            // leave the ciphertext for an operator to fix the keyring.
+            await deferJob(job, "key-unavailable");
             await query("COMMIT");
-            return { processed: true };
+            return { processed: false };
           }
           const update = await query(
             `UPDATE provider_media_jobs SET status='processing',attempts=attempts+1,claimed_at=now(),error_code=NULL,version=version+1 WHERE id=$1 AND account_id=$2 AND version=$3 AND attempts<3 RETURNING *`,

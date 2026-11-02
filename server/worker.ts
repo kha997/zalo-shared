@@ -10,6 +10,18 @@ export class ProviderNotDispatchedError extends Error {
     this.name = "ProviderNotDispatchedError";
   }
 }
+/**
+ * The durable pilot ledger already owns this part, so no further egress attempt
+ * is permitted. The part is known not to have been accepted, but it cannot be
+ * retried under the same reservation; leave it terminal instead of pending so a
+ * single stale reservation cannot wedge the queue head forever.
+ */
+export class ProviderReservationConsumedError extends Error {
+  constructor() {
+    super("Provider reservation already consumed");
+    this.name = "ProviderReservationConsumedError";
+  }
+}
 export interface Provider {
   connected(db?: pg.PoolClient): Promise<boolean>;
   prepareMessage?(messageId: string, db: pg.PoolClient): Promise<void>;
@@ -184,7 +196,12 @@ export async function runWorkerOnce(
       await db.query("BEGIN");
       const deferred = error instanceof ProviderNotDispatchedError;
       if (deferred) deferredJob = true;
-      const status = deferred ? "pending" : dispatched ? "unknown" : "failed";
+      const consumed = error instanceof ProviderReservationConsumedError;
+      // A spent reservation is refused before the provider call, so this
+      // attempt is known not to have dispatched even though the part was
+      // marked processing above.
+      const status =
+        deferred ? "pending" : dispatched && !consumed ? "unknown" : "failed";
       await db.query("UPDATE messages SET status=$2 WHERE id=$1", [
         job.message_id,
         status,
@@ -204,15 +221,19 @@ export async function runWorkerOnce(
         null,
         deferred
           ? "message.deferred"
-          : dispatched
+          : dispatched && !consumed
             ? "message.unknown"
             : "message.failed",
         job.message_id,
         deferred
           ? { reason: "provider-not-dispatched" }
-          : dispatched
+          : dispatched && !consumed
             ? {}
-            : { reason: "preparation-failed" },
+            : {
+                reason: consumed
+                  ? "reservation-already-consumed"
+                  : "preparation-failed",
+              },
       );
       if (deferred) {
         const m = (

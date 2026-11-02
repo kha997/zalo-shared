@@ -317,6 +317,79 @@ test("scheduler refuses downloads when the keyring lacks an envelope key", async
   }
 });
 
+test("a recognized key id with wrong key bytes defers instead of erasing the locator", async () => {
+  const { d, c, owner } = await ownedDatabase("ci-media-wrong-key");
+  try {
+    await owner.markActive();
+    const event = await ingestProviderEvent(d.pool, input("wrong-key"), {
+      owner: owner.token,
+      mediaCipher: c,
+    });
+    const wrongKey = createLocatorCipher({
+      activeKeyId: "synthetic",
+      keys: new Map([["synthetic", randomBytes(32)]]),
+      fingerprintKey: randomBytes(32),
+    });
+    const fake = fakeDownload();
+    const deferred = await runMediaScheduler({
+      pool: d.pool,
+      worker: { owner, cipher: wrongKey, policy, download: fake.download },
+      maxIterations: 2,
+      maintenanceEvery: 1,
+      idleDelayMs: 0,
+      sleep: async () => {},
+    });
+    assert.deepEqual(deferred, {
+      iterations: 2,
+      downloads: 0,
+      expired: 0,
+      stopped: "bounded",
+    });
+    assert.equal(fake.calls, 0);
+    const job = await jobFor(d.pool, event.eventId);
+    assert.equal(job.status, "pending");
+    assert.equal(job.error_code, "key-unavailable");
+    assert.notEqual(job.locator_envelope, null);
+    assert.equal(job.attempts, 0);
+    assert.deepEqual(
+      (
+        await d.pool.query(
+          "SELECT action,metadata->>'reason' AS reason FROM audit WHERE target_id=$1",
+          [job.id],
+        )
+      ).rows,
+      [{ action: "media.download_deferred", reason: "key-unavailable" }],
+    );
+
+    await d.pool.query(
+      "UPDATE provider_media_jobs SET next_attempt_at=now() WHERE id=$1",
+      [job.id],
+    );
+    const recovered = await runMediaScheduler({
+      pool: d.pool,
+      worker: { owner, cipher: c, policy, download: fake.download },
+      maxIterations: 1,
+      maintenanceEvery: 1,
+      idleDelayMs: 0,
+      sleep: async () => {},
+    });
+    assert.deepEqual(recovered, {
+      iterations: 1,
+      downloads: 1,
+      expired: 0,
+      stopped: "bounded",
+    });
+    assert.equal(fake.calls, 1);
+    const ready = await jobFor(d.pool, event.eventId);
+    assert.equal(ready.status, "ready");
+    assert.notEqual(ready.attachment_id, null);
+    assert.equal(ready.locator_envelope, null);
+  } finally {
+    await owner.close().catch(() => {});
+    await d.close();
+  }
+});
+
 test("migration provides the message-scoped media lookup index", async () => {
   const d = await isolatedDatabase();
   try {

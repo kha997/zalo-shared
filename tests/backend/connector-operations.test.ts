@@ -613,3 +613,99 @@ test("operations fail closed under worker contention and never expose raw databa
       e.cause === undefined,
   );
 });
+
+test("gap acknowledgement succeeds with provably pending work but refuses unknown or processing work", async () => {
+  const d = await isolatedDatabase();
+  const { pool } = d;
+  async function tx<T>(fn: (db: any) => Promise<T>) {
+    const db = await pool.connect();
+    try {
+      await db.query("BEGIN");
+      const result = await fn(db);
+      await db.query("COMMIT");
+      return result;
+    } catch (e) {
+      await db.query("ROLLBACK");
+      throw e;
+    } finally {
+      db.release();
+    }
+  }
+  try {
+    const admin = (
+      await pool.query(
+        "INSERT INTO users(name,email,password_hash,role) VALUES('Admin','ops-pending@example.test','unused','admin') RETURNING id",
+      )
+    ).rows[0];
+    const conversation = (
+      await pool.query(
+        "INSERT INTO conversations(contact_id,contact_name) VALUES('gap-pending','Pending') RETURNING id",
+      )
+    ).rows[0];
+    const pending = (
+      await pool.query(
+        "INSERT INTO messages(conversation_id,direction,text,status) VALUES($1,'outbound','synthetic pending','pending') RETURNING id",
+        [conversation.id],
+      )
+    ).rows[0];
+    await pool.query(
+      "INSERT INTO outbox(message_id,status) VALUES($1,'pending')",
+      [pending.id],
+    );
+    await pool.query(
+      "UPDATE provider_state SET reconciliation_required=true,gap_version=3",
+    );
+    const ack = {
+      expectedGapVersion: "3",
+      expectedOwnerId: null,
+      expectedOwnerEpoch: "0",
+      evidenceRef: ref,
+      confirmHistoryReviewed: true as const,
+    };
+    await tx((db) => acknowledgeProviderGap(db, admin, ack));
+    assert.equal(
+      (
+        await pool.query(
+          "SELECT reconciliation_required FROM provider_state",
+        )
+      ).rows[0].reconciliation_required,
+      false,
+    );
+
+    for (const [version, work] of [
+      ["4", "UPDATE outbox SET status='unknown' WHERE message_id=$1"],
+      ["5", "UPDATE messages SET status='processing' WHERE id=$1"],
+    ] as const) {
+      await pool.query(
+        "UPDATE provider_state SET reconciliation_required=true,gap_version=$1",
+        [version],
+      );
+      await pool.query(work, [pending.id]);
+      await assert.rejects(
+        tx((db) =>
+          acknowledgeProviderGap(db, admin, {
+            ...ack,
+            expectedGapVersion: version,
+          }),
+        ),
+        invalid(409),
+      );
+      assert.equal(
+        (
+          await pool.query(
+            "SELECT reconciliation_required FROM provider_state",
+          )
+        ).rows[0].reconciliation_required,
+        true,
+      );
+      await pool.query("UPDATE outbox SET status='pending' WHERE message_id=$1", [
+        pending.id,
+      ]);
+      await pool.query("UPDATE messages SET status='pending' WHERE id=$1", [
+        pending.id,
+      ]);
+    }
+  } finally {
+    await d.close();
+  }
+});

@@ -24,13 +24,18 @@ PGDATABASE="$restore_db" psql -X -v ON_ERROR_STOP=1 -At -f "$(dirname "$0")/coun
 cmp "$work/counts.tsv" "$work/restored-counts.tsv"
 PGDATABASE="$restore_db" psql -X -v ON_ERROR_STOP=1 -At -f "$(dirname "$0")/integrity.sql" > "$work/restored-integrity.tsv"
 cmp "$work/integrity.tsv" "$work/restored-integrity.tsv"
-# Fail closed: revoke sessions and quarantine all work that might otherwise dispatch.
+# Fail closed: revoke sessions and quarantine only work that may have reached
+# the provider. Backups are taken after the app and worker are stopped, so a
+# `pending` row is provably never-egressed; keeping it pending lets recovery
+# resume it once the operator clears the reconciliation gap. Rewriting pending
+# to unknown would strand rows that have no provider event and therefore no
+# valid confirmation path.
 PGDATABASE="$restore_db" psql -X -v ON_ERROR_STOP=1 <<'SQL'
 BEGIN;
 DELETE FROM sessions;
-UPDATE outbox SET status='unknown' WHERE status IN ('pending','processing');
-UPDATE messages SET status='unknown' WHERE direction='outbound' AND status IN ('pending','processing');
-UPDATE delivery_parts SET status='unknown' WHERE status IN ('pending','processing');
+UPDATE outbox SET status='unknown' WHERE status='processing';
+UPDATE messages SET status='unknown' WHERE direction='outbound' AND status='processing';
+UPDATE delivery_parts SET status='unknown' WHERE status='processing';
 UPDATE provider_media_jobs SET status='held',claimed_at=NULL,
  version=CASE WHEN version<9223372036854775807 THEN version+1 ELSE version END
  WHERE status IN ('pending','processing');

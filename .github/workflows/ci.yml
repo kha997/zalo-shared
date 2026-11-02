@@ -164,7 +164,7 @@ jobs:
           # into the public artifact.
           sudo chown 65532:65532 "$RUNNER_TEMP/pilot-manifest.synthetic.json"
           sudo chmod 600 "$RUNNER_TEMP/pilot-manifest.synthetic.json"
-          docker run --rm --read-only --tmpfs /tmp:rw,nosuid,size=16m --cap-drop ALL --security-opt no-new-privileges:true -v "$RUNNER_TEMP/pilot-manifest.synthetic.json:/run/pilot/manifest.json:ro" -e PILOT_MANIFEST=/run/pilot/manifest.json zalo-shared-connector:ci | tee docs/evidence/ci-pilot-dry-run.json
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=16m --cap-drop ALL --security-opt no-new-privileges:true -v "$RUNNER_TEMP/pilot-manifest.synthetic.json:/run/pilot/manifest.json:ro" -e PILOT_MANIFEST=/run/pilot/manifest.json zalo-shared-connector:ci | tee docs/evidence/ci-pilot-dry-run.json
           grep -q '"ok":true' docs/evidence/ci-pilot-dry-run.json
           grep -q '"command":"dry-run"' docs/evidence/ci-pilot-dry-run.json
       - name: Separate connector scan, SDK inventory and nonroot/port assertions

@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { constants } from "node:fs";
+import type { Stats } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import {
   lstat,
@@ -102,11 +103,42 @@ export async function ensurePrivateDirectory(value: string): Promise<string> {
   return directory;
 }
 
+/**
+ * A writable or symlinked parent lets another local account swap the file
+ * between the pre-open check and the read. The file itself is already
+ * owner-only; require the containing directory to be a real directory that is
+ * not group/other writable and is owned by this uid or root.
+ */
+async function requireTrustedParent(path: string) {
+  const directory = await lstat(dirname(path));
+  if (directory.isSymbolicLink() || !directory.isDirectory())
+    throw unavailable();
+  if (!POSIX) return;
+  if ((directory.mode & 0o022) !== 0) throw unavailable();
+  if (
+    typeof process.getuid === "function" &&
+    directory.uid !== process.getuid() &&
+    directory.uid !== 0
+  )
+    throw unavailable();
+}
+
+function sameOpenedFile(before: Stats, after: Stats) {
+  return (
+    !POSIX ||
+    (before.dev === after.dev &&
+      before.ino === after.ino &&
+      before.uid === after.uid &&
+      (before.mode & 0o777) === (after.mode & 0o777))
+  );
+}
+
 /** Reads an owner-managed 32-byte key without following links or exposing contents. */
 export async function readPrivateKeyFile(value: string): Promise<Uint8Array> {
   const path = cleanPath(value);
   let handle: FileHandle | undefined;
   try {
+    await requireTrustedParent(path);
     const before = await lstat(path);
     if (before.isSymbolicLink() || !before.isFile()) throw unavailable();
     if (POSIX) {
@@ -119,7 +151,12 @@ export async function readPrivateKeyFile(value: string): Promise<Uint8Array> {
     }
     handle = await open(path, constants.O_RDONLY | noFollow);
     const stat = await handle.stat();
-    if (stat.isSymbolicLink() || !stat.isFile() || stat.size !== 32)
+    if (
+      !sameOpenedFile(before, stat) ||
+      stat.isSymbolicLink() ||
+      !stat.isFile() ||
+      stat.size !== 32
+    )
       throw unavailable();
     const key = Buffer.alloc(32);
     const { bytesRead } = await handle.read(key, 0, 32, 0);
@@ -141,6 +178,7 @@ export async function readPrivateTextFile(
   if (!Number.isInteger(maxBytes) || maxBytes < 1) throw unavailable();
   let handle: FileHandle | undefined;
   try {
+    await requireTrustedParent(path);
     const before = await lstat(path);
     if (before.isSymbolicLink() || !before.isFile()) throw unavailable();
     if (before.size <= 0 || before.size > maxBytes) throw unavailable();
@@ -154,7 +192,12 @@ export async function readPrivateTextFile(
     }
     handle = await open(path, constants.O_RDONLY | noFollow);
     const stat = await handle.stat();
-    if (stat.isSymbolicLink() || !stat.isFile() || stat.size > maxBytes)
+    if (
+      !sameOpenedFile(before, stat) ||
+      stat.isSymbolicLink() ||
+      !stat.isFile() ||
+      stat.size > maxBytes
+    )
       throw unavailable();
     const text = await handle.readFile("utf8");
     if (Buffer.byteLength(text) > maxBytes) throw unavailable();

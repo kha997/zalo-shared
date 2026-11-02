@@ -22,5 +22,5 @@ for result in report.get('Results',[]):
 summary={'scanner':'Trivy0.76.1','highCriticalCount':len(findings),'fixableHighCriticalCount':sum(bool(x['fixed']) for x in findings),'findings':findings}
 Path('docs/evidence/container-scan-summary.json').write_text(json.dumps(summary,indent=2)+'\n')
 print(json.dumps(summary))
-if summary['fixableHighCriticalCount']: raise SystemExit('Fixable high/critical image vulnerabilities remain')
+if summary['highCriticalCount']: raise SystemExit('High/critical image vulnerabilities remain')
 PY

@@ -141,6 +141,24 @@ try {
     "INSERT INTO pilot_part_ledger(account_id,day,message_id,part,grant_id,peer_id) VALUES($1,(now() AT TIME ZONE 'utc')::date,$2,0,'ci-grant','ci-synthetic-peer') ON CONFLICT DO NOTHING",
     [ACCOUNT, mid],
   );
+  // Never-attempted outbound work: the backup runs with the app and worker
+  // stopped, so restore must leave this pending rather than strand it as an
+  // unknown row with no provider event to confirm.
+  const pendingMid = (
+    await pool.query(
+      `WITH m AS (
+         INSERT INTO messages(conversation_id,direction,text,status)
+         SELECT conversation_id,'outbound','synthetic never-attempted pending fixture','pending'
+           FROM messages WHERE id=$1 RETURNING id
+       )
+       INSERT INTO outbox(message_id,status) SELECT id,'pending' FROM m RETURNING message_id`,
+      [mid],
+    )
+  ).rows[0].message_id;
+  await pool.query(
+    "INSERT INTO delivery_parts(message_id,part) VALUES($1,0)",
+    [pendingMid],
+  );
   // Nonempty inbound media jobs: ready bytes, claimable pending/processing,
   // held, and expired metadata. Synthetic ciphertext only; no real locator.
   const linked = (

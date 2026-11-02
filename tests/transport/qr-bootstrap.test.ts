@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { bootstrapPilotSession } from "../../adapters/zalo/qr-bootstrap.js";
@@ -1017,6 +1017,20 @@ test("private directories, QR files, session files and keys reject unsafe inputs
       await writeFile(join(keyDirectory, "wide.json"), "{}", { mode: 0o644 });
       await assert.rejects(
         readPrivateTextFile(join(keyDirectory, "wide.json"), 1024),
+      );
+
+      const sharedParent = join(root, "shared-parent");
+      await mkdir(sharedParent, { mode: 0o770 });
+      await chmod(sharedParent, 0o770);
+      await writeFile(join(sharedParent, "session.key"), key, { mode: 0o600 });
+      await writeFile(join(sharedParent, "manifest.json"), "{}", {
+        mode: 0o600,
+      });
+      await assert.rejects(
+        readPrivateKeyFile(join(sharedParent, "session.key")),
+      );
+      await assert.rejects(
+        readPrivateTextFile(join(sharedParent, "manifest.json"), 1024),
       );
 
       const target = join(root, "target");
