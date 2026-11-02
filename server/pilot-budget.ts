@@ -136,6 +136,16 @@ export async function reservePilotPart(
         throw unavailable();
       return Object.freeze({ status: "already-reserved" as const });
     }
+    // A grant is one activated session. Bound its total independently of the
+    // UTC-day budget so a midnight rollover cannot double a short session.
+    const grantUsage = (
+      await db.query(
+        "SELECT count(*)::int AS count FROM pilot_part_ledger WHERE account_id=$1 AND grant_id=$2",
+        [ACCOUNT, grantId],
+      )
+    ).rows[0]?.count;
+    if (!Number.isInteger(grantUsage) || grantUsage >= maxPartsPerDay)
+      throw unavailable();
     if (
       !(
         await db.query(

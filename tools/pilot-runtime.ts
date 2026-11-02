@@ -27,6 +27,7 @@ export type PilotLoopHalt =
   | "tick-limit"
   | "grant-expired"
   | "session-limit"
+  | "connection-lost"
   | "aborted"
   | "runtime-error"
   | PilotDispatchHaltReason;
@@ -383,6 +384,7 @@ export async function startPilotRuntime(input: {
   const forwardAbort = () => controller.abort();
   input.signal?.addEventListener("abort", forwardAbort, { once: true });
   let policyHalt: PilotDispatchHaltReason | undefined;
+  let transportFault = false;
   let connector: OwnedConnector | undefined;
   try {
     const key = await files.readPrivateKeyFile(keyPath);
@@ -399,7 +401,10 @@ export async function startPilotRuntime(input: {
         reconnectDelayMs: 5000,
         maxReconnectAttempts: 0,
       },
-      onTransportFault: () => controller.abort(),
+      onTransportFault: () => {
+        transportFault = true;
+        controller.abort();
+      },
       inbound: {
         accountId: grant.expectedAccountId!,
         allowedPeerIds: grant.allowedPeerIds,
@@ -436,7 +441,7 @@ export async function startPilotRuntime(input: {
           : createObserveProvider(),
       acquireOwnership: ownership.acquireConnectorOwnership,
     });
-    return await runPilotLoop({
+    const outcome = await runPilotLoop({
       connector,
       mode,
       grant,
@@ -448,6 +453,11 @@ export async function startPilotRuntime(input: {
       signal: controller.signal,
       haltReason: () => policyHalt,
     });
+    // The transport fault aborts the same controller as an operator stop.
+    // Report it as a safety failure so a lost connection never exits cleanly.
+    return transportFault && outcome.halt === "aborted"
+      ? { ...outcome, halt: "connection-lost" }
+      : outcome;
   } finally {
     input.signal?.removeEventListener("abort", forwardAbort);
     await pool.end().catch(() => {});

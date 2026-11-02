@@ -303,6 +303,13 @@ test("fault observation blocks dispatch locally before pool acquisition and lock
   const observed = fault("connection-lost");
   assert.equal(dispatchOwner.admitted, false);
   await assert.rejects(dispatchOwner.assertCurrent());
+  // Teardown must not close the owner row before the fault write commits.
+  let stopped = false;
+  const stopping = runtime.stop().then(() => {
+    stopped = true;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(stopped, false);
   gate.resolve({
     async query(text: string) {
       sql.push(text);
@@ -329,6 +336,8 @@ test("fault observation blocks dispatch locally before pool acquisition and lock
   assert.match(sql[faultWrite + 1], /INSERT INTO audit/);
   assert.equal(sql.at(-1), "COMMIT");
   assert.equal(dispatchOwner.admitted, false);
+  await stopping;
+  assert.equal(stopped, true);
   await runtime.stop();
 });
 test("late transport factory never starts SDK after stop, and close errors are sanitized", async () => {

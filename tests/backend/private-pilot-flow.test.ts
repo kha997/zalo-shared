@@ -19,6 +19,7 @@ import {
   runPilotLoop,
   type PilotConnector,
 } from "../../tools/pilot-runtime.js";
+import { G5_SESSION_LIMIT_MS } from "../../tools/g5-policy.js";
 
 const sentinelUid = "zalo-uid-pilot-1";
 const grant = (overrides: Partial<PilotGrant> = {}): PilotGrant =>
@@ -583,6 +584,37 @@ test("an exhausted daily quota blocks the next part without egress", async () =>
   }
 });
 
+test("one grant cannot exceed its part budget across a UTC day rollover", async () => {
+  const database = await isolatedDatabase();
+  try {
+    const transportSpy = transport();
+    const provider = createSdkProvider(
+      database.pool,
+      transportSpy,
+      owner(),
+      { grant: grant({ maxPartsPerDay: 1 }), now: () => new Date() },
+    );
+    const first = await seed(database.pool);
+    await prepare(database.pool, provider, first.mid);
+    await send(database.pool, provider, first.mid);
+    // A fresh day resets the UTC-day budget, but the activated grant must not
+    // regain parts. The interval is also cleared so only the grant cap can deny.
+    await database.pool.query(
+      "UPDATE pilot_send_budget SET day=day+1,last_reserved_at=now()-interval '10 seconds'",
+    );
+    const second = await seed(database.pool, { peer: "peer-b" });
+    await prepare(database.pool, provider, second.mid);
+    await assert.rejects(
+      send(database.pool, provider, second.mid),
+      ProviderNotDispatchedError,
+    );
+    assert.equal(transportSpy.calls.length, 1);
+    assert.equal(await ledgerCount(database.pool), 1);
+  } finally {
+    await database.close();
+  }
+});
+
 test("a text-only pilot refuses an outbound attachment before reservation or egress", async () => {
   const database = await isolatedDatabase();
   try {
@@ -594,6 +626,38 @@ test("a text-only pilot refuses an outbound attachment before reservation or egr
       { grant: grant(), textOnly: true, now: () => new Date() },
     );
     const { mid } = await seed(database.pool, { peer: "peer-a" });
+    const attachmentId = (
+      await database.pool.query(
+        "INSERT INTO attachments(account_id,name,mime,data,message_id) VALUES($1,'synthetic.png','image/png',$2,$3) RETURNING id",
+        [ACCOUNT, Buffer.from([0x89, 0x50, 0x4e, 0x47]), mid],
+      )
+    ).rows[0].id;
+    await database.pool.query(
+      "INSERT INTO delivery_parts(message_id,part,status,attachment_id) VALUES($1,1,'pending',$2)",
+      [mid, attachmentId],
+    );
+    await assert.rejects(
+      prepare(database.pool, provider, mid),
+      /Unsupported SDK media/,
+    );
+    assert.equal(transportSpy.calls.length, 0);
+    assert.equal(await ledgerCount(database.pool), 0);
+  } finally {
+    await database.close();
+  }
+});
+
+test("a pilot dispatch with no textOnly flag still refuses media by default", async () => {
+  const database = await isolatedDatabase();
+  try {
+    const transportSpy = transport();
+    const provider = createSdkProvider(
+      database.pool,
+      transportSpy,
+      owner(),
+      { grant: grant(), now: () => new Date() },
+    );
+    const { mid } = await seed(database.pool);
     const attachmentId = (
       await database.pool.query(
         "INSERT INTO attachments(account_id,name,mime,data,message_id) VALUES($1,'synthetic.png','image/png',$2,$3) RETURNING id",
@@ -735,10 +799,10 @@ test("a live session stops at the two-hour wall-clock limit", async () => {
     }),
     maxTicks: 10,
     tickMs: 0,
-    sessionLimitMs: 60 * 60 * 1000,
+    sessionLimitMs: G5_SESSION_LIMIT_MS,
     now: () => new Date(clock),
     sleep: async () => {
-      clock += 59 * 60 * 1000;
+      clock += 60 * 60 * 1000;
     },
   });
   assert.deepEqual(result, {
@@ -894,6 +958,49 @@ test("runtime entry refuses non-Linux hosts and incomplete private configuration
       startPilotRuntime(input as never),
       /Pilot runtime unavailable/,
     );
+});
+
+test("the live runtime refuses a policy-valid grant outside the G5 scope", async () => {
+  const { startPilotRuntime } = await import("../../tools/pilot-runtime.js");
+  const base = Date.now();
+  // Eight hours is valid for the generic pilot policy but exceeds the approved
+  // two-hour G5 session. The G5 refusal must happen before build identity,
+  // private key, session or database access.
+  const grant = observeGrant({
+    issuedAt: new Date(base - 1000).toISOString(),
+    expiresAt: new Date(base + 8 * 60 * 60 * 1000 - 1000).toISOString(),
+    maxPartsPerDay: 10,
+  });
+  const manifest = {
+    version: 1,
+    build: {
+      sourceCommit: grant.sourceCommit,
+      lockSha256: grant.lockSha256,
+      sdkIntegrity: grant.sdkIntegrity,
+    },
+    consent: {
+      consentRef: grant.ownerConsentRef,
+      notAfter: new Date(base + 9 * 60 * 60 * 1000).toISOString(),
+      expectedAccountId: sentinelUid,
+      allowedPurposes: ["observe"],
+      allowedPeerIds: ["peer-a"],
+      maxPartsPerDay: 10,
+      minIntervalMs: 2000,
+    },
+    grant,
+  };
+  await assert.rejects(
+    startPilotRuntime({
+      command: "run-observe",
+      manifest,
+      env: {
+        DATABASE_URL: "postgresql://synthetic:synthetic@127.0.0.1:1/synthetic",
+        PILOT_KEY_FILE: "/private/key",
+        PILOT_SESSION_FILE: "/private/session",
+      },
+    } as never),
+    /Pilot runtime unavailable/,
+  );
 });
 
 test("a mismatched purpose or unbounded configuration is refused before start", async () => {

@@ -365,6 +365,7 @@ test("matching live commands invoke the reviewed runner and return only safe out
 
 test("safety halts exit non-zero and expose only bounded counters", async () => {
   for (const halt of [
+    "connection-lost",
     "runtime-error",
     "already-reserved",
     "reservation-denied",

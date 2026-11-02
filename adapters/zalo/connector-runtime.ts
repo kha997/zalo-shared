@@ -149,6 +149,7 @@ export function createOwnedConnector(options: Options) {
     transport: Transport | undefined,
     provider: Provider | undefined,
     governedOwner: OwnershipHandle | undefined;
+  const faultWrites = new Set<Promise<void>>();
   let disposedFacade: Facade | undefined,
     disposedTransport: Transport | undefined;
   const cleanup = () => {
@@ -334,40 +335,45 @@ export function createOwnedConnector(options: Options) {
               maxPendingMedia: options.maxPendingMedia,
             });
           },
-          onFault: async (reason) => {
+          onFault: (reason) => {
             // Block dispatch synchronously; durable fault persistence may await a pool.
             gap = true;
             try {
               options.onTransportFault?.();
             } catch {}
-            const db = await options.pool.connect();
-            try {
-              await db.query("BEGIN");
-              await db.query("SET LOCAL statement_timeout='2000ms'");
-              // Hold the owner row until the gap write commits. A plain MVCC
-              // EXISTS could admit an old callback then overwrite a new owner.
-              const current = await db.query(
-                "SELECT account_id FROM connector_ownership WHERE account_id=$1 AND owner_id=$2 AND epoch=$3 AND phase IN ('reserved','active') FOR SHARE",
-                [ACCOUNT, owner!.token.ownerId, owner!.token.epoch],
-              );
-              if (current.rowCount) {
-                await recordProviderFault(db, reason);
-                await db.query(
-                  "INSERT INTO audit(account_id,action,target_id,metadata) VALUES($1,'connector.gap',$2,$3)",
-                  [
-                    ACCOUNT,
-                    owner!.token.ownerId,
-                    { epoch: owner!.token.epoch, reason },
-                  ],
+            const write = (async () => {
+              const db = await options.pool.connect();
+              try {
+                await db.query("BEGIN");
+                await db.query("SET LOCAL statement_timeout='2000ms'");
+                // Hold the owner row until the gap write commits. A plain MVCC
+                // EXISTS could admit an old callback then overwrite a new owner.
+                const current = await db.query(
+                  "SELECT account_id FROM connector_ownership WHERE account_id=$1 AND owner_id=$2 AND epoch=$3 AND phase IN ('reserved','active') FOR SHARE",
+                  [ACCOUNT, owner!.token.ownerId, owner!.token.epoch],
                 );
+                if (current.rowCount) {
+                  await recordProviderFault(db, reason);
+                  await db.query(
+                    "INSERT INTO audit(account_id,action,target_id,metadata) VALUES($1,'connector.gap',$2,$3)",
+                    [
+                      ACCOUNT,
+                      owner!.token.ownerId,
+                      { epoch: owner!.token.epoch, reason },
+                    ],
+                  );
+                }
+                await db.query("COMMIT");
+              } catch {
+                await db.query("ROLLBACK").catch(() => {});
+                throw unavailable();
+              } finally {
+                db.release();
               }
-              await db.query("COMMIT");
-            } catch {
-              await db.query("ROLLBACK").catch(() => {});
-              throw unavailable();
-            } finally {
-              db.release();
-            }
+            })();
+            faultWrites.add(write);
+            void write.catch(() => {}).finally(() => faultWrites.delete(write));
+            return write;
           },
         });
         if (terminal) {
@@ -430,6 +436,13 @@ export function createOwnedConnector(options: Options) {
       cancel?.();
       cleanup();
       governedOwner = undefined;
+      // A fault raised just before teardown must still be durable before the
+      // owner row is closed. Bound the wait so a dead pool cannot hang stop().
+      if (faultWrites.size)
+        await Promise.race([
+          Promise.allSettled([...faultWrites]),
+          new Promise<void>((resolve) => setTimeout(resolve, 3000)),
+        ]);
       await closeOwner();
     },
     async runOnce() {

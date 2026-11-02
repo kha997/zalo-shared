@@ -195,6 +195,7 @@ const COMPLETION_HALTS = new Set([
 ]);
 const KNOWN_HALTS = new Set([
   ...COMPLETION_HALTS,
+  "connection-lost",
   "runtime-error",
   "already-reserved",
   "reservation-denied",

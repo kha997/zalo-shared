@@ -22,7 +22,11 @@ export type PilotDispatchHaltReason =
 export interface PilotDispatchPolicy {
   readonly grant: PilotGrant;
   readonly reserve?: typeof reservePilotPart;
-  /** G5 media exclusion: outbound messages with attachments fail before reservation. */
+  /**
+   * G5 media exclusion: outbound messages with attachments fail before
+   * reservation. Omission fails closed; only an explicitly reviewed non-G5
+   * pilot may set this to false.
+   */
   readonly textOnly?: boolean;
   now?(): Date;
   onHalt?(reason: PilotDispatchHaltReason): void;
@@ -82,7 +86,7 @@ function readPilotPolicy(policy: PilotDispatchPolicy) {
     reserve: policy.reserve ?? reservePilotPart,
     now: policy.now ?? (() => new Date()),
     onHalt: policy.onHalt ?? (() => {}),
-    textOnly: policy.textOnly === true,
+    textOnly: policy.textOnly !== false,
     issuedAt,
     expiresAt,
   });
