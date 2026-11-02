@@ -361,6 +361,33 @@ test("an unknown runner halt never reaches operator-visible output", async () =>
   }
 });
 
+test("a non-string runner halt is a safety failure, not a success", async () => {
+  for (const halt of [
+    42,
+    null,
+    { reason: "grant-expired" },
+    new String("grant-expired"),
+  ]) {
+    const result = await runPilotCli({
+      argv: [
+        "run-observe",
+        "--manifest",
+        "/private/pilot/manifest.json",
+        "--acknowledge-pilot-risk",
+      ],
+      dependencies: {
+        readFile: async () => manifestText("observe"),
+        now: () => now,
+        runCommand: async () =>
+          ({ halt, ticks: 1 }) as unknown as never,
+      },
+    });
+    assert.equal(result.exitCode, 1);
+    assert.equal(JSON.parse(result.stdout!).gate, "runtime-error");
+    assert.equal(result.stdout!.includes("grant-expired"), false);
+  }
+});
+
 test("runner failures, missing manifests and policy-invalid live manifests fail closed", async () => {
   const runnerFailure = await runPilotCli({
     argv: [

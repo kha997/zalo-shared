@@ -1,4 +1,4 @@
-import { isAbsolute } from "node:path";
+import { dirname, isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 import { readPrivateTextFile } from "../server/private-pilot-files.js";
 import {
@@ -279,10 +279,16 @@ export async function runPilotCli(options: {
         ? (returned as PilotCommandOutcome)
         : undefined;
     const rawHalt =
-      outcome && typeof outcome.halt === "string" ? outcome.halt : undefined;
-    // Only the reviewed literals may reach the operator-visible gate. A future
-    // or corrupted reason is collapsed into the generic safety failure.
-    const halt = rawHalt !== undefined && KNOWN_HALTS.has(rawHalt) ? rawHalt : undefined;
+      outcome && "halt" in outcome
+        ? (outcome as { halt?: unknown }).halt
+        : undefined;
+    // Only the reviewed literals may reach the operator-visible gate. A
+    // non-string, future or corrupted reason is a safety failure, never an
+    // implicit success, and is collapsed into the generic gate.
+    const halt =
+      typeof rawHalt === "string" && KNOWN_HALTS.has(rawHalt)
+        ? rawHalt
+        : undefined;
     if (rawHalt !== undefined && halt === undefined)
       return {
         exitCode: 1,
@@ -359,6 +365,10 @@ async function liveBootstrap(input: {
       keyId: env.PILOT_KEY_ID ?? "v1",
     });
     const view = new files.PrivateQrFileView({ directory: viewDirectory });
+    // Validate the private destinations before ownership: a wrong session
+    // directory or QR view mode must not bump the epoch or quarantine state.
+    await files.ensurePrivateDirectory(dirname(sessionPath));
+    await files.ensurePrivateDirectory(viewDirectory);
     owner = await ownership.acquireConnectorOwnership(pool, {
       ownerLabel: "pilot-enrollment",
       onRevoked: () => controller.abort(),

@@ -42,6 +42,17 @@ A follow-up pass over the same slice raised seven issues; all are fixed and host
 
 Focused pilot/connector/worker suites 50/50 PASS; full local suite 266 tests, 264 PASS, 2 FAIL (only the Windows-only `vault.test.ts` mode assertions). Load p95 60.9/74.9/228.7/418.0 ms at 4/10/25/50; 200 clients 1791.4 ms; 500 FAIL at 4210.8 ms with zero request errors.
 
+## Follow-up after the third review (local PASS, hosted pending)
+
+An independent re-audit of `44b677f` found no P1 or introduced regression, with three residuals and one incomplete fix; all are addressed in the follow-up slice:
+
+- Session and QR view directories are validated (or created 0700) before bootstrap acquires ownership.
+- A non-string runner halt is a safety failure instead of an implicit success.
+- Publication re-checks the live transport and admission immediately before `COMMIT`; the remaining in-process/database race is documented and cannot dispatch because `provider.connected()` also requires a connected transport and admitted owner.
+- Observe mode passes the grant peer scope, and inbound re-checks the guard after the ownership await before persistence.
+
+Focused pilot/connector/worker suites 52/52 PASS; full local suite 268 tests, 266 PASS, 2 FAIL (only the Windows-only `vault.test.ts` mode assertions). Hosted CI is pending for this follow-up.
+
 ## Work in the committed head — private pilot contract
 
 - Expiring grant and Owner-consent scope validation, including build identity, bound account, peers, purposes, daily part budget and minimum interval.

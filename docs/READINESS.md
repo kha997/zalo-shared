@@ -27,17 +27,29 @@ A follow-up independent pass over the same slice raised seven additional issues;
 - A deferred destination now returns `processed:false`, so the main worker backs off instead of reclaiming the same row in a hot loop. The row and its parts remain `pending` and are never marked failed.
 - The CLI restricts the operator-visible `gate` to the reviewed halt literals and maps any unknown or corrupted runner string to `runtime-error`, so a future reason cannot leak identifiers to stdout.
 - `startPilotRuntime` now contains module loading and pool construction inside its single boundary error, matching the rest of the preflight.
-- QR bootstrap validates the private key, session and view paths before acquiring ownership, so a typo cannot bump the connector epoch or quarantine provider state.
+- QR bootstrap validates the private key, session envelope and both private directories (or creates them 0700) before acquiring ownership, so a wrong path or mode cannot bump the connector epoch or quarantine provider state.
 - The in-image build identity remains build-derived, not content-hashed: the trust anchor is the CI-built image digest recorded externally, and the runtime cannot attest its own provenance from inside the container. Deployment must pin that digest. Dry-run remains shape-only and intentionally reads no image file. This limitation is recorded in the review.
 
 Hosted [CI 41381303200](https://github.com/kha997/zalo-shared/actions/runs/41381303200) on `44b677f` passed both jobs: **266/266** unit checks, **2/2** guarded offline SDK checks, **9 browser cases + 1 explicit skip, 0 failed**, plus the pilot image job. The image identity was verified against the checked-out PR merge commit `e5fb987` and the connector lock; the inventory reported UID 65532, `zca-js@2.2.0`, `crypto-js@4.2.0`, no private files, no exposed ports and **0 HIGH/CRITICAL (0 fixable)**. Load p95 was **60.9/74.9/228.7/418.0 ms** at 4/10/25/50 clients and 108.8 ms for 50×50; 100/200-client p95 was 880.3/1791.4 ms; **500 clients FAIL** at 4210.8 ms. There were zero request errors and all mock queues drained. [Retained measurements](evidence/ci-pilot-third-review-results.json).
 
 Local evidence for the working slice: typecheck and both builds PASS; focused pilot/connector/worker suites **50/50** PASS; full local suite **266 tests, 264 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions that pass on Linux.
 
+### Follow-up review pass — local PASS, hosted pending
+
+An independent re-audit of `44b677f` found no P1 or introduced regression, with three residuals and one incomplete fix. They are fixed in the follow-up slice:
+
+- The session and QR view directories are validated (or created 0700) before bootstrap acquires ownership, not only when first written.
+- A non-string runner halt (`42`, `null`, an object, a boxed string) is now a safety failure; it previously fell through as absent and exited 0.
+- Publication re-checks the live transport and admission immediately before `COMMIT`, rolling back if the transport dropped during the round-trip. The in-process guard is not a database fence; the residual microsecond window is documented and cannot dispatch because `provider.connected()` also requires a connected transport and admitted owner.
+- Observe mode now passes the grant peer scope too, and inbound re-checks the guard after the ownership fence await and before persistence.
+
+Local evidence for the follow-up: typecheck and both builds PASS; focused pilot/connector/worker suites **52/52** PASS; full local suite **268 tests, 266 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions.
+
 | Claim | Status |
 |---|---|
 | Policy-halt exit, real dispatch path, peer-scoped claims, image build identity, self-peer rejection, TLS rule, boundary error | PASS locally and hosted at `a37935a` |
 | Exact-scope validation, scoped interrupted sweep, deferral backoff, CLI halt allowlist, preflight containment, bootstrap ordering | PASS locally and hosted at `44b677f` |
+| Non-string halt rejection, pre-ownership directory validation, commit-time publication re-check, observe scoping, post-fence inbound guard | PASS locally; hosted pending |
 | Four-staff browser acceptance and 4/10/25/50 capacity | PASS hosted; 500-client p95 FAIL |
 | Live send-test against a real account or peer | UNPROVEN — requires Owner activation |
 | Production readiness | NOT ESTABLISHED |

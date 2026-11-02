@@ -477,6 +477,53 @@ test("pilot publication refuses when provider state still requires reconciliatio
   await runtime.stop();
 });
 
+test("pilot publication rolls back when the transport drops during the round-trip", async () => {
+  const f = fixture();
+  const transport = {
+    status: "connected",
+    async start() {},
+    stop() {},
+    async sendText() {
+      return { status: "sent" as const, providerId: "synthetic" };
+    },
+  };
+  const statements: string[] = [];
+  const pool = {
+    async connect() {
+      return {
+        async query(text: string) {
+          statements.push(text);
+          if (text.includes("connector_ownership"))
+            return { rowCount: 1, rows: [{ account_id: ACCOUNT }] };
+          if (text.includes("UPDATE provider_state"))
+            return { rowCount: 1, rows: [{}] };
+          if (text.includes("INSERT INTO audit")) transport.status = "disconnected";
+          return { rowCount: 1, rows: [{}] };
+        },
+        release() {},
+      };
+    },
+    async query() {
+      return { rowCount: 0, rows: [] };
+    },
+  } as any;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool,
+    publishConnected: true,
+    createTransport: () => transport as any,
+  });
+  await assert.rejects(
+    runtime.start(),
+    (e) => e instanceof Error && e.message === "Connector runtime unavailable",
+  );
+  assert.equal(transport.status, "disconnected");
+  assert.equal(statements.includes("COMMIT"), false);
+  assert.equal(statements.at(-1), "ROLLBACK");
+  assert.equal(runtime.status, "blocked");
+  await runtime.stop();
+});
+
 test("the pilot guard stops inbound and dispatch once it fails", async () => {
   const f = fixture();
   let allowed = true;
@@ -518,6 +565,7 @@ test("the pilot guard stops inbound and dispatch once it fails", async () => {
   assert.equal(runtime.rejectedInbound, 1);
   assert.equal(connects, 0);
   assert.deepEqual(await runtime.runOnce(), { processed: false });
+  assert.deepEqual(await runtime.runMediaOnce(), { processed: false });
   assert.equal(sends, 0);
   assert.equal(runtime.status, "active");
   await runtime.stop();

@@ -55,9 +55,25 @@ Local evidence after the fixes: typecheck and both builds pass; focused pilot/co
 | P3.8 | The interrupted-`processing` sweep was account-wide even for a peer-scoped worker, so a pilot could quarantine out-of-scope staff mail it never dispatched. | **Fixed.** A scoped worker sweeps only direct threads in its exact peer set; out-of-scope rows remain `processing` and are recovered by the next unscoped owner. A regression seeds one in-scope and one older out-of-scope interrupted row and proves only the in-scope row becomes `unknown`. |
 | P3.9 | `{ peers: [] }` silently disabled scoping and fell back to the account-wide claim. | **Fixed.** `runWorkerOnce` validates a provided scope before acquiring the connection or advisory lock: empty, duplicate, malformed, non-array or missing `peers` throws. Regression covers six malformed shapes and proves the pending row is untouched. |
 | P3.10 | The CLI echoed the runner's `halt` string directly, so a future reason containing identifiers would reach stdout. | **Fixed.** Only the reviewed halt literals may be emitted; any other string is collapsed to `runtime-error` and never echoed. Regression includes a halt containing the bound account and a cookie-shaped string. |
-| P2.4 follow-up | QR bootstrap acquired connector ownership before validating the private key and session paths, so a typo bumped the epoch and could quarantine provider state. | **Fixed.** `readPrivateKeyFile`, `PrivateSessionFile` and `PrivateQrFileView` are constructed before `acquireConnectorOwnership`; ownership is taken only after all three validate. The enrollment path itself remains covered by the QR bootstrap suite; this ordering is structural and has no dedicated Linux/DB regression. |
+| P2.4 follow-up | QR bootstrap acquired connector ownership before validating the private key and session paths, so a typo bumped the epoch and could quarantine provider state. | **Fixed.** `readPrivateKeyFile`, `PrivateSessionFile` and `PrivateQrFileView` are constructed, and the session and view directories are validated (or created 0700) before `acquireConnectorOwnership`; ownership is taken only after those checks. The enrollment path itself remains covered by the QR bootstrap suite; this ordering is structural and has no dedicated Linux/DB regression. |
 
 Local evidence for the third pass: typecheck and both builds PASS; focused pilot/connector/worker suites **50/50** PASS; full local suite **266 tests, 264 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions. Hosted PASS at `44b677f`/41381303200: 266/266 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip, pilot dry-run/scan and identity `e5fb987` verified. Full-suite and load details are recorded in [readiness](../READINESS.md).
+
+### Follow-up pass after the third review
+
+An independent reviewer re-audited `44b677f` and reported no P1 or introduced regression, with three residual issues and one incomplete fix; all are addressed here.
+
+| Finding | Disposition |
+| --- | --- |
+| Bootstrap validation was incomplete: session and QR view directories were only checked when first written, after ownership. | **Fixed.** The session directory and view directory are now validated (or created 0700) before `acquireConnectorOwnership`. |
+| A non-string runner halt (for example `42`, `null` or a boxed string) was treated as absent and exited 0. | **Fixed.** Only a string in the reviewed literal set is accepted; any other defined value exits 1 with `runtime-error`. Regression covers number, null, object and boxed string. |
+| Publication checked the live transport only before the `UPDATE`, not at commit. | **Mitigated.** The transport status and admission are re-checked after the audit row and immediately before `COMMIT`, rolling back on a disconnect. The in-process guard still cannot be a database fence: a disconnect in the final microseconds can commit a stale `connected` row, but `provider.connected()` also requires a connected transport and admitted owner, so dispatch remains blocked and a later shutdown/fault returns the state to disconnected/quarantined. |
+| Observe mode passed no dispatch scope, so an accidental `runOnce` would perform the account-wide interrupted sweep. | **Fixed.** Both pilot modes pass the grant peer scope; observe still constructs no dispatching provider. |
+| Inbound could persist across the grant expiry during the `assertCurrent` await. | **Fixed.** The guard is re-checked after the fence await and before journal persistence. |
+
+Residual, accepted: if the deferred-bookkeeping transaction itself fails after the provider refused dispatch, the row can remain `processing`; the next owning sweep quarantines it as `unknown`. That is fail-closed (no resend) but can mark a never-sent message ambiguous. A conversation whose peer/type metadata changes after enqueue is likewise recovered by the next unscoped owner rather than the scoped pilot.
+
+Local evidence after this follow-up: typecheck and both builds PASS; focused pilot/connector/worker suites **52/52** PASS; full local suite is recorded in [readiness](../READINESS.md).
 
 ## Residual risks and unproven claims
 

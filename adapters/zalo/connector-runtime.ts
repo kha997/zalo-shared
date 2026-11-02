@@ -235,6 +235,10 @@ export function createOwnedConnector(options: Options) {
         status: "connected",
         ownerLabel: options.ownerLabel,
       });
+      // Re-check the live transport immediately before commit: the guard is
+      // in-process, so a disconnect during the round-trip must roll back.
+      if (transport.status !== "connected" || !admissible())
+        throw unavailable();
       await db.query("COMMIT");
     } catch {
       await db.query("ROLLBACK").catch(() => {});
@@ -300,6 +304,11 @@ export function createOwnedConnector(options: Options) {
               return;
             }
             await assertCurrent();
+            // The fence await can cross the grant expiry; re-check before persistence.
+            if (!guardPasses()) {
+              rejectedInbound++;
+              return;
+            }
             if (
               inboundPeers &&
               !admitPilotInbound(

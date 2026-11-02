@@ -370,9 +370,10 @@ export async function startPilotRuntime(input: {
           return false;
         }
       },
-      ...(mode === "send-test"
-        ? { dispatchPeers: grant.allowedPeerIds }
-        : {}),
+      // Both modes keep any accidental worker claim inside the grant peers;
+      // observe never constructs a dispatching provider, but its interrupted
+      // sweep must also stay scoped.
+      dispatchPeers: grant.allowedPeerIds,
       createFacade: () =>
         facadeModule.createBoundSdkFacade({
           sessionStore,
