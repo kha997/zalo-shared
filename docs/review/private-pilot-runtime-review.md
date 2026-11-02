@@ -73,11 +73,11 @@ An independent reviewer re-audited `44b677f` and reported no P1 or introduced re
 
 Residual, accepted: if the deferred-bookkeeping transaction itself fails after the provider refused dispatch, the row can remain `processing`; the next owning sweep quarantines it as `unknown`. That is fail-closed (no resend) but can mark a never-sent message ambiguous. A conversation whose peer/type metadata changes after enqueue is likewise recovered by the next unscoped owner rather than the scoped pilot.
 
-Local evidence after this follow-up: typecheck and both builds PASS; focused pilot/connector/worker suites **52/52** PASS; full local suite is recorded in [readiness](../READINESS.md).
+Local evidence after this follow-up: typecheck and both builds PASS; focused pilot/connector/worker suites **52/52** PASS; full local suite **268 tests, 266 PASS, 2 FAIL** (the known Windows-only `vault.test.ts` mode assertions). Hosted PASS at `cc6614c`/41382664808: 268/268 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip, pilot dry-run admitted, image identity `fee2b21` verified, UID 65532, no ports/private files, 0 HIGH/CRITICAL. Load p95 42.5/54.4/150.9/273.9 ms at 4/10/25/50, 80.2 ms at 50×50, 657.9/993.4 ms at 100/200, 500 FAIL at 2370.5 ms with zero errors. Full details are recorded in [readiness](../READINESS.md).
 
 ## Residual risks and unproven claims
 
-- Hosted CI at `a37935a`/41379964911 passed 258/258 units, and `44b677f`/41381303200 passed 266/266; the two Windows-only local mode failures do not reproduce on Linux.
+- Hosted CI at `a37935a`/41379964911 passed 258/258 units, `44b677f`/41381303200 passed 266/266 and `cc6614c`/41382664808 passed 268/268; the two Windows-only local mode failures do not reproduce on Linux.
 - The build identity is derived at image build from the commit, connector lock and SDK integrity, but it is not a cryptographic attestation of the image contents. Deploy only the CI-built digest recorded in the pipeline, not a locally rebuilt image.
 - Dry-run validates the manifest shape only; it intentionally does not read `/app/build-identity.json`, import the SDK, open a database or touch the network.
 - A scoped worker leaves out-of-scope interrupted `processing` rows for the next unscoped owner. If a pilot is the only process running for the whole window, those rows stay `processing` until it exits; they are never retried by the pilot.

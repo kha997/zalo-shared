@@ -1,6 +1,6 @@
 # Implementation roadmap and execution ledger
 
-> Current status (2026-11-02): offline engineering and the private-pilot harness passed hosted CI at `44b677f`/41381303200 (266/266 units, 2/2 SDK guards, 9 browser cases + 1 skip, pilot image scan). See [READINESS.md](../READINESS.md) for current PASS/FAIL/UNPROVEN evidence. This ledger is historical; live-account activation and production remain explicit Owner gates.
+> Current status (2026-11-02): offline engineering and the private-pilot harness passed hosted CI at `cc6614c`/41382664808 (268/268 units, 2/2 SDK guards, 9 browser cases + 1 skip, pilot image scan). See [READINESS.md](../READINESS.md) for current PASS/FAIL/UNPROVEN evidence. This ledger is historical; live-account activation and production remain explicit Owner gates.
 
 Plan date 2026-10-27. Binding spec docs/DESIGN.md; API docs/API.md. User explicitly delegates architecture and subagent coordination; no design check-in gates. Worktree `/workspace/zalo-shared-dev`, branch `feat/shared-inbox`, base `787777e`.
 

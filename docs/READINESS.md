@@ -34,7 +34,7 @@ Hosted [CI 41381303200](https://github.com/kha997/zalo-shared/actions/runs/41381
 
 Local evidence for the working slice: typecheck and both builds PASS; focused pilot/connector/worker suites **50/50** PASS; full local suite **266 tests, 264 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions that pass on Linux.
 
-### Follow-up review pass — local PASS, hosted pending
+### Follow-up review pass — hosted PASS
 
 An independent re-audit of `44b677f` found no P1 or introduced regression, with three residuals and one incomplete fix. They are fixed in the follow-up slice:
 
@@ -45,11 +45,13 @@ An independent re-audit of `44b677f` found no P1 or introduced regression, with 
 
 Local evidence for the follow-up: typecheck and both builds PASS; focused pilot/connector/worker suites **52/52** PASS; full local suite **268 tests, 266 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions.
 
+Hosted [CI 41382664808](https://github.com/kha997/zalo-shared/actions/runs/41382664808) on `cc6614c` passed both jobs: **268/268** unit checks, **2/2** guarded offline SDK checks, **9 browser cases + 1 explicit skip, 0 failed**, all durability/restart/restore/monitoring/image gates, and the pilot job. The dry-run was admitted; the image identity was verified against the checked-out PR merge commit `fee2b21` and the connector lock; the inventory reported UID 65532, `zca-js@2.2.0`, `crypto-js@4.2.0`, no private files, no exposed ports and **0 HIGH/CRITICAL (0 fixable)**. Load p95 was **42.5/54.4/150.9/273.9 ms** at 4/10/25/50 clients and 80.2 ms for 50×50; 100/200-client p95 was 657.9/993.4 ms; **500 clients FAIL** at 2370.5 ms. There were zero request errors and all mock queues drained. The 200-client result is run-dependent (it failed in both earlier runs), so no stable 200-seat or provider capacity is claimed. [Retained measurements](evidence/ci-pilot-followup-results.json).
+
 | Claim | Status |
 |---|---|
 | Policy-halt exit, real dispatch path, peer-scoped claims, image build identity, self-peer rejection, TLS rule, boundary error | PASS locally and hosted at `a37935a` |
 | Exact-scope validation, scoped interrupted sweep, deferral backoff, CLI halt allowlist, preflight containment, bootstrap ordering | PASS locally and hosted at `44b677f` |
-| Non-string halt rejection, pre-ownership directory validation, commit-time publication re-check, observe scoping, post-fence inbound guard | PASS locally; hosted pending |
+| Non-string halt rejection, pre-ownership directory validation, commit-time publication re-check, observe scoping, post-fence inbound guard | PASS locally and hosted at `cc6614c` |
 | Four-staff browser acceptance and 4/10/25/50 capacity | PASS hosted; 500-client p95 FAIL |
 | Live send-test against a real account or peer | UNPROVEN — requires Owner activation |
 | Production readiness | NOT ESTABLISHED |

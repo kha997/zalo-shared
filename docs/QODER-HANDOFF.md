@@ -42,7 +42,7 @@ A follow-up pass over the same slice raised seven issues; all are fixed and host
 
 Focused pilot/connector/worker suites 50/50 PASS; full local suite 266 tests, 264 PASS, 2 FAIL (only the Windows-only `vault.test.ts` mode assertions). Load p95 60.9/74.9/228.7/418.0 ms at 4/10/25/50; 200 clients 1791.4 ms; 500 FAIL at 4210.8 ms with zero request errors.
 
-## Follow-up after the third review (local PASS, hosted pending)
+## Follow-up after the third review (hosted PASS)
 
 An independent re-audit of `44b677f` found no P1 or introduced regression, with three residuals and one incomplete fix; all are addressed in the follow-up slice:
 
@@ -51,7 +51,7 @@ An independent re-audit of `44b677f` found no P1 or introduced regression, with 
 - Publication re-checks the live transport and admission immediately before `COMMIT`; the remaining in-process/database race is documented and cannot dispatch because `provider.connected()` also requires a connected transport and admitted owner.
 - Observe mode passes the grant peer scope, and inbound re-checks the guard after the ownership await before persistence.
 
-Focused pilot/connector/worker suites 52/52 PASS; full local suite 268 tests, 266 PASS, 2 FAIL (only the Windows-only `vault.test.ts` mode assertions). Hosted CI is pending for this follow-up.
+Focused pilot/connector/worker suites 52/52 PASS; full local suite 268 tests, 266 PASS, 2 FAIL (only the Windows-only `vault.test.ts` mode assertions). Hosted [CI 41382664808](https://github.com/kha997/zalo-shared/actions/runs/41382664808) on `cc6614c` passed both jobs: **268/268** unit checks, **2/2** guarded SDK checks, **9 browser cases + 1 skip, 0 failed**, pilot dry-run/scan with image identity `fee2b21`, UID 65532, no ports/private files and 0 HIGH/CRITICAL. Load p95 42.5/54.4/150.9/273.9 ms at 4/10/25/50, 80.2 ms for 50×50, 657.9/993.4 ms at 100/200; 500 FAIL at 2370.5 ms with zero request errors. The 200-client result varies across runs, so no stable 200-seat or provider capacity is claimed.
 
 ## Work in the committed head — private pilot contract
 
