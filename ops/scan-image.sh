@@ -11,15 +11,16 @@ tar -xzf "$work/trivy.tar.gz" -C "$work" trivy
 docker save "$image" -o "$work/image.tar"
 "$work/trivy" --version
 "$work/trivy" image --input "$work/image.tar" --scanners vuln --severity HIGH,CRITICAL --format json --output docs/evidence/container-vulnerabilities.json --exit-code 0
-python3 - <<'PY'
-import json
+python3 - "$image" <<'PY'
+import json, sys
 from pathlib import Path
+image=sys.argv[1]
 report=json.loads(Path('docs/evidence/container-vulnerabilities.json').read_text())
 findings=[]
 for result in report.get('Results',[]):
  for v in result.get('Vulnerabilities',[]):
   findings.append({'target':result.get('Target'),'id':v.get('VulnerabilityID'),'package':v.get('PkgName'),'installed':v.get('InstalledVersion'),'fixed':v.get('FixedVersion'),'severity':v.get('Severity'),'url':v.get('PrimaryURL')})
-summary={'scanner':'Trivy0.76.1','highCriticalCount':len(findings),'fixableHighCriticalCount':sum(bool(x['fixed']) for x in findings),'findings':findings}
+summary={'scanner':'Trivy0.76.1','image':image,'highCriticalCount':len(findings),'fixableHighCriticalCount':sum(bool(x['fixed']) for x in findings),'findings':findings}
 Path('docs/evidence/container-scan-summary.json').write_text(json.dumps(summary,indent=2)+'\n')
 print(json.dumps(summary))
 if summary['highCriticalCount']: raise SystemExit('High/critical image vulnerabilities remain')

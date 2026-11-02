@@ -38,11 +38,19 @@ services:
     # DATABASE_URL in the private env file must be a postgres URL; a
     # non-loopback database host also requires sslmode=require, verify-ca or
     # verify-full.
-    networks: [pilot-private]
+    #
+    # pilot-db is the application's internal database network. It has no
+    # egress by itself, so the connector joins a second, non-internal network
+    # for provider TLS. Never publish PostgreSQL or attach it to pilot-egress.
+    # For a remote database, point pilot-db at a network that can reach it.
+    networks: [pilot-db, pilot-egress]
     # Live commands additionally require --acknowledge-pilot-risk and the
     # matching unexpired grant. Example:
     #   docker compose run --rm pilot-connector \
     #     dist/connector/tools/pilot-connector.js run-observe --acknowledge-pilot-risk
     command: ["dist/connector/tools/pilot-connector.js", "dry-run"]
 networks:
-  pilot-private:
+  pilot-db:
+    external: true
+    name: ${PILOT_DB_NETWORK:?Set the application private database network name}
+  pilot-egress:
