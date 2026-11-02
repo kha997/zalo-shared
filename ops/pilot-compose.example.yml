@@ -1,0 +1,45 @@
+# Example only. Do not place secrets in this file or commit a filled copy.
+# The pilot connector is a separate, intentionally SDK-bearing workload with no
+# published ports and no automatic restart. Image default is dry-run.
+name: zalo-shared-pilot
+services:
+  pilot-connector:
+    image: ${PILOT_CONNECTOR_IMAGE:?Build ops/Dockerfile.connector and set its tag}
+    init: true
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,size=16m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "65532:65532"
+    env_file:
+      - ${PILOT_ENV_FILE:?Private env file outside the repository}
+    environment:
+      NODE_ENV: production
+      PILOT_MANIFEST: /run/pilot/manifest.json
+      PILOT_KEY_FILE: /run/pilot/session.key
+      PILOT_SESSION_FILE: /run/pilot/state/session.enc
+      PILOT_VIEW_DIR: /run/pilot/state/view
+    volumes:
+      - type: bind
+        source: ${PILOT_MANIFEST_FILE:?Private owner-only manifest file}
+        target: /run/pilot/manifest.json
+        read_only: true
+      - type: bind
+        source: ${PILOT_KEY_FILE:?Private owner-only session key}
+        target: /run/pilot/session.key
+        read_only: true
+      - type: bind
+        source: ${PILOT_STATE_DIR:?Private state directory for session.enc and local QR view}
+        target: /run/pilot/state
+    # No published ports. The connector needs outbound TLS to the provider;
+    # host-level egress policy remains an Owner operating decision.
+    networks: [pilot-private]
+    # Live commands additionally require --acknowledge-pilot-risk and the
+    # matching unexpired grant. Example:
+    #   docker compose run --rm pilot-connector \
+    #     dist/connector/tools/pilot-connector.js run-observe --acknowledge-pilot-risk
+    command: ["dist/connector/tools/pilot-connector.js", "dry-run"]
+networks:
+  pilot-private:

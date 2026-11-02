@@ -32,11 +32,17 @@ export type PilotCliResult = Readonly<{
   stderr?: string;
 }>;
 
+export type PilotCommandOutcome = Readonly<{
+  halt?: string;
+  ticks?: number;
+  rejectedInbound?: number;
+}>;
+
 export type PilotCommandRunner = (input: {
   command: Exclude<PilotCommand, "dry-run">;
   manifest: PilotManifest;
   env: Record<string, string | undefined>;
-}) => Promise<void>;
+}) => Promise<void | PilotCommandOutcome>;
 
 export type PilotCliDependencies = Readonly<{
   readFile?: (path: string) => Promise<string>;
@@ -166,12 +172,26 @@ export function parsePilotManifest(text: string, now: Date): PilotManifest {
   }
 }
 
+const SAFETY_HALTS = new Set([
+  "runtime-error",
+  "already-reserved",
+  "reservation-denied",
+  "dispatch-uncertain",
+]);
+const counter = (value: unknown) =>
+  Number.isInteger(value) && (value as number) >= 0
+    ? (value as number)
+    : undefined;
+
 function safeOutcome(
   command: PilotCommand,
   ok: boolean,
   gate: string,
   manifest?: PilotManifest,
+  outcome?: PilotCommandOutcome,
 ): string {
+  const ticks = counter(outcome?.ticks);
+  const rejectedInbound = counter(outcome?.rejectedInbound);
   return JSON.stringify({
     command,
     ok,
@@ -179,6 +199,8 @@ function safeOutcome(
     ...(manifest
       ? { purpose: manifest.grant.purpose, expiresAt: manifest.grant.expiresAt }
       : {}),
+    ...(ticks !== undefined ? { ticks } : {}),
+    ...(rejectedInbound !== undefined ? { rejectedInbound } : {}),
   });
 }
 
@@ -237,14 +259,25 @@ export async function runPilotCli(options: {
     };
 
   try {
-    await options.dependencies.runCommand({
+    const returned = await options.dependencies.runCommand({
       command,
       manifest,
       env,
     });
+    const outcome =
+      returned !== null && typeof returned === "object"
+        ? (returned as PilotCommandOutcome)
+        : undefined;
+    const halt =
+      outcome && typeof outcome.halt === "string" ? outcome.halt : undefined;
+    if (halt && SAFETY_HALTS.has(halt))
+      return {
+        exitCode: 1,
+        stdout: safeOutcome(command, false, halt, manifest, outcome),
+      };
     return {
       exitCode: 0,
-      stdout: safeOutcome(command, true, "completed", manifest),
+      stdout: safeOutcome(command, true, halt ?? "completed", manifest, outcome),
     };
   } catch (error) {
     const gate =
@@ -307,6 +340,7 @@ async function liveBootstrap(input: {
     const sessionStore = new files.PrivateSessionFile({
       path: sessionPath,
       key,
+      keyId: env.PILOT_KEY_ID ?? "v1",
     });
     const view = new files.PrivateQrFileView({ directory: viewDirectory });
     await qr.bootstrapPilotSession({
@@ -325,6 +359,30 @@ async function liveBootstrap(input: {
   }
 }
 
+async function liveCommand(input: {
+  command: Exclude<PilotCommand, "dry-run">;
+  manifest: PilotManifest;
+  env: Record<string, string | undefined>;
+}) {
+  if (input.command === "bootstrap") return liveBootstrap(input);
+  const runtime = await import("./pilot-runtime.js");
+  const controller = new AbortController();
+  const onSignal = () => controller.abort();
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+  try {
+    return await runtime.startPilotRuntime({
+      command: input.command,
+      manifest: input.manifest,
+      env: input.env,
+      signal: controller.signal,
+    });
+  } finally {
+    process.removeListener("SIGINT", onSignal);
+    process.removeListener("SIGTERM", onSignal);
+  }
+}
+
 export async function main(
   argv: readonly string[] = process.argv.slice(2),
   env: NodeJS.ProcessEnv = process.env,
@@ -332,7 +390,7 @@ export async function main(
   const result = await runPilotCli({
     argv,
     env,
-    dependencies: { runCommand: liveBootstrap },
+    dependencies: { runCommand: liveCommand },
   });
   if (result.stdout) process.stdout.write(`${result.stdout}\n`);
   if (result.stderr) process.stderr.write(`${result.stderr}\n`);

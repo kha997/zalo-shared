@@ -2,11 +2,28 @@ import type pg from "pg";
 import { prepareMedia, type MediaInput } from "./media.js";
 import { ACCOUNT } from "../../server/db.js";
 import {
+  reservePilotPart,
+  type PilotReservation,
+} from "../../server/pilot-budget.js";
+import type { PilotGrant } from "../../server/pilot-policy.js";
+import {
   ProviderNotDispatchedError,
   type Provider,
 } from "../../server/worker.js";
 type Delivery =
   { status: "sent"; providerId: string } | { status: "failed" | "unknown" };
+export type PilotDispatchHaltReason =
+  | "grant-expired"
+  | "already-reserved"
+  | "reservation-denied"
+  | "dispatch-uncertain";
+/** Send-test admission: direct allowlisted peers, fresh grant, reserve before egress. */
+export interface PilotDispatchPolicy {
+  readonly grant: PilotGrant;
+  readonly reserve?: typeof reservePilotPart;
+  now?(): Date;
+  onHalt?(reason: PilotDispatchHaltReason): void;
+}
 export interface TextTransport {
   sendAttachment?(
     input: MediaInput,
@@ -22,12 +39,76 @@ export interface TextTransport {
     { status: "sent"; providerId: string } | { status: "failed" | "unknown" }
   >;
 }
+const pilotUnavailable = () => new Error("Pilot dispatch unavailable");
+const pilotId = /^[A-Za-z0-9_-]{1,200}$/;
+function readPilotPolicy(policy: PilotDispatchPolicy) {
+  const grant = policy?.grant;
+  if (
+    !grant ||
+    grant.version !== 1 ||
+    grant.purpose !== "send-test" ||
+    typeof grant.expectedAccountId !== "string" ||
+    !pilotId.test(grant.expectedAccountId) ||
+    !Array.isArray(grant.allowedPeerIds) ||
+    grant.allowedPeerIds.length < 1 ||
+    grant.allowedPeerIds.length > 4 ||
+    !grant.allowedPeerIds.every((peer) => pilotId.test(peer)) ||
+    new Set(grant.allowedPeerIds).size !== grant.allowedPeerIds.length ||
+    !Number.isFinite(Date.parse(grant.issuedAt)) ||
+    !Number.isFinite(Date.parse(grant.expiresAt))
+  )
+    throw pilotUnavailable();
+  if (
+    policy.reserve !== undefined &&
+    typeof policy.reserve !== "function"
+  )
+    throw pilotUnavailable();
+  if (policy.now !== undefined && typeof policy.now !== "function")
+    throw pilotUnavailable();
+  if (policy.onHalt !== undefined && typeof policy.onHalt !== "function")
+    throw pilotUnavailable();
+  const issuedAt = Date.parse(grant.issuedAt);
+  const expiresAt = Date.parse(grant.expiresAt);
+  if (expiresAt <= issuedAt) throw pilotUnavailable();
+  return Object.freeze({
+    grant,
+    peers: new Set(grant.allowedPeerIds),
+    reserve: policy.reserve ?? reservePilotPart,
+    now: policy.now ?? (() => new Date()),
+    onHalt: policy.onHalt ?? (() => {}),
+    issuedAt,
+    expiresAt,
+  });
+}
+type PilotDispatch = ReturnType<typeof readPilotPolicy>;
+function fresh(dispatch: PilotDispatch) {
+  let current: unknown;
+  try {
+    current = dispatch.now();
+  } catch {
+    return false;
+  }
+  const now = current instanceof Date ? current.getTime() : NaN;
+  return (
+    Number.isFinite(now) &&
+    now < dispatch.expiresAt &&
+    now + 30_000 >= dispatch.issuedAt
+  );
+}
+function halt(dispatch: PilotDispatch, reason: PilotDispatchHaltReason) {
+  try {
+    dispatch.onHalt(reason);
+  } catch {}
+}
+
 /** Explicit injected development bridge; never exposes or authenticates SDK sessions. */
 export function createSdkProvider(
   pool: pg.Pool,
   transport: TextTransport,
   ownership?: { readonly admitted: boolean; assertCurrent(): Promise<void> },
+  pilot?: PilotDispatchPolicy,
 ): Provider {
+  const dispatch = pilot ? readPilotPolicy(pilot) : undefined;
   let prepared:
     | {
         id: string;
@@ -93,6 +174,17 @@ export function createSdkProvider(
         m.text.length > 10000
       )
         throw new Error("Unsupported SDK message");
+      if (dispatch) {
+        if (!fresh(dispatch)) {
+          halt(dispatch, "grant-expired");
+          throw new ProviderNotDispatchedError();
+        }
+        if (
+          m.provider_thread_type !== 0 ||
+          !dispatch.peers.has(m.provider_thread_id)
+        )
+          throw new Error("Pilot destination denied");
+      }
       const media = new Map<number, MediaInput>();
       if (m.attachments > 0) {
         if (!transport.sendAttachment) throw new Error("Unsupported SDK media");
@@ -172,6 +264,45 @@ export function createSdkProvider(
         }
         if (!ownership.admitted) throw new ProviderNotDispatchedError();
       }
+      if (dispatch) {
+        if (!fresh(dispatch)) {
+          halt(dispatch, "grant-expired");
+          throw new ProviderNotDispatchedError();
+        }
+        // The caller-supplied client must be in autocommit: the reservation
+        // transaction is committed before egress and must not swallow caller work.
+        const client = db ?? (await pool.connect().catch(() => undefined));
+        if (!client) throw new ProviderNotDispatchedError();
+        let reservation: PilotReservation;
+        try {
+          await client.query("BEGIN");
+          reservation = await dispatch.reserve(client, dispatch.grant, {
+            messageId: id,
+            part,
+            peerId: prepared.peer,
+            threadType: 0,
+          });
+          await client.query("COMMIT");
+        } catch {
+          await client.query("ROLLBACK").catch(() => {});
+          halt(dispatch, "reservation-denied");
+          throw new ProviderNotDispatchedError();
+        } finally {
+          if (!db) client.release();
+        }
+        if (reservation.status !== "reserved") {
+          halt(dispatch, "already-reserved");
+          throw new ProviderNotDispatchedError();
+        }
+        if (ownership) {
+          try {
+            await ownership.assertCurrent();
+          } catch {
+            throw new ProviderNotDispatchedError();
+          }
+          if (!ownership.admitted) throw new ProviderNotDispatchedError();
+        }
+      }
       const input = prepared.media.get(part);
       const result =
         part === 0
@@ -191,14 +322,19 @@ export function createSdkProvider(
         try {
           await ownership.assertCurrent();
         } catch {
+          if (dispatch) halt(dispatch, "dispatch-uncertain");
           throw new Error("Provider execution uncertain");
         }
-        if (!ownership.admitted)
+        if (!ownership.admitted) {
+          if (dispatch) halt(dispatch, "dispatch-uncertain");
           throw new Error("Provider execution uncertain");
+        }
       }
       if (result.status === "failed") throw new ProviderNotDispatchedError();
-      if (result.status !== "sent")
+      if (result.status !== "sent") {
+        if (dispatch) halt(dispatch, "dispatch-uncertain");
         throw new Error("Provider execution uncertain");
+      }
       return result.providerId;
     },
     releaseMessage(id) {

@@ -43,6 +43,8 @@ interface Options {
     transport: Transport,
     owner: OwnershipHandle,
   ) => Provider;
+  /** Pilot-only: persist inbound only for the bound account and these exact direct peers. */
+  inbound?: { accountId: string; allowedPeerIds: readonly string[] };
   acquireOwnership?: typeof acquireConnectorOwnership;
   transportOptions?: Pick<
     TransportOptions,
@@ -53,8 +55,49 @@ interface Options {
   >;
 }
 const unavailable = () => new Error("Connector runtime unavailable");
+const peerId = /^[A-Za-z0-9_-]{1,200}$/;
+function readInboundPolicy(value: Options["inbound"]) {
+  if (value === undefined) return undefined;
+  const peers = value?.allowedPeerIds;
+  if (
+    !value ||
+    typeof value.accountId !== "string" ||
+    !peerId.test(value.accountId) ||
+    !Array.isArray(peers) ||
+    peers.length < 1 ||
+    peers.length > 4 ||
+    !peers.every((peer) => typeof peer === "string" && peerId.test(peer)) ||
+    new Set(peers).size !== peers.length
+  )
+    throw unavailable();
+  return Object.freeze({
+    ownAccountId: value.accountId,
+    peers: new Set(peers),
+  });
+}
+/** Inbound content from any other direct peer, group or mismatched sender is dropped unpersisted. */
+export function admitPilotInbound(
+  peers: ReadonlySet<string>,
+  ownAccountId: string,
+  event: {
+    threadType: 0 | 1;
+    threadId: string;
+    senderId: string;
+    isSelf: boolean;
+  },
+) {
+  return (
+    event.threadType === 0 &&
+    peers.has(event.threadId) &&
+    (event.isSelf === true
+      ? event.senderId === ownAccountId
+      : event.senderId === event.threadId)
+  );
+}
 /** Injected, single-lifetime connector. No SDK import, login default, executable or live switch. */
 export function createOwnedConnector(options: Options) {
+  const inboundPeers = readInboundPolicy(options.inbound);
+  let rejectedInbound = 0;
   let status: "stopped" | "starting" | "active" | "blocked" = "stopped";
   let gap = false;
   let terminal = false,
@@ -158,6 +201,17 @@ export function createOwnedConnector(options: Options) {
           captureMedia: !!options.mediaCipher,
           onInbound: async (event) => {
             await assertCurrent();
+            if (
+              inboundPeers &&
+              !admitPilotInbound(
+                inboundPeers.peers,
+                inboundPeers.ownAccountId,
+                event,
+              )
+            ) {
+              rejectedInbound++;
+              return;
+            }
             await ingestProviderEvent(options.pool, event, {
               owner: owner!.token,
               mediaCipher: options.mediaCipher,
@@ -308,5 +362,9 @@ export function createOwnedConnector(options: Options) {
     get status() {
       return status;
     },
+    get rejectedInbound() {
+      return rejectedInbound;
+    },
   };
 }
+export type OwnedConnector = ReturnType<typeof createOwnedConnector>;

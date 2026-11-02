@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { createOwnedConnector } from "../../adapters/zalo/connector-runtime.js";
+import {
+  admitPilotInbound,
+  createOwnedConnector,
+} from "../../adapters/zalo/connector-runtime.js";
 import { ACCOUNT } from "../../server/db.js";
 import type { OwnershipHandle } from "../../server/connector-ownership.js";
 const deferred = <T>() => {
@@ -377,4 +380,96 @@ test("late API discarded during stop retains an error sink after listener cleanu
   assert.doesNotThrow(() =>
     f.listener.emit("error", Error("private late sdk error")),
   );
+});
+test("pilot inbound gate admits only exact direct peers with a consistent sender", () => {
+  const peers = new Set(["peer-a"]);
+  const direct = {
+    threadType: 0 as const,
+    threadId: "peer-a",
+    senderId: "peer-a",
+    isSelf: false,
+  };
+  assert.equal(admitPilotInbound(peers, "me", direct), true);
+  assert.equal(
+    admitPilotInbound(peers, "me", {
+      ...direct,
+      threadId: "peer-b",
+      senderId: "peer-b",
+    }),
+    false,
+  );
+  assert.equal(admitPilotInbound(peers, "me", { ...direct, threadType: 1 }), false);
+  assert.equal(
+    admitPilotInbound(peers, "me", { ...direct, senderId: "peer-x" }),
+    false,
+  );
+  assert.equal(
+    admitPilotInbound(peers, "me", { ...direct, isSelf: true, senderId: "me" }),
+    true,
+  );
+  assert.equal(
+    admitPilotInbound(peers, "me", { ...direct, isSelf: true }),
+    false,
+  );
+});
+test("unexpected direct peers and groups are dropped without persistence", async () => {
+  const f = fixture();
+  let connects = 0,
+    queries = 0;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool: {
+      async connect() {
+        connects++;
+        throw new Error("must not persist");
+      },
+      async query() {
+        queries++;
+        return { rows: [], rowCount: 0 };
+      },
+    } as any,
+    inbound: { accountId: "me", allowedPeerIds: ["peer-a"] },
+  });
+  await runtime.start();
+  const message = (
+    threadId: string,
+    type: 0 | 1,
+    msgId: string,
+    uidFrom = threadId,
+    isSelf = false,
+  ) => ({
+    threadId,
+    type,
+    isSelf,
+    data: { msgId, uidFrom, msgType: "chat.photo" },
+  });
+  f.listener.emit("message", message("peer-z", 0, "m-1"));
+  f.listener.emit("message", message("peer-a", 1, "m-2"));
+  f.listener.emit("message", message("peer-a", 0, "m-3", "peer-x"));
+  f.listener.emit("message", message("peer-a", 0, "m-4", "peer-a", true));
+  for (let i = 0; i < 20 && runtime.rejectedInbound < 4; i++)
+    await new Promise((r) => setImmediate(r));
+  assert.equal(runtime.rejectedInbound, 4);
+  assert.equal(connects, 0);
+  assert.equal(queries, 0);
+  assert.equal(runtime.status, "active");
+  await runtime.stop();
+});
+test("invalid inbound policy is refused at construction", () => {
+  const f = fixture();
+  for (const inbound of [
+    { accountId: "me", allowedPeerIds: [] },
+    { accountId: "me", allowedPeerIds: ["peer-a", "peer-a"] },
+    { accountId: "me", allowedPeerIds: ["peer-a", "peer-b", "peer-c", "peer-d", "peer-e"] },
+    { accountId: "me", allowedPeerIds: ["bad peer"] },
+    { accountId: "me", allowedPeerIds: [""] },
+    { allowedPeerIds: ["peer-a"] },
+    { accountId: "", allowedPeerIds: ["peer-a"] },
+    { accountId: "bad account", allowedPeerIds: ["peer-a"] },
+    { accountId: "me", allowedPeerIds: "peer-a" },
+  ])
+    assert.throws(
+      () => createOwnedConnector({ ...f.options, inbound: inbound as never }),
+      /Connector runtime unavailable/,
+    );
 });

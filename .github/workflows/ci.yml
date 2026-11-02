@@ -128,3 +128,47 @@ jobs:
           name: synthetic-validation-evidence
           path: docs/evidence/
           retention-days: 14
+  pilot:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.19.0"
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Compile the separate connector entrypoint
+        run: npm run build:connector
+      - name: Synthetic owner-consent manifest for the offline gate
+        run: mkdir -p docs/evidence && node --import tsx ops/ci-pilot-manifest.ts | tee docs/evidence/ci-pilot-manifest.log
+      - name: Intentional SDK-bearing connector image
+        run: |
+          builder_image=$(awk -F= '/^ARG BUILDER_IMAGE=/{print $2}' ops/Dockerfile.connector)
+          docker pull "$builder_image"
+          builder_base=$(docker image inspect --format '{{index .RepoDigests 0}}' "$builder_image")
+          printf '%s\n' "$builder_base" | tee docs/evidence/connector-builder-digest.txt
+          docker build --build-arg BUILDER_IMAGE="$builder_base" -f ops/Dockerfile.connector -t zalo-shared-connector:ci .
+      - name: Dry-run default performs no vault, SDK, database or network work
+        run: |
+          # The connector enforces owner-only manifest files; the CI runner UID
+          # must match the image runtime UID for the bind mount.
+          sudo chown 65532:65532 docs/evidence/pilot-manifest.synthetic.json
+          sudo chmod 600 docs/evidence/pilot-manifest.synthetic.json
+          docker run --rm --read-only --tmpfs /tmp:rw,nosuid,size=16m --cap-drop ALL --security-opt no-new-privileges:true -v "$PWD/docs/evidence/pilot-manifest.synthetic.json:/run/pilot/manifest.json:ro" -e PILOT_MANIFEST=/run/pilot/manifest.json zalo-shared-connector:ci | tee docs/evidence/ci-pilot-dry-run.json
+          grep -q '"ok":true' docs/evidence/ci-pilot-dry-run.json
+          grep -q '"command":"dry-run"' docs/evidence/ci-pilot-dry-run.json
+      - name: Separate connector scan, SDK inventory and nonroot/port assertions
+        run: bash ops/pilot-scan.sh zalo-shared-connector:ci
+      - name: Preserve pilot connector evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pilot-connector-evidence
+          path: docs/evidence/
+          retention-days: 14

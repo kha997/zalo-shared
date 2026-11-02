@@ -2,6 +2,22 @@
 
 **NOT PRODUCTION-READY. No live Zalo login, production deployment, real customer data or public application endpoint has been used.** The repository is public; runtime credentials and unlicensed upstream application snapshots are excluded.
 
+## Private pilot runtime, connector image and gate review — local PASS, hosted pending
+
+The uncommitted tree adds a bounded pilot driver (`tools/pilot-runtime.ts`): a single-lifetime owned connector, pre-start abort handling, grant shape/lifetime/peer/budget/interval validation, observe mode that never constructs a dispatcher, send-test ticks at `max(2000 ms, grant.minIntervalMs)`, policy-halt propagation, and an exact direct-peer inbound gate bound to the grant account. Session envelopes carry an explicit `keyId` bound into AES-GCM AAD, so key rotation is explicit and cross-id reads fail. The CLI now maps safety halts (`runtime-error`, `already-reserved`, `reservation-denied`, `dispatch-uncertain`) to exit 1 and exposes only bounded tick/rejection counters. A separate SDK-bearing connector image (`ops/Dockerfile.connector`) uses a dedicated exact lock, runs as UID 65532 with no ports, and defaults to dry-run; a hosted `pilot` CI job builds it, runs the dry-run with a synthetic owner-only manifest, inventories `zca-js`/`crypto-js`, and scans it.
+
+Local evidence: `npm run typecheck`, `npm run build` and `npm run build:connector` PASS; focused pilot/connector/QR suites **57/57** PASS; full local suite **251 tests, 249 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions that pass on Linux. The connector image built locally, the in-container dry-run was admitted, and the inventory reported `uid=65532`, `zca-js=2.2.0`, `crypto-js=4.2.0`. Independent review dispositions are in [private pilot runtime review](review/private-pilot-runtime-review.md) and [connector image review](review/private-pilot-connector-image-review.md); H1, M1–M4 and L2–L5/L7 were fixed with regressions, L1/L6 are accepted and documented.
+
+Hosted CI for this slice is pending. Nothing here validates a real login, QR scan, session interoperability, provider delivery, phone coexistence or account health.
+
+| Claim | Status |
+|---|---|
+| Bounded loop, grant shape, observe-never-dispatch, halt propagation, inbound sender/account gate | PASS locally |
+| Separate exact-lock connector image, nonroot/no-port dry-run, SDK inventory | PASS locally; hosted pending |
+| Real host runtime drill, live scan artifact, phone coexistence | UNPROVEN |
+| Media scheduling in the pilot loop | NOT ENABLED (`media:false`) |
+| Production readiness | NOT ESTABLISHED |
+
 ## Inbound media hosted acceptance — 2026-10-31
 
 [CI41076902601](https://github.com/kha997/zalo-shared/actions/runs/41076902601) on merge `e1cc3d9` (branch head `05c8082d200a78a7017f5a823277e7aa1a7cfe1e` into `787777e`): **171/171** unit checks, **2/2** guarded offline SDK checks, **9 browser cases expected + 1 explicit skip, 0 unexpected**. Raw logs confirm the real-PostgreSQL inbound receipt, provider journal, media worker, private-UI authorization/redaction, four-staff browser flow, ownership/recovery and encrypted backup/restore stages passed. Monitoring and SDK-free nonroot image smoke passed; Trivy 0.76.1 reported 0 HIGH/CRITICAL at scan time.
@@ -41,11 +57,13 @@ Local `npm run typecheck` PASS and the full local suite is **201/203** only beca
 | QR enrollment, private identity confirmation, pilot runtime/image | NOT IMPLEMENTED in this hosted result |
 | Live account behavior, phone coexistence, ban risk | UNPROVEN |
 
-## Private pilot QR enrollment and CLI — local PASS, hosted pending
+## Private pilot QR enrollment and CLI — hosted PASS at ad036f6
 
-The working tree adds `adapters/zalo/qr-bootstrap.ts` (owner-checked, expiring-grant QR enrollment: bounded canonical PNG decoding, no `qrPath`, no `saveToFile`/retry, no listener start/send, staged encrypted session write, final-UID and final-cookie-jar checks, synchronous TTY identity confirmation and quarantine signalling), `server/private-pilot-files.ts` (AES-256-GCM session envelope, exclusive temp+rename installs, 0700/0600/non-symlink checks including POSIX ancestor realpath, stale-temp sweep and a private manifest reader) and `tools/pilot-connector.ts` (dry-run default; live commands require `--acknowledge-pilot-risk`, an absolute private manifest, matching grant purpose, Linux host; output carries no account, peer, grant or consent ID). `tsconfig.json` now includes `tools`.
+The committed slice `ad036f60ae4fa4a8b00cbd72e584c0a0128e1784` adds `adapters/zalo/qr-bootstrap.ts` (owner-checked, expiring-grant QR enrollment: bounded canonical PNG decoding, no `qrPath`, no `saveToFile`/retry, no listener start/send, staged encrypted session write, final-UID and final-cookie-jar checks, synchronous TTY identity confirmation and quarantine signalling), `server/private-pilot-files.ts` (AES-256-GCM session envelope, exclusive temp+rename installs, 0700/0600/non-symlink checks including POSIX ancestor realpath, stale-temp sweep and a private manifest reader) and `tools/pilot-connector.ts` (dry-run default; live commands require `--acknowledge-pilot-risk`, an absolute private manifest, matching grant purpose, Linux host; output carries no account, peer, grant or consent ID). `tsconfig.json` now includes `tools`.
 
-Local evidence: `npm run typecheck` and `npm run build` PASS; focused QR/CLI suites **26/26** PASS; full local suite **229 tests, 227 PASS, 2 FAIL**, with both failures the known Windows-only `vault.test.ts` POSIX mode/rename assertions that pass on Linux. The independent review is recorded in [private pilot QR bootstrap review](review/private-pilot-qr-bootstrap-review.md); its P2 view-race and win32/no-follow findings, and all five P3 findings, were fixed. This remains synthetic and offline: no real SDK login, phone scan, session interoperability, runtime dispatch or connector image has been exercised.
+Hosted [CI 41374543813](https://github.com/kha997/zalo-shared/actions/runs/41374543813) on `ad036f6` passed **229/229** unit checks, **2/2** guarded offline SDK checks and **9 browser cases + 1 explicit skip, 0 failed**. The job passed the full PostgreSQL, transport, recovery/restore, monitoring and SDK-free nonroot image stages. This does not cover the uncommitted runtime/image slice above.
+
+Local evidence for the committed slice: `npm run typecheck` and `npm run build` PASS; focused QR/CLI suites **26/26** PASS; full local suite **229 tests, 227 PASS, 2 FAIL**, with both failures the known Windows-only `vault.test.ts` POSIX mode/rename assertions that pass on Linux. The independent review is recorded in [private pilot QR bootstrap review](review/private-pilot-qr-bootstrap-review.md); its P2 view-race and win32/no-follow findings, and all five P3 findings, were fixed. This remains synthetic and offline: no real SDK login, phone scan, session interoperability, runtime dispatch or connector image has been exercised in that run.
 
 ## Earlier verified source — operator acceptance, 2026-10-30
 
@@ -103,7 +121,8 @@ All measured loads had zero request errors and verified idempotent retries. All 
 
 ## Open live/operating gates
 
-- Offline injectable transport, AES-GCM vault and gated SDK facade remain **unwired into app/worker**. SDK2.2.0 is development-only; actual import/model tests and fake-login facade tests do not establish provider authentication. Real media, durable inbound integration, key rotation and takeover fencing still need implementation/validation.
+- The application app/worker remains provider-disabled/mock and its production image stays SDK-free. The uncommitted tree adds a separate pilot host path and SDK-bearing image, but neither has a live drill; the owned runtime is single-lifetime and fails closed. SDK 2.2.0 is development/pilot-only; actual import/model tests and fake-login facade tests do not establish provider authentication. Real media scheduling in the pilot loop, key rotation and takeover fencing still need implementation/validation.
+- The pilot peer allowlist is capped at 1–4 consenting peers by policy. This is a pilot safety scope, not a product seat limit: the application itself has no seat cap and has passed four-staff browser acceptance; capacity beyond four staff remains an infrastructure/load question, not a hardcoded product constraint.
 - A legitimate, dedicated test account/phone/test peer and Owner approval are required before any real login. Never HANU production; never send cookies/passwords through chat.
 - Real phone coexistence, delivery/media, invalidation, missed history, reconnect/fencing and7–14day low-volume soak remain UNPROVEN. Platform terms/account-ban risk cannot be removed by tests.
 - No maximum staff count or capacity ceiling is established. There is no product seat cap; additional infrastructure/longer workload tests are required before broader promises.

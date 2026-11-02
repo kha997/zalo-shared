@@ -252,6 +252,87 @@ test("matching live commands invoke the reviewed runner and return only safe out
   }
 });
 
+test("safety halts exit non-zero and expose only bounded counters", async () => {
+  for (const halt of [
+    "runtime-error",
+    "already-reserved",
+    "reservation-denied",
+    "dispatch-uncertain",
+  ]) {
+    const result = await runPilotCli({
+      argv: [
+        "run-send-test",
+        "--manifest",
+        "/private/pilot/manifest.json",
+        "--acknowledge-pilot-risk",
+      ],
+      dependencies: {
+        readFile: async () => manifestText("send-test"),
+        now: () => now,
+        runCommand: async () => ({ halt, ticks: 4, rejectedInbound: 2 }),
+      },
+    });
+    assert.equal(result.exitCode, 1);
+    assert.deepEqual(JSON.parse(result.stdout!), {
+      command: "run-send-test",
+      ok: false,
+      gate: halt,
+      purpose: "send-test",
+      expiresAt: "2026-11-02T08:00:00.000Z",
+      ticks: 4,
+      rejectedInbound: 2,
+    });
+    assert.equal(result.stdout!.includes(account), false);
+    assert.equal(result.stdout!.includes(peer), false);
+  }
+
+  const benign = await runPilotCli({
+    argv: [
+      "run-observe",
+      "--manifest",
+      "/private/pilot/manifest.json",
+      "--acknowledge-pilot-risk",
+    ],
+    dependencies: {
+      readFile: async () => manifestText("observe"),
+      now: () => now,
+      runCommand: async () => ({ halt: "grant-expired", ticks: 3 }),
+    },
+  });
+  assert.equal(benign.exitCode, 0);
+  assert.deepEqual(JSON.parse(benign.stdout!), {
+    command: "run-observe",
+    ok: true,
+    gate: "grant-expired",
+    purpose: "observe",
+    expiresAt: "2026-11-02T08:00:00.000Z",
+    ticks: 3,
+  });
+
+  const invalidCounters = await runPilotCli({
+    argv: [
+      "run-send-test",
+      "--manifest",
+      "/private/pilot/manifest.json",
+      "--acknowledge-pilot-risk",
+    ],
+    dependencies: {
+      readFile: async () => manifestText("send-test"),
+      now: () => now,
+      runCommand: async () => ({
+        halt: "runtime-error",
+        ticks: -1,
+        rejectedInbound: "many" as never,
+      }),
+    },
+  });
+  assert.equal(invalidCounters.exitCode, 1);
+  const output = JSON.parse(invalidCounters.stdout!);
+  assert.equal(output.gate, "runtime-error");
+  assert.equal("ticks" in output, false);
+  assert.equal("rejectedInbound" in output, false);
+});
+
 test("runner failures, missing manifests and policy-invalid live manifests fail closed", async () => {
   const runnerFailure = await runPilotCli({
     argv: [

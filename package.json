@@ -10,6 +10,7 @@
     "dev": "tsx watch server/main.ts",
     "dev:client": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build && npm run build:server",
+    "build:connector": "tsc -p tsconfig.connector.json",
     "typecheck": "tsc --noEmit",
     "start": "node dist/server/main.js",
     "worker": "tsx server/worker.ts",

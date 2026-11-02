@@ -892,6 +892,50 @@ test("synthetic UID, cookie and display label never reach the console", async ()
   assert.equal(joined.includes("\u001b"), false);
 });
 
+test("session envelopes bind an explicit key id and refuse cross-id reads", async () => {
+  const root = await mkdtemp(join(tmpdir(), "zalo-pilot-keyid-"));
+  try {
+    const directory = join(root, "session");
+    await ensurePrivateDirectory(directory);
+    const path = join(directory, "session.enc");
+    const key = Buffer.alloc(32, 9);
+    const v1 = new PrivateSessionFile({ path, key, keyId: "v1" });
+    await v1.write({ version: 1, accountId: sentinelUid });
+    const envelope = JSON.parse(await readFile(path, "utf8"));
+    assert.equal(envelope.v, 1);
+    assert.equal(envelope.keyId, "v1");
+    assert.deepEqual(await v1.read(), { version: 1, accountId: sentinelUid });
+
+    await assert.rejects(
+      new PrivateSessionFile({ path, key, keyId: "v2" }).read(),
+    );
+    const v2 = new PrivateSessionFile({ path, key, keyId: "v2" });
+    await v2.write({ version: 1, accountId: sentinelUid });
+    assert.deepEqual(await v2.read(), { version: 1, accountId: sentinelUid });
+    await assert.rejects(v1.read());
+
+    await writeFile(
+      path,
+      JSON.stringify({ ...envelope, keyId: "v2" }),
+      { mode: 0o600 },
+    );
+    await assert.rejects(v1.read());
+    await assert.rejects(v2.read());
+
+    for (const keyId of ["", ".bad", "v 1", "v".repeat(65)])
+      assert.throws(
+        () => new PrivateSessionFile({ path, key, keyId }),
+        /Private pilot files unavailable/,
+      );
+    assert.throws(
+      () => new PrivateSessionFile({ path: "relative", key }),
+      /Private pilot files unavailable/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("private directories, QR files, session files and keys reject unsafe inputs", async () => {
   const root = await mkdtemp(join(tmpdir(), "zalo-pilot-files-"));
   try {

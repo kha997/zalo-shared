@@ -42,7 +42,8 @@ const accountIdPattern = /^[A-Za-z0-9_-]{1,200}$/;
 const MAX_SESSION_BYTES = 1024 * 1024;
 const MAX_ENVELOPE_BYTES = 2 * 1024 * 1024;
 const MAX_QR_BYTES = 1024 * 1024;
-const AAD = Buffer.from("zalo-pilot-session-v1");
+const KEY_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
+const DEFAULT_KEY_ID = "v1";
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const POSIX = process.platform !== "win32";
 const noFollow = (constants as { O_NOFOLLOW?: number }).O_NOFOLLOW ?? 0;
@@ -167,31 +168,39 @@ export async function readPrivateTextFile(
 
 type Envelope = {
   v: 1;
+  keyId: string;
   nonce: string;
   tag: string;
   data: string;
 };
 
-function seal(key: Buffer, value: unknown): string {
+// The key identifier is bound into both the envelope and the AAD so an
+// explicitly selected key cannot decrypt a record written under another id.
+function associated(keyId: string): Buffer {
+  return Buffer.from(`zalo-pilot-session-v1:${keyId}`);
+}
+
+function seal(key: Buffer, value: unknown, keyId: string): string {
   const json = JSON.stringify(value);
   if (typeof json !== "string" || Buffer.byteLength(json) > MAX_SESSION_BYTES)
     throw unavailable();
   const nonce = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, nonce);
-  cipher.setAAD(AAD);
+  cipher.setAAD(associated(keyId));
   const ciphertext = Buffer.concat([
     cipher.update(json, "utf8"),
     cipher.final(),
   ]);
   return JSON.stringify({
     v: 1,
+    keyId,
     nonce: nonce.toString("base64"),
     tag: cipher.getAuthTag().toString("base64"),
     data: ciphertext.toString("base64"),
   });
 }
 
-function unseal(key: Buffer, encoded: string): unknown {
+function unseal(key: Buffer, encoded: string, keyId: string): unknown {
   let envelope: Envelope;
   try {
     envelope = JSON.parse(encoded);
@@ -202,6 +211,7 @@ function unseal(key: Buffer, encoded: string): unknown {
     !envelope ||
     typeof envelope !== "object" ||
     envelope.v !== 1 ||
+    envelope.keyId !== keyId ||
     typeof envelope.nonce !== "string" ||
     typeof envelope.tag !== "string" ||
     typeof envelope.data !== "string"
@@ -211,7 +221,7 @@ function unseal(key: Buffer, encoded: string): unknown {
   const tag = Buffer.from(envelope.tag, "base64");
   if (nonce.length !== 12 || tag.length !== 16) throw unavailable();
   const decipher = createDecipheriv("aes-256-gcm", key, nonce);
-  decipher.setAAD(AAD);
+  decipher.setAAD(associated(keyId));
   decipher.setAuthTag(tag);
   try {
     return JSON.parse(
@@ -230,13 +240,22 @@ export class PrivateSessionFile implements PrivateSessionStore {
   private readonly path: string;
   private readonly directory: string;
   private readonly key: Buffer;
+  private readonly keyId: string;
 
-  constructor(options: { path: string; key: Uint8Array }) {
+  constructor(options: {
+    path: string;
+    key: Uint8Array;
+    /** Non-secret key selector bound into the envelope and AAD. */
+    keyId?: string;
+  }) {
     this.path = cleanPath(options?.path);
     this.directory = dirname(this.path);
     if (!(options?.key instanceof Uint8Array) || options.key.byteLength !== 32)
       throw unavailable();
+    const keyId = options.keyId ?? DEFAULT_KEY_ID;
+    if (typeof keyId !== "string" || !KEY_ID.test(keyId)) throw unavailable();
     this.key = Buffer.from(options.key);
+    this.keyId = keyId;
   }
 
   async read(): Promise<unknown> {
@@ -251,7 +270,7 @@ export class PrivateSessionFile implements PrivateSessionStore {
       if (stat.isSymbolicLink() || !stat.isFile()) throw unavailable();
       if (stat.size <= 0 || stat.size > MAX_ENVELOPE_BYTES) throw unavailable();
       const encoded = await handle.readFile("utf8");
-      return unseal(this.key, encoded);
+      return unseal(this.key, encoded, this.keyId);
     } catch {
       throw unavailable();
     } finally {
@@ -266,7 +285,7 @@ export class PrivateSessionFile implements PrivateSessionStore {
       if (name.startsWith(prefix) && name.endsWith(".tmp"))
         await unlink(join(this.directory, name)).catch(() => {});
     }
-    const encoded = seal(this.key, value);
+    const encoded = seal(this.key, value, this.keyId);
     const temp = `${this.path}.${randomBytes(16).toString("hex")}.tmp`;
     let installed = false;
     let handle: FileHandle | undefined;
