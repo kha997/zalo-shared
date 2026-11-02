@@ -89,6 +89,38 @@ test("reconnect is bounded and stale message callback is ignored", async () => {
   assert.ok(x.listeners.every((listener) => listener.starts === 1));
   x.transport.stop();
 });
+test("zero reconnect attempts stop the listener and report one durable fault", async () => {
+  let faults = 0;
+  const x = setup({
+    maxReconnectAttempts: 0,
+    onFault: () => {
+      faults++;
+    },
+  });
+  await x.transport.start();
+  x.listener.emit("closed", 1006, "");
+  await delay();
+  assert.equal(x.transport.status, "disconnected");
+  assert.equal(faults, 1);
+  assert.equal(x.listeners.length, 1);
+  assert.equal(x.listener.starts, 1);
+  await assert.rejects(x.transport.start(), /reconciliation required/);
+  x.transport.stop();
+});
+
+test("reconnect attempts are bounded to the reviewed range", () => {
+  for (const value of [-1, 4, 1.5]) {
+    assert.throws(
+      () =>
+        createZaloTransport({
+          approvedSdk: { createApi: async () => ({}) as never },
+          maxReconnectAttempts: value,
+        }),
+      /Invalid reconnect bounds/,
+    );
+  }
+});
+
 test("duplicate/kick and explicit invalidation expire without retry or sending", async () => {
   for (const code of [3000, 3003]) {
     const x = setup();

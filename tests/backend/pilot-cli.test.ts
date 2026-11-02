@@ -153,6 +153,107 @@ test("dry-run denies expired, malformed, extra-field and mismatched manifests", 
   }
 });
 
+test("preflight admits an exact G5 scope without reading secrets or requiring acknowledgement", async () => {
+  let reads = 0;
+  let runner = 0;
+  const result = await runPilotCli({
+    argv: ["preflight", "--manifest", "/private/pilot/manifest.json"],
+    dependencies: {
+      readFile: async () => {
+        reads++;
+        return JSON.stringify(
+          manifestFor("observe", {
+            expiresAt: "2026-11-02T02:00:00.000Z",
+          }),
+        );
+      },
+      now: () => now,
+      runCommand: async () => {
+        runner++;
+      },
+    },
+  });
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(JSON.parse(result.stdout!), {
+    command: "preflight",
+    ok: true,
+    gate: "admitted",
+    purpose: "observe",
+    accountBound: true,
+    peerCount: 1,
+    maxPartsPerDay: 1,
+    minIntervalMs: 2000,
+    lifetimeMs: 2 * 60 * 60 * 1000,
+    expiresAt: "2026-11-02T02:00:00.000Z",
+  });
+  assert.equal(reads, 1);
+  assert.equal(runner, 0);
+  assert.equal(result.stdout!.includes(account), false);
+  assert.equal(result.stdout!.includes(peer), false);
+  assert.equal(result.stdout!.includes("grant-synthetic"), false);
+  assert.equal(result.stdout!.includes("owner-consent"), false);
+
+  const enroll = await runPilotCli({
+    argv: ["preflight", "--manifest", "/private/pilot/manifest.json"],
+    dependencies: {
+      readFile: async () => manifestText("enroll-session"),
+      now: () => now,
+    },
+  });
+  assert.equal(enroll.exitCode, 0);
+  assert.equal(JSON.parse(enroll.stdout!).peerCount, 0);
+  assert.equal(JSON.parse(enroll.stdout!).accountBound, false);
+});
+
+test("preflight denies a scope outside the approved G5 bounds", async () => {
+  const cases = [
+    JSON.stringify(
+      manifestFor(
+        "observe",
+        {
+          allowedPeerIds: [peer, "peer-sentinel-2"],
+          expiresAt: "2026-11-02T02:00:00.000Z",
+        },
+        { allowedPeerIds: [peer, "peer-sentinel-2"] },
+      ),
+    ),
+    JSON.stringify(
+      manifestFor(
+        "observe",
+        {
+          maxPartsPerDay: 11,
+          expiresAt: "2026-11-02T02:00:00.000Z",
+        },
+        { maxPartsPerDay: 11 },
+      ),
+    ),
+    JSON.stringify(
+      manifestFor("observe", {
+        expiresAt: "2026-11-02T03:00:00.000Z",
+      }),
+    ),
+    JSON.stringify(
+      manifestFor("observe", {
+        minIntervalMs: 1999,
+        expiresAt: "2026-11-02T02:00:00.000Z",
+      }),
+    ),
+  ];
+  for (const text of cases) {
+    const result = await runPilotCli({
+      argv: ["preflight", "--manifest", "/private/pilot/manifest.json"],
+      dependencies: {
+        readFile: async () => text,
+        now: () => now,
+      },
+    });
+    assert.equal(result.exitCode, 1);
+    assert.equal(JSON.parse(result.stdout!).gate, "denied");
+    assert.equal(result.stdout!.includes(account), false);
+    assert.equal(result.stdout!.includes(peer), false);
+  }
+});
+
 test("live commands require the explicit operator flag before any manifest read", async () => {
   let reads = 0;
   for (const command of ["bootstrap", "run-observe", "run-send-test"]) {

@@ -583,6 +583,38 @@ test("an exhausted daily quota blocks the next part without egress", async () =>
   }
 });
 
+test("a text-only pilot refuses an outbound attachment before reservation or egress", async () => {
+  const database = await isolatedDatabase();
+  try {
+    const transportSpy = transport();
+    const provider = createSdkProvider(
+      database.pool,
+      transportSpy,
+      owner(),
+      { grant: grant(), textOnly: true, now: () => new Date() },
+    );
+    const { mid } = await seed(database.pool, { peer: "peer-a" });
+    const attachmentId = (
+      await database.pool.query(
+        "INSERT INTO attachments(account_id,name,mime,data,message_id) VALUES($1,'synthetic.png','image/png',$2,$3) RETURNING id",
+        [ACCOUNT, Buffer.from([0x89, 0x50, 0x4e, 0x47]), mid],
+      )
+    ).rows[0].id;
+    await database.pool.query(
+      "INSERT INTO delivery_parts(message_id,part,status,attachment_id) VALUES($1,1,'pending',$2)",
+      [mid, attachmentId],
+    );
+    await assert.rejects(
+      prepare(database.pool, provider, mid),
+      /Unsupported SDK media/,
+    );
+    assert.equal(transportSpy.calls.length, 0);
+    assert.equal(await ledgerCount(database.pool), 0);
+  } finally {
+    await database.close();
+  }
+});
+
 test("the reviewed worker path sends once and records the reservation", async () => {
   const database = await isolatedDatabase();
   try {
@@ -687,6 +719,33 @@ test("send-test ticks the worker and stops when the grant expires", async () => 
     rejectedInbound: 0,
   });
   assert.equal(connector.counts.runs, 1);
+  assert.equal(connector.counts.stopped, 1);
+});
+
+test("a live session stops at the two-hour wall-clock limit", async () => {
+  const connector = fakeConnector();
+  const base = Date.now();
+  let clock = base;
+  const result = await runPilotLoop({
+    connector,
+    mode: "observe",
+    grant: observeGrant({
+      issuedAt: new Date(base - 60_000).toISOString(),
+      expiresAt: new Date(base + 7 * 60 * 60 * 1000).toISOString(),
+    }),
+    maxTicks: 10,
+    tickMs: 0,
+    sessionLimitMs: 60 * 60 * 1000,
+    now: () => new Date(clock),
+    sleep: async () => {
+      clock += 59 * 60 * 1000;
+    },
+  });
+  assert.deepEqual(result, {
+    halt: "session-limit",
+    ticks: 2,
+    rejectedInbound: 0,
+  });
   assert.equal(connector.counts.stopped, 1);
 });
 
@@ -847,6 +906,12 @@ test("a mismatched purpose or unbounded configuration is refused before start", 
     { mode: "observe" as const, grant: grant(), maxTicks: 1 },
     { mode: "observe" as const, grant: observeGrant(), maxTicks: 0 },
     { mode: "observe" as const, grant: observeGrant(), maxTicks: 1, tickMs: 60_001 },
+    {
+      mode: "observe" as const,
+      grant: observeGrant(),
+      maxTicks: 1,
+      sessionLimitMs: 2 * 60 * 60 * 1000 + 1,
+    },
   ]) {
     const connector = fakeConnector();
     await assert.rejects(

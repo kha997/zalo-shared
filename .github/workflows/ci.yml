@@ -167,6 +167,28 @@ jobs:
           docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=16m --cap-drop ALL --security-opt no-new-privileges:true -v "$RUNNER_TEMP/pilot-manifest.synthetic.json:/run/pilot/manifest.json:ro" -e PILOT_MANIFEST=/run/pilot/manifest.json zalo-shared-connector:ci | tee docs/evidence/ci-pilot-dry-run.json
           grep -q '"ok":true' docs/evidence/ci-pilot-dry-run.json
           grep -q '"command":"dry-run"' docs/evidence/ci-pilot-dry-run.json
+      - name: G5 offline preflight admits only the approved scope
+        run: |
+          for stage in bootstrap observe send-test; do
+            node --import tsx ops/g5-synthetic-manifest.ts "$RUNNER_TEMP/g5-$stage.json" "$stage"
+            sudo chown 65532:65532 "$RUNNER_TEMP/g5-$stage.json"
+            sudo chmod 600 "$RUNNER_TEMP/g5-$stage.json"
+            docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=16m --cap-drop ALL --security-opt no-new-privileges:true -v "$RUNNER_TEMP/g5-$stage.json:/run/pilot/manifest.json:ro" -e PILOT_MANIFEST=/run/pilot/manifest.json zalo-shared-connector:ci preflight | tee "docs/evidence/ci-g5-preflight-$stage.json"
+            grep -q '"ok":true' "docs/evidence/ci-g5-preflight-$stage.json"
+            grep -q '"gate":"admitted"' "docs/evidence/ci-g5-preflight-$stage.json"
+            case "$stage" in
+              bootstrap) expected=enroll-session ;;
+              *) expected=$stage ;;
+            esac
+            grep -q "\"purpose\":\"$expected\"" "docs/evidence/ci-g5-preflight-$stage.json"
+          done
+          node --import tsx ops/g5-synthetic-manifest.ts "$RUNNER_TEMP/g5-invalid.json" observe --invalid-scope
+          sudo chown 65532:65532 "$RUNNER_TEMP/g5-invalid.json"
+          sudo chmod 600 "$RUNNER_TEMP/g5-invalid.json"
+          if docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=16m --cap-drop ALL --security-opt no-new-privileges:true -v "$RUNNER_TEMP/g5-invalid.json:/run/pilot/manifest.json:ro" -e PILOT_MANIFEST=/run/pilot/manifest.json zalo-shared-connector:ci preflight > docs/evidence/ci-g5-preflight-denied.json; then
+            echo "out-of-scope manifest was admitted"; exit 1
+          fi
+          grep -q '"gate":"denied"' docs/evidence/ci-g5-preflight-denied.json
       - name: Separate connector scan, SDK inventory and nonroot/port assertions
         run: bash ops/pilot-scan.sh zalo-shared-connector:ci
       - name: Image build identity matches this commit and the connector lock

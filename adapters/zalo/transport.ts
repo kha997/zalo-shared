@@ -30,6 +30,8 @@ interface Options {
     }): Promise<Api>;
   };
   reconnectDelayMs?: number;
+  /** 0 disables automatic reconnect and session reuse after any interruption. */
+  maxReconnectAttempts?: number;
   sendTimeoutMs?: number;
   handshakeTimeoutMs?: number;
   maxPendingInbound?: number;
@@ -95,12 +97,15 @@ export function createZaloTransport(options: Options) {
   const delay = options.reconnectDelayMs ?? 1000,
     sendTimeout = options.sendTimeoutMs ?? 15000;
   const handshakeTimeout = options.handshakeTimeoutMs ?? 15000,
-    maxInbound = options.maxPendingInbound ?? 100;
+    maxInbound = options.maxPendingInbound ?? 100,
+    maxReconnects = options.maxReconnectAttempts ?? 3;
   for (const n of [delay, sendTimeout, handshakeTimeout])
     if (!Number.isInteger(n) || n < 1 || n > 60000)
       throw new Error("Invalid transport bounds");
   if (!Number.isInteger(maxInbound) || maxInbound < 1 || maxInbound > 1000)
     throw new Error("Invalid ingress bounds");
+  if (!Number.isInteger(maxReconnects) || maxReconnects < 0 || maxReconnects > 3)
+    throw new Error("Invalid reconnect bounds");
   const owner = {},
     used = new WeakSet<Listener>();
   let status: Status = "disconnected",
@@ -235,8 +240,14 @@ export function createZaloTransport(options: Options) {
       generation++;
       release();
       status = "disconnected";
+      if (maxReconnects === 0) {
+        // A live pilot must not re-authenticate or silently continue after a
+        // connection loss; surface a durable fault and stop the listener.
+        failIngress("connection-lost");
+        return;
+      }
       notify("connection-lost");
-      if (stopped || ingressFault || attempts >= 3) return;
+      if (stopped || ingressFault || attempts >= maxReconnects) return;
       attempts++;
       retry = setTimeout(() => {
         retry = undefined;

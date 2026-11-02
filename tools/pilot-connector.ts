@@ -11,9 +11,15 @@ import {
   readBuildIdentity,
   requireTlsDatabaseUrl,
 } from "./pilot-gates.js";
+import {
+  assertG5Scope,
+  g5ScopeSummary,
+  g5StageForPurpose,
+} from "./g5-policy.js";
 
 export type PilotCommand =
   | "dry-run"
+  | "preflight"
   | "bootstrap"
   | "run-observe"
   | "run-send-test";
@@ -44,7 +50,7 @@ export type PilotCommandOutcome = Readonly<{
 }>;
 
 export type PilotCommandRunner = (input: {
-  command: Exclude<PilotCommand, "dry-run">;
+  command: Exclude<PilotCommand, "dry-run" | "preflight">;
   manifest: PilotManifest;
   env: Record<string, string | undefined>;
 }) => Promise<void | PilotCommandOutcome>;
@@ -57,12 +63,13 @@ export type PilotCliDependencies = Readonly<{
 
 const COMMANDS: readonly PilotCommand[] = [
   "dry-run",
+  "preflight",
   "bootstrap",
   "run-observe",
   "run-send-test",
 ];
 const GRANT_PURPOSE: Readonly<
-  Record<Exclude<PilotCommand, "dry-run">, PilotGrant["purpose"]>
+  Record<Exclude<PilotCommand, "dry-run" | "preflight">, PilotGrant["purpose"]>
 > = {
   bootstrap: "enroll-session",
   "run-observe": "observe",
@@ -180,7 +187,12 @@ export function parsePilotManifest(text: string, now: Date): PilotManifest {
 // Any halt not listed here is treated as a safety failure so a new or unknown
 // reason can never produce a successful exit. The gate echoed to stdout is
 // restricted to these literals: a future runner string must not leak details.
-const COMPLETION_HALTS = new Set(["tick-limit", "grant-expired", "aborted"]);
+const COMPLETION_HALTS = new Set([
+  "tick-limit",
+  "grant-expired",
+  "session-limit",
+  "aborted",
+]);
 const KNOWN_HALTS = new Set([
   ...COMPLETION_HALTS,
   "runtime-error",
@@ -230,11 +242,15 @@ export async function runPilotCli(options: {
     return {
       exitCode: 2,
       stderr:
-        "Pilot CLI denied: expected [dry-run|bootstrap|run-observe|run-send-test] [--manifest <private-path>] [--acknowledge-pilot-risk]",
+        "Pilot CLI denied: expected [dry-run|preflight|bootstrap|run-observe|run-send-test] [--manifest <private-path>] [--acknowledge-pilot-risk]",
     };
 
   const command = parsed.command;
-  if (command !== "dry-run" && parsed.acknowledge !== true)
+  if (
+    command !== "dry-run" &&
+    command !== "preflight" &&
+    parsed.acknowledge !== true
+  )
     return {
       exitCode: 1,
       stdout: safeOutcome(command, false, "denied"),
@@ -256,6 +272,30 @@ export async function runPilotCli(options: {
       exitCode: 0,
       stdout: safeOutcome(command, true, "admitted", manifest),
     };
+
+  if (command === "preflight") {
+    try {
+      assertG5Scope(
+        g5StageForPurpose(manifest.grant.purpose),
+        manifest.grant,
+      );
+      return {
+        exitCode: 0,
+        stdout: JSON.stringify({
+          command,
+          ok: true,
+          gate: "admitted",
+          ...g5ScopeSummary(manifest.grant),
+          expiresAt: manifest.grant.expiresAt,
+        }),
+      };
+    } catch {
+      return {
+        exitCode: 1,
+        stdout: safeOutcome(command, false, "denied", manifest),
+      };
+    }
+  }
 
   if (manifest.grant.purpose !== GRANT_PURPOSE[command])
     return {
@@ -316,13 +356,18 @@ export async function runPilotCli(options: {
 }
 
 async function liveBootstrap(input: {
-  command: Exclude<PilotCommand, "dry-run">;
+  command: Exclude<PilotCommand, "dry-run" | "preflight">;
   manifest: PilotManifest;
   env: Record<string, string | undefined>;
 }) {
   if (input.command !== "bootstrap") throw unavailable();
   if (process.platform !== "linux") throw unavailable();
   const { env, manifest } = input;
+  try {
+    assertG5Scope("bootstrap", manifest.grant);
+  } catch {
+    throw unavailable();
+  }
   // Enrollment must also bind to the reviewed image, not a copied manifest.
   assertBuildIdentity(await readBuildIdentity(), manifest.build);
   const databaseUrl = requireTlsDatabaseUrl(env.DATABASE_URL);
@@ -390,7 +435,7 @@ async function liveBootstrap(input: {
 }
 
 async function liveCommand(input: {
-  command: Exclude<PilotCommand, "dry-run">;
+  command: Exclude<PilotCommand, "dry-run" | "preflight">;
   manifest: PilotManifest;
   env: Record<string, string | undefined>;
 }) {

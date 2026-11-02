@@ -1,6 +1,6 @@
 # Private pilot connector operations
 
-Prepared 2026-11-02. **Offline operations only.** This document authorizes no real login, QR scan, account activation, deployment or production use. The live pilot requires an explicit Owner decision on the account, consenting peers, private host and platform-risk acceptance. See [READINESS.md](../READINESS.md) for PASS/FAIL/UNPROVEN evidence.
+Prepared 2026-11-02. **Activation pending.** This document authorizes no real login, QR scan, account activation, deployment or production use. The Owner approved D1–D7 **in scope** ([G5-SCOPE-APPROVAL.md](../evidence/G5-SCOPE-APPROVAL.md)) but has not authorized live activation; the current stop point is `G5A_AWAITING_OWNER_START` ([G5-LIVE-PILOT-PROCEDURE.md](G5-LIVE-PILOT-PROCEDURE.md)). See [READINESS.md](../READINESS.md) for PASS/FAIL/UNPROVEN evidence.
 
 ## Boundary
 
@@ -10,6 +10,21 @@ The pilot connector is a **separate, intentionally SDK-bearing image**. The appl
 - defaults to `dry-run`, which validates a private manifest and touches no vault, SDK, database or network;
 - runs as UID 65532 with a read-only root filesystem, no capabilities and `no-new-privileges`;
 - never starts from ordinary application startup, CI test jobs or the default Compose stack.
+
+## G5 approved scope (activation pending)
+
+The Owner approved this narrower scope for the staged G5 pilot. It is enforced in addition to the generic policy below:
+
+- exactly one dedicated account and exactly one allowlisted direct peer; enrollment is the only mode with a null account and zero peers;
+- 1–10 outbound parts per account per day and a minimum 2000 ms interval;
+- a 2-hour wall-clock cap per activated observe/send-test session, after which the loop stops with `session-limit`;
+- text only: an outbound attachment request is refused before reservation or egress;
+- no automatic reconnect (`maxReconnectAttempts: 0`); a lost connection becomes one durable fault and aborts the session;
+- no automated reauthentication, no automatic resend after an unknown result and no concurrent connector owner;
+- `preflight` validates the exact stage manifest against these bounds offline, before any live command can start;
+- stage order `bootstrap` → `run-observe` → `run-send-test`, each with separate explicit Owner authorization.
+
+Any broadening of account, peer, purposes, budget, interval, media, risk or window requires renewed Owner approval.
 
 ## Build identity
 
@@ -59,9 +74,9 @@ A manifest contains exactly `version`, `build`, `consent` and `grant`. The grant
 - `sourceCommit`, `lockSha256` and `sdkIntegrity` match the reviewed artifact recorded in `build`;
 - `issuedAt <= now + 30s` and `expiresAt > now`; enrollment grants last at most 1 hour, observe/send-test at most 8 hours;
 - `ownerConsentRef` matches the separate consent scope, and the purpose is allowed by that scope;
-- observe/send-test carry a non-null exact `expectedAccountId` and 1–4 unique exact direct-peer IDs;
+- observe/send-test carry a non-null exact `expectedAccountId` and 1–4 unique exact direct-peer IDs; **G5 uses exactly one peer**;
 - an enrollment manifest may carry a null `expectedAccountId`, but its consent scope must then allow only `enroll-session` and may contain 0–4 peers; the enrollment manifest is never reused for observe or send;
-- `maxPartsPerDay` is 1–30 and `minIntervalMs` is 2000–60000, within the consent limits;
+- `maxPartsPerDay` is 1–30 and `minIntervalMs` is 2000–60000, within the consent limits; **G5 uses at most 10 parts/day and a 2-hour session**;
 - expiration never exceeds `consent.notAfter`, and all timestamps use millisecond precision (`YYYY-MM-DDTHH:MM:SS.sssZ`).
 
 A routine reviewed rebuild may receive a refreshed technical grant under the same consent reference. Broadened account, peers, purposes, budget, interval or risk requires a new Owner decision.
@@ -73,6 +88,10 @@ The repository ships only [`ops/pilot-compose.example.yml`](../../ops/pilot-comp
 ```bash
 # Default: offline gate only.
 docker compose --env-file /private/pilot-interpolation.env -f /private/pilot-compose.yml run --rm pilot-connector
+
+# Offline G5 scope check for the exact stage manifest (no network, no SDK, no DB).
+docker compose --env-file /private/pilot-interpolation.env -f /private/pilot-compose.yml run --rm pilot-connector \
+  dist/connector/tools/pilot-connector.js preflight
 
 # Explicit one-time enrollment under an Owner-controlled phone interaction.
 docker compose --env-file /private/pilot-interpolation.env -f /private/pilot-compose.yml run --rm pilot-connector \
@@ -98,12 +117,12 @@ Bootstrap writes the QR PNG only to the private view directory for the Owner to 
 - Only exact allowlisted direct peers (`threadType 0`) are dispatchable; groups and unlisted peers are refused before reservation. The worker claim itself is scoped to the grant peers, so mail for any other conversation is never claimed or marked failed.
 - The bound account's own UID can never appear in the peer allowlist; it is rejected by the grant parser, provider, connector and CLI.
 - Inbound persistence is limited to the bound account and the same allowlist. Unexpected direct peers, group events, a non-self sender that is not the peer, and a self sender that is not the bound account are dropped before persistence, without storing body, locator, identity or raw SDK error; the runtime reports only a count.
-- The 1–4 peer allowlist is a pilot safety scope, not a product seat limit. The application itself has no seat cap.
+- The 1–4 peer allowlist is the generic pilot safety scope; G5 further restricts the connector to exactly one peer. This is not a product seat limit. The application itself has no seat cap.
 - An expired grant, quota stop, lost ownership or uncertain result stops the loop. Local ownership gap state stays closed; do not add a permissive resume shortcut. Ownership recovery requires the reviewed admin reconciliation and externally verified old-owner termination.
 
 ## Media scope
 
-The pilot runs with media scheduling disabled (`media:false`). Inbound media events are journaled only as unsupported metadata: no locator is captured, no CDN download is attempted and no bytes are stored. The locator key described above is provisioned separately and is not passed to the pilot connector in this mode.
+The pilot runs with media scheduling disabled (`media:false`) and, under G5, a dispatch policy that rejects any outbound attachment before reservation or egress. Inbound media events are journaled only as unsupported metadata: no locator is captured, no CDN download is attempted and no bytes are stored. The locator key described above is provisioned separately and is not passed to the pilot connector in this mode.
 
 Outbound media dispatch exists in the shared worker/provider code, but the pilot has no operator path to enqueue media and it has not been exercised against a provider. Real inbound media, CDN hosts, cookie-free downloads and outbound media delivery remain UNPROVEN; enabling media requires a separately reviewed private host policy and an Owner decision.
 
@@ -125,20 +144,10 @@ Back up the encrypted session file, the separate key, the binding/budget databas
 
 Offline gate evidence: hosted CI 41386800622 on `a810087` (PR merge `2bd5e7f`) passed 273/273 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip, four-staff browser and 4/10/25/50 load, the encrypted restore drill (including a seeded interrupted-processing fixture quarantined to `unknown`), and the pilot dry-run/scan with the PR merge identity, UID 65532, no ports/private files and 0 HIGH/CRITICAL. Load p95 was 62.9/82.9/222.5/435.6 ms at 4/10/25/50 clients, 119.7 ms at 50×50 and 928.7/1661.8 ms at 100/200; **500 clients FAIL** at 3135.5 ms. The prior run 41385140560 on `e0e635d` reported 65.0/79.6/212.3/441.8 ms and 701.5/1525.0 ms. These are short synthetic API workloads; the 200-client result varies across runs. This establishes enforceable local boundaries only; no real login, phone interaction or provider delivery has occurred.
 
-No item here is accepted or authorized yet. Before any live login, the Owner must explicitly approve:
+No live item is activated. The Owner approved D1–D7 in scope on 2026-11-02 ([G5-SCOPE-APPROVAL.md](../evidence/G5-SCOPE-APPROVAL.md)), fixing one dedicated account, exactly one consenting direct peer, a private host with local-only QR, the staged order, 10 parts/day, ≥2 s, 2 hours, text-only and the risk acceptance. Live entry still requires a separate explicit authorization for each stage, starting at `G5A_AWAITING_OWNER_START` ([procedure](G5-LIVE-PILOT-PROCEDURE.md)).
 
-1. one dedicated legitimate test account and its official phone, with the account not used for production or customers;
-2. 1–4 consenting direct-message test peer IDs and the exact test window;
-3. a private pilot host that can show the QR locally to the Owner, with controlled egress and no public ports;
-4. the staged command order — `bootstrap` once, then `run-observe`, then `run-send-test` only if the same approved scope includes sending — and the 1–30 part/day, ≥2 s interval limits;
-5. acceptance of the unofficial-client, platform-terms, account-restriction and ban risks, recorded by consent reference rather than secret material;
-6. the pilot media scope — text-only first with inbound media scheduling disabled (the current code path), or a separately reviewed private media host policy before any media test;
-7. post-pilot retention/deletion of test messages, media and private session material; the proposed engineering default is to delete them after the window and retain only sanitized evidence.
-
-Proposed engineering defaults, not adopted until the Owner records them: observe-only first with one consenting peer; up to four peers for the four-staff acceptance; a 2-hour observe/send-test session followed by a 7-day low-volume soak; an initial cap of 10 parts/day (below the 30 hard maximum) and a ≥2 s interval; text-only. These are conservative engineering proposals, not Zalo-approved limits or ban-safety claims.
-
-After approval, the Engineering Lead records the approved scope, provisions the private files outside the repository, verifies build/lock/integrity identity, and starts observe-only under direct Owner participation. Any change to account, peers, purposes, budget, interval, risk or window requires a new Owner decision. Never request cookies, passwords or QR images through chat.
+The scope record does not authorize production, HANU/customer accounts, more recipients, higher limits, media, public exposure, PR #3 merge, G6 soak or an automatic production transition. Any change to account, peer, purposes, budget, interval, media, risk or window requires a new Owner decision. Never request cookies, passwords or QR images through chat.
 
 ## Stop conditions
 
-Stop immediately on account warnings, credential leakage, repeated listener eviction, unexplained missing/duplicate sends, uncertain exclusive ownership or provider-policy changes. Disable dispatch, preserve only sanitized evidence and have the Owner revoke the test session. Never evade account/device limits or automate replacement accounts.
+Stop immediately on account warnings, credential leakage, repeated listener eviction, unexplained missing/duplicate sends, uncertain exclusive ownership or provider-policy changes. Disable dispatch, preserve only sanitized evidence and have the Owner revoke the test session. Never evade account/device limits or automate replacement accounts. When the pilot ends, follow [PILOT-TEARDOWN.md](PILOT-TEARDOWN.md) for the D7 deletion and inventory.

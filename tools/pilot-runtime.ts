@@ -20,11 +20,13 @@ import {
   createSdkProvider,
   type PilotDispatchHaltReason,
 } from "../adapters/zalo/provider.js";
+import { assertG5Scope, G5_SESSION_LIMIT_MS } from "./g5-policy.js";
 
 export type PilotMode = "observe" | "send-test";
 export type PilotLoopHalt =
   | "tick-limit"
   | "grant-expired"
+  | "session-limit"
   | "aborted"
   | "runtime-error"
   | PilotDispatchHaltReason;
@@ -113,6 +115,8 @@ export async function runPilotLoop(input: {
   maxTicks: number;
   tickMs?: number;
   media?: boolean;
+  /** Absolute wall-clock cap for one activated session; bounded by the G5 limit. */
+  sessionLimitMs?: number;
   now?: () => Date;
   signal?: AbortSignal;
   sleep?: (ms: number) => Promise<void>;
@@ -124,6 +128,7 @@ export async function runPilotLoop(input: {
   const sleep = input?.sleep ?? defaultSleep;
   const grant = input?.grant;
   const connector = input?.connector;
+  const sessionLimitMs = input?.sessionLimitMs;
   if (
     !connector ||
     typeof connector.start !== "function" ||
@@ -138,6 +143,10 @@ export async function runPilotLoop(input: {
     !Number.isInteger(tickMs) ||
     tickMs < 0 ||
     tickMs > MAX_TICK_MS ||
+    (sessionLimitMs !== undefined &&
+      (!Number.isInteger(sessionLimitMs) ||
+        sessionLimitMs < 1 ||
+        sessionLimitMs > G5_SESSION_LIMIT_MS)) ||
     (input.media === true && typeof connector.runMediaOnce !== "function") ||
     (input.now !== undefined && typeof input.now !== "function") ||
     (input.sleep !== undefined && typeof input.sleep !== "function") ||
@@ -146,6 +155,26 @@ export async function runPilotLoop(input: {
   )
     throw unavailable();
   if (!fresh(grant, now)) throw unavailable();
+  let sessionStart: number | undefined;
+  if (sessionLimitMs !== undefined) {
+    try {
+      const current = now();
+      sessionStart = current instanceof Date ? current.getTime() : NaN;
+    } catch {
+      throw unavailable();
+    }
+    if (!Number.isFinite(sessionStart)) throw unavailable();
+  }
+  const sessionExpired = () => {
+    if (sessionLimitMs === undefined || sessionStart === undefined) return false;
+    try {
+      const current = now();
+      const nowMs = current instanceof Date ? current.getTime() : NaN;
+      return !Number.isFinite(nowMs) || nowMs - sessionStart >= sessionLimitMs;
+    } catch {
+      return true;
+    }
+  };
 
   if (input.signal?.aborted) {
     try {
@@ -161,6 +190,10 @@ export async function runPilotLoop(input: {
     while (ticks < input.maxTicks) {
       if (input.signal?.aborted) {
         halt = "aborted";
+        break;
+      }
+      if (sessionExpired()) {
+        halt = "session-limit";
         break;
       }
       if (!fresh(grant, now)) {
@@ -291,6 +324,11 @@ export async function startPilotRuntime(input: {
     !fresh(grant, () => new Date())
   )
     throw unavailable();
+  try {
+    assertG5Scope(mode, grant);
+  } catch {
+    throw unavailable();
+  }
   let identity: unknown;
   try {
     identity = await readBuildIdentity();
@@ -357,7 +395,11 @@ export async function startPilotRuntime(input: {
     connector = createOwnedConnector({
       pool,
       ownerLabel: mode === "observe" ? "pilot-observe" : "pilot-send-test",
-      transportOptions: { reconnectDelayMs: 5000 },
+      transportOptions: {
+        reconnectDelayMs: 5000,
+        maxReconnectAttempts: 0,
+      },
+      onTransportFault: () => controller.abort(),
       inbound: {
         accountId: grant.expectedAccountId!,
         allowedPeerIds: grant.allowedPeerIds,
@@ -385,6 +427,7 @@ export async function startPilotRuntime(input: {
         mode === "send-test"
           ? createSdkProvider(pool, transport, owner, {
               grant,
+              textOnly: true,
               onHalt: (reason) => {
                 policyHalt = reason;
                 controller.abort();
@@ -401,6 +444,7 @@ export async function startPilotRuntime(input: {
       tickMs:
         mode === "observe" ? 1000 : Math.max(2000, grant.minIntervalMs),
       media: false,
+      sessionLimitMs: G5_SESSION_LIMIT_MS,
       signal: controller.signal,
       haltReason: () => policyHalt,
     });

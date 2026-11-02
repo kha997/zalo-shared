@@ -22,6 +22,8 @@ export type PilotDispatchHaltReason =
 export interface PilotDispatchPolicy {
   readonly grant: PilotGrant;
   readonly reserve?: typeof reservePilotPart;
+  /** G5 media exclusion: outbound messages with attachments fail before reservation. */
+  readonly textOnly?: boolean;
   now?(): Date;
   onHalt?(reason: PilotDispatchHaltReason): void;
 }
@@ -69,6 +71,8 @@ function readPilotPolicy(policy: PilotDispatchPolicy) {
     throw pilotUnavailable();
   if (policy.onHalt !== undefined && typeof policy.onHalt !== "function")
     throw pilotUnavailable();
+  if (policy.textOnly !== undefined && typeof policy.textOnly !== "boolean")
+    throw pilotUnavailable();
   const issuedAt = Date.parse(grant.issuedAt);
   const expiresAt = Date.parse(grant.expiresAt);
   if (expiresAt <= issuedAt) throw pilotUnavailable();
@@ -78,6 +82,7 @@ function readPilotPolicy(policy: PilotDispatchPolicy) {
     reserve: policy.reserve ?? reservePilotPart,
     now: policy.now ?? (() => new Date()),
     onHalt: policy.onHalt ?? (() => {}),
+    textOnly: policy.textOnly === true,
     issuedAt,
     expiresAt,
   });
@@ -181,6 +186,8 @@ export function createSdkProvider(
           halt(dispatch, "grant-expired");
           throw new ProviderNotDispatchedError();
         }
+        if (dispatch.textOnly && m.attachments > 0)
+          throw new Error("Unsupported SDK media");
         if (
           m.provider_thread_type !== 0 ||
           !dispatch.peers.has(m.provider_thread_id)

@@ -51,10 +51,13 @@ interface Options {
   guard?: () => boolean;
   /** Pilot-only: restrict outbound claims to these exact direct peers. */
   dispatchPeers?: readonly string[];
+  /** Pilot-only: synchronous operator hook when the transport reports a gap. */
+  onTransportFault?: () => void;
   acquireOwnership?: typeof acquireConnectorOwnership;
   transportOptions?: Pick<
     TransportOptions,
     | "reconnectDelayMs"
+    | "maxReconnectAttempts"
     | "sendTimeoutMs"
     | "handshakeTimeoutMs"
     | "maxPendingInbound"
@@ -129,6 +132,11 @@ export function createOwnedConnector(options: Options) {
   )
     throw unavailable();
   if (options.guard !== undefined && typeof options.guard !== "function")
+    throw unavailable();
+  if (
+    options.onTransportFault !== undefined &&
+    typeof options.onTransportFault !== "function"
+  )
     throw unavailable();
   let rejectedInbound = 0;
   let status: "stopped" | "starting" | "active" | "blocked" = "stopped";
@@ -329,6 +337,9 @@ export function createOwnedConnector(options: Options) {
           onFault: async (reason) => {
             // Block dispatch synchronously; durable fault persistence may await a pool.
             gap = true;
+            try {
+              options.onTransportFault?.();
+            } catch {}
             const db = await options.pool.connect();
             try {
               await db.query("BEGIN");
