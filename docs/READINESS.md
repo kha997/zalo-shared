@@ -19,9 +19,9 @@ Four-staff acceptance and capacity remained within the short-workload target at 
 
 Local evidence for the same source: typecheck and both builds PASS; focused pilot/connector suites **47/47** PASS; full local suite **258 tests, 256 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions that pass on Linux. The Linux-only runtime branch was also exercised locally with a forced `process.platform`. The connector image built locally with a real identity; the inventory reported UID 65532, `zca-js@2.2.0`, `crypto-js@4.2.0`, the commit identity and no private files. [Review and dispositions](review/private-pilot-runtime-review.md).
 
-### Third-pass review remediation — local PASS, hosted pending
+### Third-pass review remediation — hosted PASS
 
-A follow-up independent pass over the same slice raised seven additional issues; all are fixed in the working tree and covered by focused regressions.
+A follow-up independent pass over the same slice raised seven additional issues; all are fixed in `44b677f` and covered by focused regressions.
 
 - A provided worker scope is now validated before any lock or query: an empty, duplicate, malformed or absent `peers` list throws instead of silently widening the claim to the whole account. The interrupted-dispatch sweep is also limited to the scope, so a pilot no longer quarantines out-of-scope staff mail; the normal owner recovers those rows.
 - A deferred destination now returns `processed:false`, so the main worker backs off instead of reclaiming the same row in a hot loop. The row and its parts remain `pending` and are never marked failed.
@@ -30,12 +30,14 @@ A follow-up independent pass over the same slice raised seven additional issues;
 - QR bootstrap validates the private key, session and view paths before acquiring ownership, so a typo cannot bump the connector epoch or quarantine provider state.
 - The in-image build identity remains build-derived, not content-hashed: the trust anchor is the CI-built image digest recorded externally, and the runtime cannot attest its own provenance from inside the container. Deployment must pin that digest. Dry-run remains shape-only and intentionally reads no image file. This limitation is recorded in the review.
 
-Local evidence for the working slice: typecheck and both builds PASS; focused pilot/connector/worker suites **50/50** PASS; full local suite **266 tests, 264 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions that pass on Linux. Hosted CI is pending.
+Hosted [CI 41381303200](https://github.com/kha997/zalo-shared/actions/runs/41381303200) on `44b677f` passed both jobs: **266/266** unit checks, **2/2** guarded offline SDK checks, **9 browser cases + 1 explicit skip, 0 failed**, plus the pilot image job. The image identity was verified against the checked-out PR merge commit `e5fb987` and the connector lock; the inventory reported UID 65532, `zca-js@2.2.0`, `crypto-js@4.2.0`, no private files, no exposed ports and **0 HIGH/CRITICAL (0 fixable)**. Load p95 was **60.9/74.9/228.7/418.0 ms** at 4/10/25/50 clients and 108.8 ms for 50×50; 100/200-client p95 was 880.3/1791.4 ms; **500 clients FAIL** at 4210.8 ms. There were zero request errors and all mock queues drained.
+
+Local evidence for the working slice: typecheck and both builds PASS; focused pilot/connector/worker suites **50/50** PASS; full local suite **266 tests, 264 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions that pass on Linux.
 
 | Claim | Status |
 |---|---|
 | Policy-halt exit, real dispatch path, peer-scoped claims, image build identity, self-peer rejection, TLS rule, boundary error | PASS locally and hosted at `a37935a` |
-| Exact-scope validation, scoped interrupted sweep, deferral backoff, CLI halt allowlist, preflight containment, bootstrap ordering | PASS locally; hosted pending |
+| Exact-scope validation, scoped interrupted sweep, deferral backoff, CLI halt allowlist, preflight containment, bootstrap ordering | PASS locally and hosted at `44b677f` |
 | Four-staff browser acceptance and 4/10/25/50 capacity | PASS hosted; 500-client p95 FAIL |
 | Live send-test against a real account or peer | UNPROVEN — requires Owner activation |
 | Production readiness | NOT ESTABLISHED |

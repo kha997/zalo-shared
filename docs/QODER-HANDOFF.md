@@ -28,9 +28,9 @@ A second independent review of the committed pilot slice found one high-impact d
 
 Local: typecheck/build/build:connector PASS; focused pilot/connector suites 47/47 PASS; full local suite 258 tests, 256 PASS, only the two Windows-only `vault.test.ts` failures. Connector image built locally with a real identity; inventory reports UID 65532, `zca-js@2.2.0`, `crypto-js@4.2.0`, no private files. Hosted PASS at `a37935a`/41379964911: 258/258 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip, four-staff browser flow and 4/10/25/50 load within target (p95 44.7/65.2/145.8/272.9 ms; 500 clients FAIL at 3991.5 ms).
 
-## Working slice — third-pass review remediation (local PASS, hosted pending)
+## Working slice — third-pass review remediation (hosted PASS)
 
-A follow-up pass over the same slice raised seven issues; all are fixed in the working tree:
+A follow-up pass over the same slice raised seven issues; all are fixed and hosted CI passed at `44b677f`/41381303200: **266/266** unit checks, **2/2** guarded SDK checks, **9 browser cases + 1 skip, 0 failed**, pilot dry-run/scan with image identity `e5fb987`, UID 65532, no ports/private files and 0 HIGH/CRITICAL.
 
 - A provided worker scope is validated before any lock or query; empty/duplicate/malformed scopes throw instead of falling back to the account-wide claim.
 - A scoped worker's interrupted-dispatch sweep covers only its exact peers, leaving out-of-scope `processing` rows for the next unscoped owner.
@@ -40,7 +40,7 @@ A follow-up pass over the same slice raised seven issues; all are fixed in the w
 - QR bootstrap validates the private key/session/view files before acquiring ownership.
 - Build identity remains build-derived, not content-hashed; deployment must pin the CI image digest. Dry-run intentionally verifies manifest shape only.
 
-Focused pilot/connector/worker suites 50/50 PASS; full local suite 266 tests, 264 PASS, 2 FAIL (only the Windows-only `vault.test.ts` mode assertions); hosted verification is pending in this slice.
+Focused pilot/connector/worker suites 50/50 PASS; full local suite 266 tests, 264 PASS, 2 FAIL (only the Windows-only `vault.test.ts` mode assertions). Load p95 60.9/74.9/228.7/418.0 ms at 4/10/25/50; 200 clients 1791.4 ms; 500 FAIL at 4210.8 ms with zero request errors.
 
 ## Work in the committed head — private pilot contract
 
@@ -94,6 +94,6 @@ Local typecheck passes; full local suite 201/203 (two Windows-only vault mode as
 - QR enrollment, private files and CLI: hosted PASS at `ad036f6`/41374543813.
 - Pilot runtime, separate connector image, scan and review fixes: local and hosted PASS at `105f2d7`/41377272040.
 - Second-review hardening (halt precedence, real dispatch path, peer-scoped claims, image build identity, self-peer and TLS rules, boundary error): hosted PASS at `a37935a`/41379964911.
-- Third-pass hardening (exact-scope validation, scoped interrupted sweep, deferral backoff, CLI halt allowlist, preflight containment, bootstrap ordering): local PASS, hosted pending.
+- Third-pass hardening (exact-scope validation, scoped interrupted sweep, deferral backoff, CLI halt allowlist, preflight containment, bootstrap ordering): hosted PASS at `44b677f`/41381303200.
 - Long-lived pilot runtime live drill, media scheduling in the pilot loop, dedicated admin retry, metadata/attachment retention policy and duplicate-egress bounds: open.
 - Actual Zalo login, messaging/media, account health, phone coexistence, terms compliance and ban risk: UNPROVEN. Production readiness: NOT ESTABLISHED.

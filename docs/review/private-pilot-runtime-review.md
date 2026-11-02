@@ -57,11 +57,11 @@ Local evidence after the fixes: typecheck and both builds pass; focused pilot/co
 | P3.10 | The CLI echoed the runner's `halt` string directly, so a future reason containing identifiers would reach stdout. | **Fixed.** Only the reviewed halt literals may be emitted; any other string is collapsed to `runtime-error` and never echoed. Regression includes a halt containing the bound account and a cookie-shaped string. |
 | P2.4 follow-up | QR bootstrap acquired connector ownership before validating the private key and session paths, so a typo bumped the epoch and could quarantine provider state. | **Fixed.** `readPrivateKeyFile`, `PrivateSessionFile` and `PrivateQrFileView` are constructed before `acquireConnectorOwnership`; ownership is taken only after all three validate. The enrollment path itself remains covered by the QR bootstrap suite; this ordering is structural and has no dedicated Linux/DB regression. |
 
-Local evidence for the third pass: typecheck and both builds PASS; focused pilot/connector/worker suites **50/50** PASS; full local suite **266 tests, 264 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions. The full-suite and hosted results are recorded in [readiness](../READINESS.md).
+Local evidence for the third pass: typecheck and both builds PASS; focused pilot/connector/worker suites **50/50** PASS; full local suite **266 tests, 264 PASS, 2 FAIL**, both the known Windows-only `vault.test.ts` POSIX mode assertions. Hosted PASS at `44b677f`/41381303200: 266/266 units, 2/2 guarded SDK checks, 9 browser cases + 1 skip, pilot dry-run/scan and identity `e5fb987` verified. Full-suite and load details are recorded in [readiness](../READINESS.md).
 
 ## Residual risks and unproven claims
 
-- Hosted CI at `a37935a`/41379964911 passed 258/258 units; the two Windows-only local mode failures do not reproduce on Linux. The third-pass fixes are hosted-pending.
+- Hosted CI at `a37935a`/41379964911 passed 258/258 units, and `44b677f`/41381303200 passed 266/266; the two Windows-only local mode failures do not reproduce on Linux.
 - The build identity is derived at image build from the commit, connector lock and SDK integrity, but it is not a cryptographic attestation of the image contents. Deploy only the CI-built digest recorded in the pipeline, not a locally rebuilt image.
 - Dry-run validates the manifest shape only; it intentionally does not read `/app/build-identity.json`, import the SDK, open a database or touch the network.
 - A scoped worker leaves out-of-scope interrupted `processing` rows for the next unscoped owner. If a pilot is the only process running for the whole window, those rows stay `processing` until it exits; they are never retried by the pilot.
