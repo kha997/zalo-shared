@@ -1,6 +1,6 @@
 {
   "scanner": "Trivy0.76.1",
-  "image": "zalo-shared-connector:g4-ea66d8b",
+  "image": "zalo-shared-connector:g5-2b41b34",
   "highCriticalCount": 0,
   "fixableHighCriticalCount": 0,
   "findings": [],
@@ -626,7 +626,7 @@
     "cryptoJs": "4.2.0",
     "buildIdentity": {
       "version": 1,
-      "sourceCommit": "ea66d8b94dde26e67bcb438e114fdd2454401a2d",
+      "sourceCommit": "2b41b340f57dbceea6b5c445b11a4d3a0f5ba62e",
       "lockSha256": "17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b",
       "sdkIntegrity": "sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA=="
     },

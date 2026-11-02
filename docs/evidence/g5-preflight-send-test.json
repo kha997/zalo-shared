@@ -1,0 +1,1 @@
+{"command":"preflight","ok":true,"gate":"admitted","purpose":"send-test","accountBound":true,"peerCount":1,"maxPartsPerDay":10,"minIntervalMs":2000,"lifetimeMs":7200000,"expiresAt":"2026-11-02T12:30:13.223Z"}

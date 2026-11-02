@@ -1,0 +1,60 @@
+{
+  "gate": "G5_OFFLINE_PREFLIGHT",
+  "status": "PASS",
+  "evidenceType": "synthetic-offline",
+  "liveAction": "none",
+  "recordedAt": "2026-11-02T10:31:14.874Z",
+  "branch": "feat/shared-inbox",
+  "artifactSourceCommit": "2b41b340f57dbceea6b5c445b11a4d3a0f5ba62e",
+  "image": "zalo-shared-connector:g5-2b41b34",
+  "imageId": "sha256:e3fa923f1396c10ddcae039b889a6109f6cafcce6b25c2054ed8e43c0835c7b0",
+  "localRepoDigest": "zalo-shared-connector@sha256:e3fa923f1396c10ddcae039b889a6109f6cafcce6b25c2054ed8e43c0835c7b0",
+  "localArchiveSha256": "ce7dbd64bb3d1fde02e4126afbac519df209cfd661f09e037dae2f1761116246",
+  "imageBytes": 57493682,
+  "imageKind": "local image digest and local archive fingerprint; not a pushed registry digest or signature",
+  "buildIdentity": {
+    "version": 1,
+    "sourceCommit": "2b41b340f57dbceea6b5c445b11a4d3a0f5ba62e",
+    "lockSha256": "17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b",
+    "sdkIntegrity": "sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA=="
+  },
+  "runtime": {
+    "uid": 65532,
+    "zcaJs": "2.2.0",
+    "cryptoJs": "4.2.0",
+    "exposedPorts": [],
+    "privateFiles": []
+  },
+  "scan": {
+    "scanner": "Trivy0.76.1",
+    "highCriticalCount": 0,
+    "fixableHighCriticalCount": 0
+  },
+  "preflight": {
+    "network": "none",
+    "bootstrap": "admitted",
+    "observe": "admitted",
+    "send-test": "admitted",
+    "outOfScope": "denied"
+  },
+  "checks": {
+    "fullLocalSuite": "283/283 PASS",
+    "typecheck": "PASS",
+    "connectorBuild": "PASS",
+    "noQrLoginOrSend": true
+  },
+  "evidenceFiles": [
+    "g5-preflight-bootstrap.json",
+    "g5-preflight-observe.json",
+    "g5-preflight-send-test.json",
+    "g5-preflight-denied.json",
+    "connector-image-inventory.json",
+    "connector-image-scan-summary.json",
+    "connector-container-vulnerabilities.json"
+  ],
+  "limitations": [
+    "Synthetic manifests only; no real account, peer, session or provider action.",
+    "The local image ID is not a registry digest or a signed attestation; CI does not push the image.",
+    "Hosted egress restriction and phone coexistence remain unproven until the approved live pilot."
+  ]
+}

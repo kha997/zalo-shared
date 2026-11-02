@@ -1,5 +1,7 @@
 # G4 — Live pilot activation package
 
+> **SUPERSEDED IN SCOPE (2026-11-02):** the Owner approved D1–D7 in scope under [G5-SCOPE-APPROVAL.md](G5-SCOPE-APPROVAL.md). Live activation is still withheld; current status is `G5A_AWAITING_OWNER_START` ([readiness](G5A-ACTIVATION-READINESS.md)). This G4 package remains as historical evidence.
+
 **Status:** OFFLINE READY — **NO LIVE ACTION PERFORMED**.
 **Baseline:** connector artifact source `ea66d8b94dde26e67bcb438e114fdd2454401a2d`; G3 functional evidence was collected at `adf8ceca9bd615004486b14ebc07da8475b71a3a`. Later commits are docs/ops-only and do not change the artifact.
 **Gate:** `G4_AWAITING_OWNER_LIVE_APPROVAL`. G5 is not authorized. PR #3 remains Draft.

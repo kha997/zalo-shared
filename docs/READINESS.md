@@ -2,6 +2,12 @@
 
 **NOT PRODUCTION-READY. No live Zalo login, production deployment, real customer data or public application endpoint has been used.** The repository is public; runtime credentials and unlicensed upstream application snapshots are excluded.
 
+## G5 pre-activation readiness — offline PASS, activation pending
+
+The Owner approved the D1–D7 pilot scope but withheld live activation ([decision](evidence/G5-SCOPE-APPROVAL.md)). The connector now enforces the narrower G5 bounds in addition to the generic pilot policy: exactly one account and one direct peer, 1–10 outbound parts/day, ≥2 s interval, a 2-hour wall-clock session cap, text-only dispatch, zero automatic reconnect, and an offline `preflight` command that denies any out-of-scope manifest. The stage order is bootstrap → observe → send-test, each requiring separate Owner authorization.
+
+Reviewed artifact: source `2b41b340f57dbceea6b5c445b11a4d3a0f5ba62e`, image `zalo-shared-connector:g5-2b41b34`, local digest `sha256:e3fa923f…c0835c7b0`. Local evidence: **283/283** tests PASS, typecheck and connector build PASS, Trivy **0 HIGH/CRITICAL**, UID 65532, no ports/private files, and in-image preflight under `--network none` admitted all three synthetic stages while denying an out-of-scope manifest ([summary](evidence/g5-offline-preflight-summary.json), [readiness report](evidence/G5A-ACTIVATION-READINESS.md)). This is synthetic/offline evidence only. The local image digest is not a registry digest or signed attestation. Status: `G5A_AWAITING_OWNER_START`; PR #3 remains Draft.
+
 ## Private pilot review hardening — hosted PASS
 
 A second independent review of the committed pilot runtime, CLI, connector image and CI job found one high-impact defect and several medium issues. All are fixed and the slice passed hosted CI.

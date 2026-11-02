@@ -15,4 +15,4 @@ for stage in bootstrap observe send-test; do
 done
 node --import tsx ops/g5-synthetic-manifest.ts "$tmp/invalid.json" observe --invalid-scope >/dev/null
 sudo install -o 65532 -g 65532 -m 0600 "$tmp/invalid.json" "$target/manifest.invalid.json"
-sudo stat -c 'mode=%a owner=%U:%G name=%n' "$target"/manifest.*.json
+sudo find "$target" -maxdepth 1 -name 'manifest.*.json' -printf 'mode=%m owner=%u:%g name=%p\n' | sort

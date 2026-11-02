@@ -13,4 +13,5 @@ sudo test -f "$manifest" || { echo "missing manifest: $manifest; run make-g5-syn
 docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=16m \
   --cap-drop ALL --security-opt no-new-privileges:true \
   -v "$manifest:/run/pilot/manifest.json:ro" \
-  -e PILOT_MANIFEST=/run/pilot/manifest.json "$image" preflight
+  -e PILOT_MANIFEST=/run/pilot/manifest.json "$image" \
+  dist/connector/tools/pilot-connector.js preflight

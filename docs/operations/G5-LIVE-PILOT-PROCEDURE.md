@@ -11,7 +11,7 @@ No step in this document authorizes a live action by itself. The Owner must name
 1. The Owner has confirmed the dedicated account alias, the single consenting peer alias, the private host and the exact UTC window.
 2. The private consent record is complete and referenced by `consentRef`; the manifest uses aliases only in repository material.
 3. The reviewed connector image is the one recorded in the readiness report; the source commit, connector lock and SDK integrity match the embedded build identity.
-4. `ops/local/preflight-connector.sh IMAGE STAGE` returns `"ok":true` and `"gate":"admitted"` for the exact stage manifest with no network namespace.
+4. `ops/local/preflight-connector.sh IMAGE STAGE` returns `"ok":true` and `"gate":"admitted"` for the exact stage manifest with no network namespace. Preflight checks scope only; the live command separately verifies the embedded image identity.
 5. The connector has exclusive ownership; no second connector process or stale container is running.
 6. The official phone is available, unlocked and held by the Owner; no screenshot, screen share, chat upload or cloud sync of the QR is permitted.
 7. The stage-specific grant is fresh, purpose-matching and expires no later than the Owner window. Enrollment ≤1 hour; observe/send-test ≤2 hours.
