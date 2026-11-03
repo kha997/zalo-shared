@@ -21,7 +21,7 @@ The Owner approved this narrower scope for the staged G5 pilot. It is enforced i
 - text only: an outbound attachment request is refused before reservation or egress;
 - no automatic reconnect (`maxReconnectAttempts: 0`); a lost connection becomes one durable fault and aborts the session;
 - one stored-credential login per process, with no QR/password re-enrollment or retry loop, no automatic resend after an unknown result and no concurrent connector owner;
-- `preflight` validates the exact stage manifest against these bounds offline, before any live command can start;
+- `preflight` validates the exact stage manifest against these bounds offline and verifies that the manifest build block matches the image's `/app/build-identity.json`; the live command repeats the identity check before any key, session, database or SDK action;
 - stage order `bootstrap` → `run-observe` → `run-send-test`, each with separate explicit Owner authorization.
 
 Any broadening of account, peer, purposes, budget, interval, media, risk or window requires renewed Owner approval.
@@ -66,6 +66,30 @@ Keep all material outside the repository, on the private pilot host:
 The container runs as UID 65532, so bind-mounted files must be owned by that UID (or a host user with the same numeric UID). The connector rejects symlinks, non-regular files, wrong owners/modes and escaping directories on POSIX.
 
 The session key and any media locator encryption key are separate capabilities with separate files. Select the envelope key identifier explicitly with `PILOT_KEY_ID` (default `v1`); it is bound into both the ciphertext envelope and the AES-GCM associated data, so a record written under one id cannot be read under another. Rotate by installing a new key file, selecting a new id, verifying decryption of a new session write, and only then retiring the old file after the agreed transition. There is no silent migration and no automatic key deletion. The pilot session path uses this private file store; the application's general credential vault is unchanged and is not used by the pilot connector.
+
+## Connector egress boundary
+
+The connector image preloads [`ops/pilot-egress-guard.cjs`](../../ops/pilot-egress-guard.cjs) with `NODE_OPTIONS=--require=/app/egress-guard.cjs`. The guard installs a default-deny boundary before any application module or SDK is imported, so it does not depend on the SDK honouring a proxy or allowlist option.
+
+- `PILOT_EGRESS_HOSTS` is a comma-separated list of **exact** provider hostnames; wildcards, IP literals and trailing dots are refused. If it is empty or unset, every provider connection is denied. `PILOT_EGRESS_PORTS` defaults to `443`.
+- The only other permitted destination is the exact `DATABASE_URL` host and port. Database query parameters that could redirect the target (`host`, `port`, `user`, `password`, `ssl`) cause the URL to be treated as unusable, and the connection is denied. Database addresses must resolve to private, loopback or unique-local space; public, link-local, multicast and metadata addresses are refused.
+- Provider destinations must resolve only to public unicast addresses. Loopback, private, link-local, carrier-grade NAT, documentation, benchmarking, multicast and IPv4-mapped addresses are refused. This blocks DNS rebinding and direct-IP substitution.
+- `dns.resolve*`, `lookupService` and `reverse` are denied. `dns.lookup` and the internal `net`/`tls` lookup admit only an allowlisted hostname, and every returned address is checked. `net.Socket.prototype.connect` injects the guarded lookup, so `fetch`, `http`, `https`, `http2`, `ws` and the SDK's WebSocket listener all pass through the same check.
+- UDP (`dgram`), child processes and worker threads are denied. Proxy environment variables (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, lower-case variants and `NODE_USE_ENV_PROXY`) and `NODE_TLS_REJECT_UNAUTHORIZED=0` fail closed at startup. `checkUpdate` is disabled in the connector, and `registry.npmjs.org` would be denied anyway.
+- The guard is process-local. It is not a network namespace or host firewall: a host/Docker administrator, root in the container, a native addon or a replaced image can bypass it. Keep the image digest pinned, keep the connector on its dedicated networks, and treat host-level controls as a separate Owner decision. The local unit tests are in [`tests/backend/pilot-egress-guard.test.ts`](../../tests/backend/pilot-egress-guard.test.ts).
+
+The pinned SDK source confirms static bootstrap hosts (`id.zalo.me`, `wpa.chat.zalo.me`, `jr.chat.zalo.me`, `chat.zalo.me`) and an npm update check. It also receives `zpw_service_map_v3` and `zpw_ws` from `getServerInfo` after login; those are server-provided API and WebSocket hosts and cannot be enumerated safely offline. Do not invent or wildcard them. The live gate stays **BLOCKED** until the Owner approves an exact host inventory, or an independently reviewed network-level egress gateway is deployed; no real Zalo traffic is permitted for endpoint discovery.
+
+### Inspecting private configuration
+
+Never `cat`, `env`, `docker inspect` or otherwise print a private env file or container environment directly. Use the approved helper, which emits variable names only:
+
+```bash
+ops/private-env-keys.sh /private/pilot-private/app.env
+ops/private-env-keys.sh --container zalo-shared-g2-app-1
+```
+
+When a diagnostic needs a value, prove a property instead of printing it (for example, compare parsed values in memory and print a boolean). The G5-A credential incident record documents why this rule exists: [G5A-CREDENTIAL-INCIDENT.md](../evidence/G5A-CREDENTIAL-INCIDENT.md).
 
 ## Binding the grant
 

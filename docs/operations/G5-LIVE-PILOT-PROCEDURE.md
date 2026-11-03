@@ -11,11 +11,12 @@ No step in this document authorizes a live action by itself. The Owner must name
 1. The Owner has confirmed the dedicated account alias, the single consenting peer alias, the private host and the exact UTC window.
 2. The private consent record is complete and referenced by `consentRef`; the manifest uses aliases only in repository material.
 3. The reviewed connector image is the one recorded in the readiness report; the source commit, connector lock and SDK integrity match the embedded build identity.
-4. `ops/local/preflight-connector.sh IMAGE STAGE` returns `"ok":true` and `"gate":"admitted"` for the exact stage manifest with no network namespace, and its purpose matches the stage. Preflight checks scope only; the live command separately verifies the embedded image identity.
-5. The connector has exclusive ownership; no second connector process or stale container is running.
-6. The official phone is available, unlocked and held by the Owner; no screenshot, screen share, chat upload or cloud sync of the QR is permitted.
-7. The stage-specific grant is fresh and purpose-matching. Set `expiresAt` to the Owner's named automatic expiry, no later than the end of the authorized window: enrollment ≤1 hour; observe/send-test ≤2 hours. The grant expiry is the absolute bound even if the process restarts.
-8. The emergency stop path is open: the Owner can terminate the container and revoke the session from the phone.
+4. `ops/local/preflight-connector.sh IMAGE STAGE` returns `"ok":true` and `"gate":"admitted"` for the exact stage manifest with no network namespace, and its purpose matches the stage. Preflight checks scope **and** that the manifest build block matches the image's embedded identity; the live command repeats the identity check.
+5. The connector's private env sets `PILOT_EGRESS_HOSTS` to the exact reviewed provider hostnames and optionally `PILOT_EGRESS_PORTS` (default 443). An empty or missing list denies all provider egress. No wildcard, IP literal or proxy is permitted. If the exact live host inventory is not approved, stop: the egress gate is still BLOCKED.
+6. The connector has exclusive ownership; no second connector process or stale container is running.
+7. The official phone is available, unlocked and held by the Owner; no screenshot, screen share, chat upload or cloud sync of the QR is permitted.
+8. The stage-specific grant is fresh and purpose-matching. Set `expiresAt` to the Owner's named automatic expiry, no later than the end of the authorized window: enrollment ≤1 hour; observe/send-test ≤2 hours. The grant expiry is the absolute bound even if the process restarts.
+9. The emergency stop path is open: the Owner can terminate the container and revoke the session from the phone.
 
 ## Stage G5-A — bootstrap (QR enrollment only)
 

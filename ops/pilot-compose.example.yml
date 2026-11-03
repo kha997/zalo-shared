@@ -33,11 +33,13 @@ services:
       - type: bind
         source: ${PILOT_STATE_DIR:?Private state directory for session.enc and local QR view}
         target: /run/pilot/state
-    # No published ports. The connector needs outbound TLS to the provider;
-    # host-level egress policy remains an Owner operating decision.
-    # DATABASE_URL in the private env file must be a postgres URL; a
-    # non-loopback database host also requires sslmode=require, verify-ca or
-    # verify-full.
+    # No published ports. The connector image preloads a default-deny egress
+    # guard: only exact provider hosts/ports listed in PILOT_EGRESS_HOSTS and
+    # the private DATABASE_URL host/port are reachable. Set exact hostnames
+    # (comma-separated, no wildcards) and optionally PILOT_EGRESS_PORTS
+    # (default 443) in the private env file. An empty host list denies all
+    # provider egress. DATABASE_URL must be a postgres URL; a non-loopback
+    # database host also requires sslmode=require, verify-ca or verify-full.
     #
     # pilot-db is the application's internal database network. It has no
     # egress by itself, so the connector joins a second, non-internal network

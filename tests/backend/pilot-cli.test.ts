@@ -14,6 +14,7 @@ const build = {
   lockSha256: "b".repeat(64),
   sdkIntegrity: "sha512-" + "c".repeat(64),
 };
+const imageIdentity = async () => ({ version: 1, ...build });
 
 function manifestFor(
   purpose: "enroll-session" | "observe" | "send-test",
@@ -167,6 +168,7 @@ test("preflight admits an exact G5 scope without reading secrets or requiring ac
           }),
         );
       },
+      readBuildIdentity: imageIdentity,
       now: () => now,
       runCommand: async () => {
         runner++;
@@ -197,6 +199,7 @@ test("preflight admits an exact G5 scope without reading secrets or requiring ac
     argv: ["preflight", "--manifest", "/private/pilot/manifest.json"],
     dependencies: {
       readFile: async () => manifestText("enroll-session"),
+      readBuildIdentity: imageIdentity,
       now: () => now,
     },
   });
@@ -254,6 +257,7 @@ test("preflight denies a scope outside the approved G5 bounds", async () => {
       argv: ["preflight", "--manifest", "/private/pilot/manifest.json"],
       dependencies: {
         readFile: async () => text,
+        readBuildIdentity: imageIdentity,
         now: () => now,
       },
     });
@@ -262,6 +266,29 @@ test("preflight denies a scope outside the approved G5 bounds", async () => {
     assert.equal(result.stdout!.includes(account), false);
     assert.equal(result.stdout!.includes(peer), false);
   }
+});
+
+test("preflight denies a manifest bound to another image identity", async () => {
+  const result = await runPilotCli({
+    argv: ["preflight", "--manifest", "/private/pilot/manifest.json"],
+    dependencies: {
+      readFile: async () => manifestText("enroll-session"),
+      readBuildIdentity: async () => ({
+        version: 1,
+        ...build,
+        sourceCommit: "d".repeat(40),
+      }),
+      now: () => now,
+    },
+  });
+  assert.equal(result.exitCode, 1);
+  assert.deepEqual(JSON.parse(result.stdout!), {
+    command: "preflight",
+    ok: false,
+    gate: "denied",
+    purpose: "enroll-session",
+    expiresAt: "2026-11-02T01:00:00.000Z",
+  });
 });
 
 test("live commands require the explicit operator flag before any manifest read", async () => {

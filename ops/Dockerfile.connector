@@ -44,11 +44,17 @@ RUN --mount=type=secret,id=proxy_ca \
 
 FROM ${RUNTIME_IMAGE}
 ENV NODE_ENV=production
+# Load the connector-local default-deny egress guard before any application
+# module. It admits only exact reviewed provider hosts/ports and the private
+# DATABASE_URL host/port; all other TCP, DNS resolve, UDP and child-process
+# egress fails closed. See ops/pilot-egress-guard.cjs.
+ENV NODE_OPTIONS=--require=/app/egress-guard.cjs
 WORKDIR /app
 COPY --from=build --chown=65532:65532 /app/dist/connector ./dist/connector
 COPY --from=build --chown=65532:65532 /app/build-identity.json ./build-identity.json
 COPY --from=runtime-deps --chown=65532:65532 /app/connector/node_modules ./node_modules
 COPY --from=runtime-deps --chown=65532:65532 /app/connector/package.json ./package.json
+COPY --chown=65532:65532 ops/pilot-egress-guard.cjs ./egress-guard.cjs
 USER 65532:65532
 # No EXPOSE: the pilot connector serves no HTTP endpoint. Dry-run fails closed
 # without a private manifest and never reads the vault, imports the SDK, or

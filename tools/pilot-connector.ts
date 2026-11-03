@@ -57,6 +57,7 @@ export type PilotCommandRunner = (input: {
 
 export type PilotCliDependencies = Readonly<{
   readFile?: (path: string) => Promise<string>;
+  readBuildIdentity?: () => Promise<unknown>;
   now?: () => Date;
   runCommand?: PilotCommandRunner;
 }>;
@@ -276,6 +277,12 @@ export async function runPilotCli(options: {
 
   if (command === "preflight") {
     try {
+      // A preflight manifest must bind to the image under test, not merely to
+      // the shape of a grant. The live command repeats this check before any
+      // key, session, database or SDK action.
+      const identity =
+        options.dependencies?.readBuildIdentity ?? readBuildIdentity;
+      assertBuildIdentity(await identity(), manifest.build);
       assertG5Scope(
         g5StageForPurpose(manifest.grant.purpose),
         manifest.grant,
