@@ -116,3 +116,73 @@ the remediation above.
 
 **STOP — `G5A_BLOCKED`. No live authentication, observation, sending, media,
 production deployment or PR merge is authorized.**
+
+## 8. Second authorization attempt — 2026-11-03 14:56–15:26Z
+
+**Authorization:** `G5A_LIVE_BOOTSTRAP_ONLY`, window
+`2026-11-03T14:56:00Z`–`2026-11-03T15:26:00Z`
+**Verified baseline:** `c38afce`; connector image `zalo-shared-connector:g5-local`
+`sha256:9bced3eb…c8427998` (embedded identity `2dff06e`); gateway
+`zalo-shared-egress-gateway:g5-local` `sha256:bfde5c7a…85ad4e75`
+**Verdict:** `G5A_BLOCKED`
+**Live Zalo action:** none — no provider connection, QR, session or ownership change
+
+The window was valid: `2026-11-03T14:57:07Z` at the authorization check and
+`2026-11-03T14:59:52Z` at the last preflight query, both inside the window. The
+flow stopped on a control failure before the hard expiry, not on expiry.
+
+### Preflight
+
+| Control | Result | Observation |
+| --- | --- | --- |
+| Reviewed source identity | PASS | `HEAD` is `c38afce`; `git diff 2dff06e..HEAD` over `adapters/`, `connector/`, `ops/Dockerfile.connector`, `server/`, `tools/`, the connector lock and `tsconfig.connector.json` is empty |
+| Connector and gateway image identity | PASS | digests above; the embedded build identity matches `2dff06e`, the connector lock (`17dcd254…`) and the SDK integrity (`sha512-pBU0T0/…`) |
+| No competing connector or SDK process | PASS | no `pilot-connector`, `pilot-runtime`, `zca-js` or `egress-gateway` process; no connector container running |
+| Private state permissions | PASS | state and view `0700`, `session.key` and manifest `0600`, UID 65532 |
+| Database credential effective | PASS | the private URL authenticates; `pilot_send_budget`, `pilot_part_ledger`, `connector_ownership`, `messages` and `outbox` exist |
+| Database transport for a non-loopback URL | **FAIL** | the pilot Postgres reports `ssl = off` and the private URL has no `sslmode`; `requireTlsDatabaseUrl` admits only `require`, `verify-ca` or `verify-full` for a non-loopback host, so every live connector command refuses this database |
+| Kernel-enforced boundary active | **FAIL** | no `pilot-db`, `pilot-egress` or `pilot-uplink` network exists and no gateway container is running |
+| Approved bootstrap hosts enforced live | **FAIL** | the reviewed list exists only in `ops/pilot-compose.example.yml`; there is no running gateway to admit it |
+| Live enrollment grant | **FAIL** | the private manifest is an explicit template (`<OWNER_CONSENT_REF>`, `<OWNER_GRANT_ID>`, placeholder timestamps) with a build block for `8d40c0f`, so it cannot match the reviewed `2dff06e` image |
+| Observe, send-test and media disabled | PASS | no pilot command running; only bootstrap was contemplated |
+
+### Why no live start
+
+1. **Database TLS is unsatisfiable as provisioned.** Closing it requires enabling
+   TLS on the pilot Postgres and issuing an `sslmode=require` URL — a change to
+   shared pilot infrastructure outside the reviewed bootstrap sequence. Neither
+   relaxing the gate nor improvising that change inside a live-account window is
+   acceptable, and the connector would refuse the database at startup regardless
+   of any grant or topology work.
+2. **The boundary is not deployed**, so it could not be confirmed active.
+3. **There is no live grant**; the only manifest is a placeholder template bound
+   to a superseded artifact.
+
+Generating the grant and starting the reviewed topology are authorized steps,
+but they do not cure the database gate, and doing all remediation ad hoc would
+leave the first-ever live enrollment outside the reviewed sequence.
+
+### State left behind
+
+No provider connection, QR generation, scan, session write, ownership
+acquisition or database write occurred. `session.key` and the view directory are
+unchanged (last modified 2026-11-02). No pilot network or container exists; the
+temporary container used to read the embedded build identity was removed. No
+host-wide firewall, routing or daemon setting was changed. PR #3 remains Draft at
+`c38afce`.
+
+### Added remediation
+
+4. Decide and review the pilot database transport: enable TLS on the pilot
+   Postgres with an `sslmode=require`/`verify-full` URL, or provision a dedicated
+   pilot database that satisfies `requireTlsDatabaseUrl`. Do not relax the gate.
+5. Deploy the reviewed topology and confirm with
+   `ops/local/verify-pilot-network.sh` that `pilot-db` and `pilot-egress` are
+   `internal=true`, the gateway is the only workload on `pilot-uplink`, and the
+   connector has no usable default route.
+6. Generate the live `enroll-session` grant against the reviewed image with
+   consent terms equal to the Owner authorization, admit it with the offline
+   preflight, and rehearse the private QR handoff before requesting a new window.
+
+**STOP — `G5A_BLOCKED` for this window as well. No live authentication,
+observation, sending, media, production deployment or PR merge is authorized.**

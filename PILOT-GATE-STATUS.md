@@ -4,7 +4,10 @@
 **Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; harness fix `b52bc33`
 **PR #3:** OPEN, **Draft** (not merged, not deployed)
 **Owner decision:** `G5_SCOPE_APPROVED_ACTIVATION_PENDING` — D1–D7 approved in scope; live activation withheld
-**G5-A authorization:** none current. The earlier `2026-11-03T02:00Z`–`02:30Z` window is invalid and was not reused.
+**G5-A authorization:** none current. The `G5A_LIVE_BOOTSTRAP_ONLY` window
+`2026-11-03T14:56:00Z`–`15:26:00Z` was entered and blocked before any live action;
+see §Bootstrap attempt. The earlier `2026-11-03T02:00Z`–`02:30Z` window is invalid
+and was not reused.
 **Live pilot:** **NOT ACTIVATED** — no Zalo login, QR scan, session, real account or external send performed
 
 ## Gates
@@ -17,7 +20,7 @@
 | `G4_PILOT_ACTIVATION_PACKAGE` | **SUPERSEDED IN SCOPE** | [G4-PILOT-ACTIVATION-PACKAGE.md](docs/evidence/G4-PILOT-ACTIVATION-PACKAGE.md); D1–D7 accepted in scope by the G5 decision |
 | `G5_SCOPE_APPROVED_ACTIVATION_PENDING` | **APPROVED IN SCOPE** | [G5-SCOPE-APPROVAL.md](docs/evidence/G5-SCOPE-APPROVAL.md) |
 | `G5A_AWAITING_OWNER_START` | **SUPERSEDED** | Old authorization window invalidated by `G5A_BLOCKED` |
-| `G5A_BOOTSTRAP_VERIFIED` | **BLOCKED** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md); no live action, egress isolation and credential containment failed preflight |
+| `G5A_BOOTSTRAP_VERIFIED` | **BLOCKED** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md); the 02:00Z attempt failed preflight, and the 14:56–15:26Z attempt was blocked on database TLS, undeployed topology and a template-only grant; no live action in either |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
 | `R2_EGRESS_ENFORCEMENT_PASS` | **PASS (bootstrap)** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); kernel boundary plus SNI gateway verified; observe/send-test remain functionally blocked until their runtime-only hosts are admitted |
 | `R3_LAN_ISOLATION_PASS` | **PASS (pilot resources)** | [G5A-R3-LAN-ISOLATION.md](docs/evidence/G5A-R3-LAN-ISOLATION.md); host-wide isolation remains UNPROVEN (no independent LAN device, firewall defaults not an explicit deny) |
@@ -42,6 +45,20 @@
 - Full local suite **327/327 PASS** on Node `v24.19.0`; typecheck and connector build PASS; guard tests 23/23 and gateway tests 16/16; allow-path harness 21/21; container boundary 25/25; LAN exposure 10/10; static topology 15 assertion groups.
 - Hosted [CI 41650617518](https://github.com/kha997/zalo-shared/actions/runs/41650617518) on `b52bc33` passed both jobs: **327/327** unit checks, **2/2** guarded offline SDK checks, **9 browser cases + 1 explicit skip, 0 unexpected**, restore/restart/monitoring/image gates, and the pilot job including the staged allow-path harness at 21/21. The harness executes a digest-verified staged copy because the namespace it creates under `sudo` cannot traverse another account's home; the first attempt (run `41649094828`) failed there and is recorded, not hidden.
 - In-image `preflight` under `--network none` admitted the synthetic bootstrap, observe and send-test manifests and denied expired, out-of-scope, extra-field, missing-build, wrong-identity, placeholder and stage-mismatch cases. An entrypoint override that removed the guard was refused.
+
+## Bootstrap attempt — 2026-11-03 14:56–15:26Z
+
+The Owner authorized `G5A_LIVE_BOOTSTRAP_ONLY` for that window. The mandatory
+preflight was run at `14:57:07Z`–`14:59:52Z` and returned **`G5A_BLOCKED`** before
+any provider contact: the pilot Postgres has `ssl=off` while the reviewed
+connector requires `sslmode=require|verify-*` for a non-loopback URL, the
+reviewed internal-network and gateway topology was not deployed, and the only
+private manifest is a placeholder template bound to `8d40c0f` rather than the
+reviewed `2dff06e` image. No QR, session, ownership or database write occurred;
+`session.key` and the view directory are unchanged. Details, evidence and the
+added remediation are in [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md)
+§8. The boundary itself remains `G5A_NETWORK_BOUNDARY_VERIFIED`; what failed is
+the live-host provisioning, not the offline boundary.
 
 ## Incident disclosure
 
