@@ -88,6 +88,10 @@ the earlier artifact was `8d40c0f934aef10f8470cf7cc5bcd7402710f6bd`
 | Proxy environment variables fail closed at startup | PASS |
 | `NODE_OPTIONS=--use-env-proxy` cannot re-enable proxy handling | PASS |
 | `dns.Resolver` instances and `fd`-based sockets cannot bypass | PASS |
+| A mixed resolver answer set is denied rather than filtered to the pin | PASS |
+| A configured but malformed `DATABASE_URL` fails closed at startup | PASS |
+| A gateway pin must be a literal internal address and must not equal the database address | PASS |
+| Route parsing detects a usable IPv4/IPv6 default and ignores the kernel IPv6 reject default | PASS |
 | Wildcard provider hosts rejected | PASS |
 
 Additional in-image checks during remediation observed the same fail-closed
@@ -197,8 +201,9 @@ rather than depended upon.
 Verification, all offline and re-run against the current working tree:
 `ops/local/check-pilot-network.sh` (15 assertion groups; rendered topology
 matches the reviewed allowlist), `ops/local/verify-egress-allowpath.sh` (21/21,
-real TLS spliced to a synthetic provider inside a loopback-only namespace, plus
-the guard pin), `ops/local/verify-pilot-network.sh` (25/25 on real containers,
+real TLS spliced to a synthetic provider inside a loopback-only namespace from a
+digest-verified staged copy of the code under test, plus the guard pin),
+`ops/local/verify-pilot-network.sh` (25/25 on real containers,
 including a probe that runs with the guard provably absent and still cannot
 reach the internet, and the default-route refusal), and 39/39 guard and gateway
 unit tests.

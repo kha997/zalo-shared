@@ -15,9 +15,14 @@
 #   client view   /etc/hosts: pilot-target.test -> 127.0.0.2      (the gateway)
 # The client view is what `extra_hosts` gives the connector, and the gateway view
 # is what the gateway resolves for its own upstream.
+#
+# The inner run executes staged copies of the code under test. Inside an
+# unprivileged user namespace only one uid is mapped, so a checkout under another
+# account's home — which is how CI reaches this script, through sudo — is not
+# traversable there. Staging makes the harness independent of where the checkout
+# lives; the digests printed below prove the executed files are the repository's
+# own bytes.
 set -euo pipefail
-cd "$(dirname "$0")/../.."
-repo=$(pwd)
 export PATH="${PATH}"
 
 PROVIDER_ADDRESS=93.184.216.20
@@ -33,12 +38,20 @@ command -v openssl >/dev/null || { echo "SKIP: openssl is required" >&2; exit 77
 command -v unshare >/dev/null || { echo "SKIP: unshare is required" >&2; exit 77; }
 
 # The outer run creates the fixture directory and owns its removal. The inner
-# run re-enters this script inside the namespace and must reuse the same
-# directory, which is how the certificates and host files reach it.
+# run re-enters the staged copy of this script inside the namespace and must
+# reuse the same directory, which is how the certificates, host files and staged
+# sources reach it.
 if [ "${HARNESS_IN_NETNS:-0}" = "1" ]; then
   dir=${HARNESS_DIR:?HARNESS_DIR is required inside the namespace}
+  src=${HARNESS_SRC:?HARNESS_SRC is required inside the namespace}
   [ -f "$dir/ca.crt" ] || { echo "FAIL: harness fixtures missing from $dir" >&2; exit 2; }
+  [ -r "$src/ops/local/harness/provider.cjs" ] || {
+    echo "FAIL: staged harness sources are unreadable at $src" >&2
+    exit 2
+  }
 else
+  cd "$(dirname "$0")/../.."
+  repo=$(pwd)
   dir=$(mktemp -d)
   trap 'rm -rf "$dir"' EXIT
 fi
@@ -70,13 +83,40 @@ if [ "${HARNESS_IN_NETNS:-0}" != "1" ]; then
   printf '127.0.0.1 localhost\n%s %s\n' "$PROVIDER_ADDRESS" "$ALLOW_NAME" > "$dir/hosts-gateway"
   printf '127.0.0.1 localhost\n%s %s\n' "$GATEWAY_ADDRESS" "$ALLOW_NAME" > "$dir/hosts-client"
 
-  HARNESS_DIR=$dir HARNESS_REPO=$repo HARNESS_NODE=$node_bin \
-  HARNESS_EXPECTED_FINGERPRINT=$expected \
-    unshare -n -m -r env \
+  # Stage the code under test and this script inside the fixture directory,
+  # preserving the repository layout so relative requires still resolve, and
+  # stage the one runtime dependency the address policy loads.
+  : > "$dir/src.sha256"
+  for rel in ops/egress-gateway.cjs ops/egress-address-policy.cjs \
+             ops/pilot-egress-guard.cjs ops/local/harness/probe.cjs \
+             ops/local/harness/provider.cjs; do
+    mkdir -p "$dir/src/$(dirname "$rel")"
+    cp "$repo/$rel" "$dir/src/$rel"
+    chmod 0444 "$dir/src/$rel"
+    ( cd "$repo" && sha256sum "$rel" | sed "s|$rel|src/$rel|" ) >> "$dir/src.sha256"
+  done
+  mkdir -p "$dir/src/node_modules"
+  cp -R "$repo/node_modules/ipaddr.js" "$dir/src/node_modules/ipaddr.js"
+  cp "$repo/ops/local/verify-egress-allowpath.sh" "$dir/harness.sh"
+  chmod 0555 "$dir/harness.sh"
+  ( cd "$dir" && sha256sum -c src.sha256 )
+  dependency_digest() {
+    ( cd "$1" && find . -type f -print0 | sort -z | xargs -0 sha256sum ) \
+      | sha256sum | cut -d' ' -f1
+  }
+  staged_dependency=$(dependency_digest "$dir/src/node_modules/ipaddr.js")
+  installed_dependency=$(dependency_digest "$repo/node_modules/ipaddr.js")
+  if [ "$staged_dependency" != "$installed_dependency" ]; then
+    echo "FAIL: staged ipaddr.js differs from the installed dependency" >&2
+    exit 2
+  fi
+  echo "allowpath: staged sources match the repository; ipaddr.js $staged_dependency"
+
+  unshare -n -m -r env \
       HARNESS_IN_NETNS=1 \
-      HARNESS_DIR="$dir" HARNESS_REPO="$repo" HARNESS_NODE="$node_bin" \
+      HARNESS_DIR="$dir" HARNESS_SRC="$dir/src" \
       HARNESS_EXPECTED_FINGERPRINT="$expected" PATH="$PATH" \
-      bash "$0" "$@"
+      bash "$dir/harness.sh"
   exit $?
 fi
 
@@ -94,12 +134,12 @@ trap cleanup EXIT
 pids=()
 
 HARNESS_CERT_DIR=$dir HARNESS_PROVIDER_BIND=$PROVIDER_ADDRESS HARNESS_PROVIDER_PORT=443 \
-  "$node_bin" "$repo/ops/local/harness/provider.cjs" > "$dir/provider.log" 2>&1 &
+  "$node_bin" "$src/ops/local/harness/provider.cjs" > "$dir/provider.log" 2>&1 &
 pids+=($!)
 
 GATEWAY_BIND_ADDRESS=$GATEWAY_ADDRESS GATEWAY_PORT=443 GATEWAY_UPSTREAM_PORT=443 \
 GATEWAY_ALLOW_HOSTS=$ALLOW_NAME GATEWAY_HANDSHAKE_TIMEOUT_MS=3000 \
-  "$node_bin" "$repo/ops/egress-gateway.cjs" > "$dir/gateway.log" 2>&1 &
+  "$node_bin" "$src/ops/egress-gateway.cjs" > "$dir/gateway.log" 2>&1 &
 pids+=($!)
 
 for _ in $(seq 1 100); do
@@ -114,8 +154,8 @@ grep -q '"event":"startup"' "$dir/gateway.log" || { echo "FAIL: gateway did not 
 # namespace as the gateway. The guard is preloaded only for the guard cases.
 run_probe() {
   local label=$1 mode=$2; shift 2
-  local args=("$repo/ops/local/harness/probe.cjs")
-  [ "$mode" = guard ] && args=("-r" "$repo/ops/pilot-egress-guard.cjs" "${args[@]}")
+  local args=("$src/ops/local/harness/probe.cjs")
+  [ "$mode" = guard ] && args=("-r" "$src/ops/pilot-egress-guard.cjs" "${args[@]}")
   unshare -m env \
     HARNESS_CA_FILE="$dir/ca.crt" \
     HARNESS_DNS_NAMES="[\"$ALLOW_NAME\",\"$DENY_NAME\"]" \

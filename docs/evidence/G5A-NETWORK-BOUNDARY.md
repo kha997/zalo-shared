@@ -125,6 +125,19 @@ verifier cannot prove the positive case because the gateway requires a public
 upstream address, and spoofing one on a Docker network would modify host routing;
 that is why the two scripts are separate.
 
+The harness stages the code it executes — `ops/egress-gateway.cjs`,
+`ops/egress-address-policy.cjs`, `ops/pilot-egress-guard.cjs`, both harness
+scripts and the installed `ipaddr.js` — into its fixture directory before it
+enters the namespaces, prints a sha256 manifest of the staged files and refuses
+to run if any digest differs. This is required, not cosmetic: inside an
+unprivileged user namespace one uid is mapped, so a checkout under another
+account's home is not traversable there. The hosted `pilot` job reaches the
+script through `sudo`, and the first hosted attempt of this step failed for
+exactly that reason (run `41649094828`, `Cannot find module
+.../ops/local/harness/provider.cjs`). The staged harness was then re-verified
+locally through the same `sudo -E` invocation: 21/21 PASS, with the manifest
+`ipaddr.js 546ee2e65468439b8b2ea39bb3ac2ebf52ee7858367040401f876d0037aff205`.
+
 ## 6. Residual risks
 
 1. **The guard's activation marker is process-local and forgeable.** It is a
