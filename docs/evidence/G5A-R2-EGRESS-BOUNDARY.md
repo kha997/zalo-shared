@@ -31,9 +31,9 @@ of `NODE_OPTIONS` cannot silently remove the guard.
 | Provider allowlist | `PILOT_EGRESS_HOSTS` is a comma-separated list of exact DNS names. Wildcards, IP literals, trailing dots and empty names are rejected. Empty/absent means provider egress is denied entirely. |
 | Provider ports | `PILOT_EGRESS_PORTS` defaults to 443; only exact listed ports are admitted. |
 | Database destination | Parsed from `DATABASE_URL`; only that exact host and port are admitted. Query overrides for host, port, user, password or TLS are rejected. |
-| Address validation | Provider targets must resolve to public unicast addresses outside reserved/private/loopback/link-local/documentation ranges, so a DNS answer cannot redirect to an internal address. Database targets must be private, loopback or unique-local. |
+| Address validation | Provider targets must resolve to public unicast addresses outside reserved/private/loopback/link-local/documentation/IPv4-compatible ranges, so a DNS answer cannot redirect to an internal address. Database targets must be private, loopback or unique-local. |
 | DNS | `dns.lookup` and `dns.promises.lookup` are pinned to the validated address; `dns.resolve*`, `lookupService`, `reverse`, `dns/promises` and `dns.Resolver` instances are denied. |
-| Other egress | UDP sockets and `dgram.Socket`, `child_process` methods and `worker_threads` are denied. |
+| Other egress | UDP sockets and `dgram.Socket`, module-level `child_process` helpers, `ChildProcess.prototype.spawn`/`spawnSync`, raw `tcp_wrap`/`udp_wrap`/`pipe_wrap` bindings and `worker_threads` are denied. |
 | Socket options | A bare Unix-socket `path` is denied. An HTTP request `path` is dropped while the TCP target is still checked, so `http`/`https` requests reach only an allowlisted host/port. Inherited `fd`/`handle` and caller-supplied lookups cannot redirect a connection. |
 | Proxy paths | Proxy environment variables, `NODE_OPTIONS=--use-env-proxy` and `NODE_TLS_REJECT_UNAUTHORIZED=0` fail closed at startup. |
 | Preload integrity | The image entrypoint carries `--require=/app/egress-guard.cjs`, so clearing or overriding `NODE_OPTIONS` through an env file does not remove the guard. |

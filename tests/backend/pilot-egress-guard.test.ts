@@ -75,7 +75,8 @@ test("provider policy admits only exact allowlisted public host and port", () =>
        publicAddress:g.validateAddress("93.184.216.34","provider"),
        privateAddress:g.validateAddress("10.0.0.1","provider"),
        loopback:g.validateAddress("127.0.0.1","provider"),
-       mapped:g.validateAddress("::ffff:127.0.0.1","provider")
+       mapped:g.validateAddress("::ffff:127.0.0.1","provider"),
+       compat:g.validateAddress("::7f00:1","provider")
      }));`,
     { PILOT_EGRESS_HOSTS: "example.test", PILOT_EGRESS_PORTS: "443" },
   );
@@ -88,6 +89,7 @@ test("provider policy admits only exact allowlisted public host and port", () =>
     privateAddress: false,
     loopback: false,
     mapped: false,
+    compat: false,
   });
 });
 
@@ -146,14 +148,18 @@ const outcomes = [];
 try { dgram.createSocket("udp4"); outcomes.push("udp-allowed"); } catch (error) { outcomes.push("udp-" + error.code); }
 dns.resolve4("example.test", (error) => outcomes.push("dns-" + (error && error.code)));
 try { child.execSync("true"); outcomes.push("child-allowed"); } catch (error) { outcomes.push("child-" + error.code); }
+try { new child.ChildProcess().spawn({ file: "/bin/true" }); outcomes.push("proto-spawn-allowed"); } catch (error) { outcomes.push("proto-spawn-" + error.code); }
+try { process.binding("tcp_wrap"); outcomes.push("binding-allowed"); } catch (error) { outcomes.push("binding-" + error.code); }
 setTimeout(() => console.log(outcomes.join(",")), 50);
 `, { PILOT_EGRESS_HOSTS: "example.test" });
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(
     result.stdout.trim().split(",").sort(),
     [
+      "binding-PILOT_EGRESS_DENIED",
       "child-PILOT_EGRESS_DENIED",
       "dns-PILOT_EGRESS_DENIED",
+      "proto-spawn-PILOT_EGRESS_DENIED",
       "udp-PILOT_EGRESS_DENIED",
     ],
   );

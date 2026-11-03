@@ -61,6 +61,7 @@ const PROVIDER_DENIED_CIDRS = [
   "240.0.0.0/4",
   "::/128",
   "::1/128",
+  "::/96",
   "::ffff:0:0/96",
   "64:ff9b::/96",
   "100::/64",
@@ -445,6 +446,28 @@ for (const name of [
     childProcess[name] = function () {
       throw denied();
     };
+}
+// The module-level helpers are not the only path: a caller can construct a
+// ChildProcess and call its prototype method directly.
+if (typeof childProcess.ChildProcess === "function") {
+  for (const name of ["spawn", "spawnSync"]) {
+    if (typeof childProcess.ChildProcess.prototype[name] === "function")
+      childProcess.ChildProcess.prototype[name] = function () {
+        throw denied();
+      };
+  }
+}
+
+// Raw socket bindings would bypass the net/dgram hooks. Node internals use
+// internalBinding, so blocking these public process.binding names does not
+// affect the runtime's own net/TLS setup.
+if (typeof process.binding === "function") {
+  const nativeBinding = process.binding.bind(process);
+  const blockedBindings = /^(tcp_wrap|udp_wrap|pipe_wrap)$/;
+  process.binding = function (name) {
+    if (typeof name === "string" && blockedBindings.test(name)) throw denied();
+    return nativeBinding(name);
+  };
 }
 
 try {
