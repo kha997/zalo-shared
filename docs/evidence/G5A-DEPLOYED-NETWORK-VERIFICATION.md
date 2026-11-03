@@ -3,7 +3,7 @@
 **Gate:** `D2_DEPLOYED_NETWORK_BOUNDARY_VERIFIED`
 **Date:** 2026-11-03 (UTC)
 **Scope:** the reviewed topology actually deployed on the Owner workstation, not a fixture
-**Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`
+**Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; deployed topology scripts as committed in `9d94a26`
 **Host:** WSL2 Ubuntu 24.04.4, kernel `6.6.87.2-microsoft-standard-WSL2`, Docker `29.6.2`
 
 ## What was deployed

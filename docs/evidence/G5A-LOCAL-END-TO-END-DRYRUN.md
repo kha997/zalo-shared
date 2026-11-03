@@ -3,7 +3,7 @@
 **Gate:** `D4_DEPLOYED_PREFLIGHT_PASS`
 **Date:** 2026-11-03 (UTC)
 **Scope:** deployed topology, synthetic inputs, no provider communication
-**Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`
+**Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; dry-run and verifier scripts as committed in `9d94a26`
 
 ## Command
 

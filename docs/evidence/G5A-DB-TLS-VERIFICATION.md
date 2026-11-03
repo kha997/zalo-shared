@@ -3,7 +3,7 @@
 **Gate:** `D1_DATABASE_TLS_VERIFIED`
 **Date:** 2026-11-03 (UTC)
 **Scope:** dedicated pilot PostgreSQL on the Owner workstation; live local evidence, not CI
-**Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; connector image `zalo-shared-connector:g5-local` (`sha256:9bced3eb…27998`)
+**Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; connector image `zalo-shared-connector:g5-local` (`sha256:9bced3eb…27998`); verifier and migration scripts as committed in `9d94a26`
 
 ## Decision: dedicated database, not shared
 

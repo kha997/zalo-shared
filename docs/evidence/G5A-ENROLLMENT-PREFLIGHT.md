@@ -3,7 +3,7 @@
 **Gate:** `D3_ENROLLMENT_PREFLIGHT_READY`
 **Date:** 2026-11-03 (UTC)
 **Scope:** enrollment-only grant readiness against the reviewed image; synthetic identities and timestamps throughout
-**Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; connector image `zalo-shared-connector:g5-local` (`sha256:9bced3eb…27998`)
+**Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; connector image `zalo-shared-connector:g5-local` (`sha256:9bced3eb…27998`); fixture generator and verifier as committed in `9d94a26`
 
 ## Artifact binding
 

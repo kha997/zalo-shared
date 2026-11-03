@@ -1,7 +1,7 @@
 # Pilot gate status
 
 **Date:** 2026-11-03
-**Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; harness fix `b52bc33`
+**Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; harness fix `b52bc33`; deployment remediation `9d94a26`
 **PR #3:** OPEN, **Draft** (not merged, not deployed)
 **Owner decision:** `G5_SCOPE_APPROVED_ACTIVATION_PENDING` — D1–D7 approved in scope; live activation withheld
 **G5-A authorization:** none current. The `G5A_LIVE_BOOTSTRAP_ONLY` window
