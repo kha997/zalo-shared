@@ -48,7 +48,11 @@ ENV NODE_ENV=production
 # module. It admits only exact reviewed provider hosts/ports and the private
 # DATABASE_URL host/port; all other TCP, DNS resolve, UDP and child-process
 # egress fails closed. See ops/pilot-egress-guard.cjs.
+# The entrypoint repeats the preload so an env_file or compose override of
+# NODE_OPTIONS cannot silently remove the guard. Node caches the module, so the
+# duplicate path is a no-op.
 ENV NODE_OPTIONS=--require=/app/egress-guard.cjs
+ENTRYPOINT ["/nodejs/bin/node", "--require=/app/egress-guard.cjs"]
 WORKDIR /app
 COPY --from=build --chown=65532:65532 /app/dist/connector ./dist/connector
 COPY --from=build --chown=65532:65532 /app/build-identity.json ./build-identity.json

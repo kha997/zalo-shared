@@ -20,8 +20,11 @@ narrowly reviewed solution exists.
 
 ## 2. Mechanism
 
-`ops/pilot-egress-guard.cjs` is preloaded by the connector image through
-`NODE_OPTIONS=--require=/app/egress-guard.cjs` before any application module.
+`ops/pilot-egress-guard.cjs` is preloaded by the connector image through both
+`NODE_OPTIONS=--require=/app/egress-guard.cjs` and the image entrypoint
+`/nodejs/bin/node --require=/app/egress-guard.cjs`, before any application
+module. The entrypoint repeats the preload so an `env_file` or compose override
+of `NODE_OPTIONS` cannot silently remove the guard.
 
 | Control | Behaviour |
 | --- | --- |
@@ -33,6 +36,7 @@ narrowly reviewed solution exists.
 | Other egress | UDP sockets and `dgram.Socket`, `child_process` methods and `worker_threads` are denied. |
 | Socket options | Unix paths, inherited `fd`/`handle` and caller-supplied lookups cannot redirect a connection. |
 | Proxy paths | Proxy environment variables, `NODE_OPTIONS=--use-env-proxy` and `NODE_TLS_REJECT_UNAUTHORIZED=0` fail closed at startup. |
+| Preload integrity | The image entrypoint carries `--require=/app/egress-guard.cjs`, so clearing or overriding `NODE_OPTIONS` through an env file does not remove the guard. |
 | TLS | `tls.connect` paths that bypass the socket policy are denied. |
 
 The guard is process-local. It is a strong default-deny control in a distroless

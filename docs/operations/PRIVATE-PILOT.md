@@ -69,7 +69,7 @@ The session key and any media locator encryption key are separate capabilities w
 
 ## Connector egress boundary
 
-The connector image preloads [`ops/pilot-egress-guard.cjs`](../../ops/pilot-egress-guard.cjs) with `NODE_OPTIONS=--require=/app/egress-guard.cjs`. The guard installs a default-deny boundary before any application module or SDK is imported, so it does not depend on the SDK honouring a proxy or allowlist option.
+The connector image preloads [`ops/pilot-egress-guard.cjs`](../../ops/pilot-egress-guard.cjs) through both `NODE_OPTIONS=--require=/app/egress-guard.cjs` and the image entrypoint (`/nodejs/bin/node --require=/app/egress-guard.cjs`). Clearing `NODE_OPTIONS` through an env file therefore does not remove the guard. The guard installs a default-deny boundary before any application module or SDK is imported, so it does not depend on the SDK honouring a proxy or allowlist option.
 
 - `PILOT_EGRESS_HOSTS` is a comma-separated list of **exact** provider hostnames; wildcards, IP literals and trailing dots are refused. If it is empty or unset, every provider connection is denied. `PILOT_EGRESS_PORTS` defaults to `443`.
 - The only other permitted destination is the exact `DATABASE_URL` host and port. Database query parameters that could redirect the target (`host`, `port`, `user`, `password`, `ssl`) cause the URL to be treated as unusable, and the connection is denied. Database addresses must resolve to private, loopback or unique-local space; public, link-local, multicast and metadata addresses are refused.
