@@ -168,8 +168,9 @@ No provider connection, QR generation, scan, session write, ownership
 acquisition or database write occurred. `session.key` and the view directory are
 unchanged (last modified 2026-11-02). No pilot network or container exists; the
 temporary container used to read the embedded build identity was removed. No
-host-wide firewall, routing or daemon setting was changed. PR #3 remains Draft at
-`c38afce`.
+host-wide firewall, routing or daemon setting was changed. PR #3 remains Draft;
+its head was `c38afce` throughout the attempt and this record is the only commit
+added on top of it.
 
 ### Added remediation
 
