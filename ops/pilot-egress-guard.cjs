@@ -473,6 +473,16 @@ if (typeof process._linkedBinding === "function")
   process._linkedBinding = denyRawBinding;
 if (typeof process.dlopen === "function") process.dlopen = denyRawBinding;
 
+// net and dgram expose internal handle factories. They create native handles,
+// and outbound use would still need unexported ConnectWrap/SendWrap objects,
+// but the factories are removed so the native surface stays closed.
+for (const [owner, name] of [
+  [net, "_createServerHandle"],
+  [dgram, "_createSocketHandle"],
+]) {
+  if (typeof owner[name] === "function") owner[name] = denyRawBinding;
+}
+
 try {
   const workerThreads = require("node:worker_threads");
   const NativeWorker = workerThreads.Worker;

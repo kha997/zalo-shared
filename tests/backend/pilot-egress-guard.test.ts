@@ -154,6 +154,8 @@ try { process.binding(new String("tcp_wrap")); outcomes.push("binding-obj-allowe
 try { process.binding("spawn_sync"); outcomes.push("binding-spawn-allowed"); } catch (error) { outcomes.push("binding-spawn-" + error.code); }
 try { process._linkedBinding("spawn_sync"); outcomes.push("linked-allowed"); } catch (error) { outcomes.push("linked-" + error.code); }
 try { process.dlopen({}); outcomes.push("dlopen-allowed"); } catch (error) { outcomes.push("dlopen-" + error.code); }
+try { require("node:net")._createServerHandle(); outcomes.push("net-handle-allowed"); } catch (error) { outcomes.push("net-handle-" + error.code); }
+try { require("node:dgram")._createSocketHandle(); outcomes.push("dgram-handle-allowed"); } catch (error) { outcomes.push("dgram-handle-" + error.code); }
 setTimeout(() => console.log(outcomes.join(",")), 50);
 `, { PILOT_EGRESS_HOSTS: "example.test" });
   assert.equal(result.status, 0, result.stderr);
@@ -164,9 +166,11 @@ setTimeout(() => console.log(outcomes.join(",")), 50);
       "binding-obj-PILOT_EGRESS_DENIED",
       "binding-spawn-PILOT_EGRESS_DENIED",
       "child-PILOT_EGRESS_DENIED",
+      "dgram-handle-PILOT_EGRESS_DENIED",
       "dlopen-PILOT_EGRESS_DENIED",
       "dns-PILOT_EGRESS_DENIED",
       "linked-PILOT_EGRESS_DENIED",
+      "net-handle-PILOT_EGRESS_DENIED",
       "proto-spawn-PILOT_EGRESS_DENIED",
       "udp-PILOT_EGRESS_DENIED",
     ],
