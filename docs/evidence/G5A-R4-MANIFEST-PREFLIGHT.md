@@ -7,16 +7,18 @@
 
 ## 1. Artifact identity
 
-The remediation commit is `2963e1ad73151059b0c92af9a9a5ddb2e582c799`. It
+The final remediation commit is `fdb0704ba9384c4fad45df0c9910fa369b059efa`. It
 supersedes the pre-remediation artifact `6d199162`, which lacks the egress
-guard and the preflight identity check and must not be used.
+guard and the preflight identity check and must not be used. It also supersedes
+the earlier remediation artifacts `2963e1a`, `244ef7f` and `6f28836`, which
+predate the whole-surface raw-binding denial.
 
 | Item | Value |
 | --- | --- |
-| Connector source commit | `2963e1ad73151059b0c92af9a9a5ddb2e582c799` |
-| Image | `zalo-shared-connector:g5-2963e1ad` |
-| Local image digest | `sha256:a1d6f79a26309494878958d6e9272cc1de1b7f67af4804afb2efffcd29707197` |
-| Embedded `sourceCommit` | `2963e1ad73151059b0c92af9a9a5ddb2e582c799` |
+| Connector source commit | `fdb0704ba9384c4fad45df0c9910fa369b059efa` |
+| Image | `zalo-shared-connector:g5-fdb0704b` |
+| Local image digest | `sha256:2cc1af75d3ac5d8fbaca79d8af8c37db1053ef9507375af13a8ebd2f359d0966` |
+| Embedded `sourceCommit` | `fdb0704ba9384c4fad45df0c9910fa369b059efa` |
 | Embedded `lockSha256` | `17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b` |
 | Embedded `sdkIntegrity` | `sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA==` |
 | `zca-js` / `crypto-js` | `2.2.0` / `4.2.0` |
@@ -34,7 +36,7 @@ The private directory `/home/zen/pilot-private/zalo-shared/g5-enroll` is `0700`
 and owned by UID 65532. It contains:
 
 - `manifest.enroll.private.json` — `0600`, UID 65532, SHA-256
-  `5b77d4f9fffd42f8dc91fe017a24690425e2495e4d54c8bcafb62bb4601c8fb0`.
+  `c9c9f034079ce432a9a74e321a8db3269c2b1617f594892aa4f0d185c239c60a`.
   It is a **template with placeholders**, not a valid grant, rebound to the
   reviewed commit above.
 - `README.private.txt` — `0600`, UID 65532, fill-in instructions.
@@ -70,13 +72,19 @@ container, all capabilities dropped, `no-new-privileges`, UID 65532.
 | Wrong build identity | manifest bound to another source commit | **denied in-image by hardened preflight** |
 
 The valid, invalid, expired, extra-field, missing-build and wrong-identity
-manifests were synthetic fixtures generated from the reviewed commit. They were
+manifests were synthetic fixtures generated from the final commit. They were
 deleted immediately after the matrix. Their SHA-256 values before deletion were:
-bootstrap `2d6fcd88b3e6a25d4c1fd861f42e2e644f87a95116c40ebc9edcaa2858b321df`,
-observe `f3601dcf866a8896131f89a3838d1cf2b77eac359c8111dc7d6518ab40d9bbc6`,
-send-test `9c196c7bd85266704c66ad4eac9f5f1c83db3c7034ee3c5728a775fc5526e6a3`,
-invalid `ae1d06a400840bbf295e4ba08eebeb805cd4498845ae21a4777383631b6a0df0`.
-No synthetic or live grant remains in the private directory.
+bootstrap `45b314735c72865930d3fa71621a0bc490642e9d109ad0cdb883531a10afc7d0`,
+observe `480a6aa29ba22ef706a0b22e459142f0ebcb473e97514b07c8eefc5bfdbe165c`,
+send-test `20962a70a25261c0dbf341717ac269c769fab2b0ee4b051970fe9baa52fa6b9b`,
+invalid `24553f32ee9cfaba120db7e6654d9dd95d106326cf4253d4c81e3e30a2609f74`,
+expired `7bc0c8e38a7756c81de72a78cf7bb93de68c9342c7f17284a34143b792b415f5`,
+wrong-commit `a1fc6170f241482b29b12836dc595fa72e31fcf23fb29995c0027ab709068dcd`,
+extra-field `193ca65efee5ae6ede69105807b65f1e963ce7514da6beadbff90d11dfd0740b`,
+missing-build `6b8eb7e7f83ecf08108293b9d92c54ac44f5f50e613152d019b7fe5e3eca5da6`,
+malformed `92072df399cb74703f8e86f450d552bc0bb01eeeb98a90985a1b7772c8fd0016`.
+No synthetic or live grant remains in the private directory; only the
+placeholder template and non-admissible negative fixtures remain.
 
 ## 4. Preflight hardening
 
@@ -96,18 +104,29 @@ Focused offline suites passed:
 - `pilot-cli.test.ts` — preflight admission/denial, including wrong image
   identity; live commands still require the operator flag and matching purpose.
 - `private-env-keys.test.ts` — redaction helper never prints values.
-- `pilot-egress-guard.test.ts` — 14/14 egress boundary tests.
+- `pilot-egress-guard.test.ts` — 16/16 egress boundary tests.
 - `private-pilot-flow.test.ts` — 29/29 PASS with the live disposable test
   database; covers private file modes, QR view, runtime identity and scope.
-- Full local suite: **302/302 PASS**; `npm run typecheck` and
-  `npm run build:connector` PASS.
+- Full local suite: **304/304 PASS** on Node `v24.19.0`; `npm run typecheck`
+  and `npm run build:connector` PASS.
+
+The only observed `private-pilot-flow` failure is reproducible when a second
+process holds advisory lock `73001` on the same test database: the worker
+correctly declines ownership and returns `processed:false` before quarantine.
+`npm test` runs one process with `--test-concurrency=1`, and concurrent suite
+runs against the same database are unsupported. This is a harness constraint,
+not a product defect; it is recorded in the R5 review evidence.
 
 In-image guard checks on the reviewed artifact, all with `--network none` and
-UID 65532: direct-IP TCP, UDP, `dns.resolve4`, child process, `fd`-based socket
-and `dns.Resolver` were denied even with `NODE_OPTIONS` cleared, because the
-entrypoint carries the preload; proxy environment variables failed closed at
-startup; a loopback listener on the exact `DATABASE_URL` host/port was
-reachable while the same host on another port was denied.
+UID 65532: direct-IP TCP, UDP, `dns.resolve4`, module-level and prototype
+`child_process` spawn, `tcp_wrap`/`udp_wrap`/`pipe_wrap` bindings, bare Unix
+socket paths and `fd`/`Resolver` paths were denied even with `NODE_OPTIONS`
+cleared, because the entrypoint carries the preload; proxy environment
+variables failed closed at startup; `::7f00:1` was classified as non-public; a
+loopback listener on the exact `DATABASE_URL` host/port was reachable while the
+same host on another port was denied; and an entrypoint override that removed
+the guard made `preflight` return `{"ok":false,"gate":"denied"}` because the
+guard marker was absent.
 
 ## 6. Limitations
 

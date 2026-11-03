@@ -1,7 +1,7 @@
 # Pilot gate status
 
 **Date:** 2026-11-03
-**Branch:** `feat/shared-inbox`; reviewed connector artifact source `2963e1ad73151059b0c92af9a9a5ddb2e582c799`
+**Branch:** `feat/shared-inbox`; reviewed connector artifact source `fdb0704ba9384c4fad45df0c9910fa369b059efa`
 **PR #3:** OPEN, **Draft** (not merged, not deployed)
 **Owner decision:** `G5_SCOPE_APPROVED_ACTIVATION_PENDING` — D1–D7 approved in scope; live activation withheld
 **G5-A authorization:** none current. The earlier `2026-11-03T02:00Z`–`02:30Z` window is invalid and was not reused.
@@ -32,11 +32,11 @@
 
 ## Verified identity and offline status
 
-- Connector image `zalo-shared-connector:g5-2963e1ad`, local image digest `sha256:a1d6f79a26309494878958d6e9272cc1de1b7f67af4804afb2efffcd29707197`.
-- Embedded build identity matches `2963e1ad`, `connector/package-lock.json` (`17dcd254…030c9b`) and the locked SDK integrity; UID 65532; no exposed ports; no `manifest.json`, `session.key`, `session.enc` or `qr.png` in the image.
-- The egress guard is preloaded by the image entrypoint and by `NODE_OPTIONS`, so clearing `NODE_OPTIONS` through an env file does not remove it.
-- Full local suite **302/302 PASS**; typecheck and connector build PASS; guard suite 14/14 PASS.
-- In-image `preflight` under `--network none` admitted the synthetic bootstrap, observe and send-test manifests and denied expired, out-of-scope, extra-field, missing-build, wrong-identity, placeholder and stage-mismatch cases.
+- Connector image `zalo-shared-connector:g5-fdb0704b`, local image digest `sha256:2cc1af75d3ac5d8fbaca79d8af8c37db1053ef9507375af13a8ebd2f359d0966`.
+- Embedded build identity matches `fdb0704b`, `connector/package-lock.json` (`17dcd254…030c9b`) and the locked SDK integrity; UID 65532; no exposed ports; no `manifest.json`, `session.key`, `session.enc` or `qr.png` in the image.
+- The egress guard is preloaded by the image entrypoint and by `NODE_OPTIONS`, so clearing `NODE_OPTIONS` through an env file does not remove it. Direct `ChildProcess.prototype.spawn`, every public raw binding path (`process.binding`, `process._linkedBinding`, `process.dlopen`) and IPv4-compatible IPv6 addresses are denied.
+- Full local suite **304/304 PASS** on Node `v24.19.0`; typecheck and connector build PASS; guard suite 16/16 PASS.
+- In-image `preflight` under `--network none` admitted the synthetic bootstrap, observe and send-test manifests and denied expired, out-of-scope, extra-field, missing-build, wrong-identity, placeholder and stage-mismatch cases. An entrypoint override that removed the guard was refused.
 - A local image digest is not a registry digest or signed attestation; CI does not push an image. This remains a deployment limitation.
 
 ## Enforced G5 limits
