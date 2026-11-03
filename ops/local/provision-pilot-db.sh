@@ -202,6 +202,20 @@ done
 [ "$(docker inspect -f '{{.State.Health.Status}}' "$container")" = "healthy" ] ||
   fail "$container did not become healthy"
 
+# A reused container must still serve the audited certificates, even if Docker
+# reports a translated bind source. Compare content and the running settings.
+for pair in "$ca_crt:/var/lib/postgresql/tls/ca.crt" "$srv_crt:/var/lib/postgresql/tls/server.crt"; do
+  host_file=${pair%%:*}
+  container_file=${pair#*:}
+  [ "$(sha256sum "$host_file" | cut -d' ' -f1)" = \
+    "$(docker exec "$container" sha256sum "$container_file" | cut -d' ' -f1)" ] ||
+    fail "$container does not serve the audited $container_file"
+done
+tls_settings=$(docker exec "$container" bash -lc \
+  "PGPASSWORD=\$(cat /run/secrets/owner.pw) psql 'host=$host dbname=$database user=$owner_user sslmode=verify-full sslrootcert=/var/lib/postgresql/tls/ca.crt' -X -tAc \"SHOW ssl_cert_file; SHOW ssl_ca_file;\"" | tr '\n' '|')
+[ "$tls_settings" = "/var/lib/postgresql/tls/server.crt|/var/lib/postgresql/tls/ca.crt|" ] ||
+  fail "running TLS settings are $tls_settings"
+
 # Read the owner password inside the container so it never appears in argv or
 # on the host, and connect over the TLS path this instance is provisioned for.
 role_present=$(docker exec "$container" bash -lc \

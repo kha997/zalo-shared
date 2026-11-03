@@ -45,6 +45,12 @@ for cmd in docker python3; do
 done
 docker image inspect "$image" >/dev/null 2>&1 || fail "$image not found"
 docker container inspect pilot-postgres >/dev/null 2>&1 || fail "pilot-postgres is missing"
+# The preceding boundary verification restarts the gateway, so wait for the
+# health check instead of sampling it once.
+for _ in $(seq 1 60); do
+  [ "$(docker inspect -f '{{.State.Health.Status}}' "$gateway" 2>/dev/null)" = "healthy" ] && break
+  sleep 1
+done
 [ "$(docker inspect -f '{{.State.Health.Status}}' "$gateway")" = "healthy" ] || fail "the gateway is not healthy"
 [ -f "$compose_priv" ] && [ -f "$interp" ] || fail "run deploy-pilot-topology.sh first"
 [ -f "$fixtures/enroll.synthetic.json" ] || fail "run make-enroll-fixtures.mjs first"
@@ -195,8 +201,12 @@ path, before, after = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
 lines = open(path, encoding="utf-8").read().splitlines()[before:after]
 events = [json.loads(line) for line in lines if line.strip().startswith("{")]
 allows = [e for e in events if e.get("event") == "sni_allow"]
+denies = [e for e in events if e.get("event") == "sni_deny"]
+assert after >= before, "the gateway log shrank; the slice cannot be attributed"
+assert events, "the gateway logged no events during the dry run"
+assert denies, "the gateway logged no refusal during the dry run"
 assert not allows, json.dumps(allows)
-print(f"pilot-dryrun: PASS  the gateway admitted no tunnel during the dry run ({len(events)} audit events)")
+print(f"pilot-dryrun: PASS  the gateway admitted no tunnel during the dry run ({len(events)} audit events, {len(denies)} refusals)")
 PY
 
 say "all D4 deployed dry-run assertions PASS"

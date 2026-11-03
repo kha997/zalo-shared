@@ -9,6 +9,7 @@
 see §Bootstrap attempt. The earlier `2026-11-03T02:00Z`–`02:30Z` window is invalid
 and was not reused.
 **Live pilot:** **NOT ACTIVATED** — no Zalo login, QR scan, session, real account or external send performed
+**Deployment remediation:** `G5A_DEPLOYMENT_READY_AWAITING_OWNER_START` — D1–D5 PASS with evidence from the actual host; readiness is not authorization
 
 ## Gates
 
@@ -27,7 +28,13 @@ and was not reused.
 | `R4_MANIFEST_PREFLIGHT_PASS` | **PASS** | [G5A-R4-MANIFEST-PREFLIGHT.md](docs/evidence/G5A-R4-MANIFEST-PREFLIGHT.md); placeholder template only, no live grant |
 | `R5_INDEPENDENT_REVIEW_PASS` | **PASS WITH FINDINGS** | [G5A-R5-INDEPENDENT-REVIEW.md](docs/evidence/G5A-R5-INDEPENDENT-REVIEW.md); boundary-specific closure in [G5A-NETWORK-BOUNDARY-REVIEW.md](docs/evidence/G5A-NETWORK-BOUNDARY-REVIEW.md) |
 | `G5A_NETWORK_BOUNDARY_VERIFIED` | **PASS** | [G5A-NETWORK-BOUNDARY.md](docs/evidence/G5A-NETWORK-BOUNDARY.md); [review and dispositions](docs/evidence/G5A-NETWORK-BOUNDARY-REVIEW.md) |
-| `G5A_REMEDIATED_AWAITING_NEW_OWNER_START` | **MET** | R1–R5 and the network boundary are closed; a new G5-A authorization is still required before any live stage |
+| `G5A_REMEDIATED_AWAITING_NEW_OWNER_START` | **SUPERSEDED** | R1–R5 and the network boundary are closed; superseded by the deployment remediation rows below |
+| `D1_DATABASE_TLS_VERIFIED` | **PASS** | [G5A-DB-TLS-VERIFICATION.md](docs/evidence/G5A-DB-TLS-VERIFICATION.md); dedicated TLS-only Postgres, `verify-full` admitted, previous no-`sslmode` blocker reproduced and refused |
+| `D2_DEPLOYED_NETWORK_BOUNDARY_VERIFIED` | **PASS** | [G5A-DEPLOYED-NETWORK-VERIFICATION.md](docs/evidence/G5A-DEPLOYED-NETWORK-VERIFICATION.md); reviewed topology deployed in place, 48/48 deployed assertions |
+| `D3_ENROLLMENT_PREFLIGHT_READY` | **PASS** | [G5A-ENROLLMENT-PREFLIGHT.md](docs/evidence/G5A-ENROLLMENT-PREFLIGHT.md); 46 assertions, 11 denials, inert grant template, no live grant |
+| `D4_DEPLOYED_PREFLIGHT_PASS` | **PASS** | [G5A-LOCAL-END-TO-END-DRYRUN.md](docs/evidence/G5A-LOCAL-END-TO-END-DRYRUN.md); all 10 required items, synthetic inputs only |
+| `D5_DEPLOYMENT_REVIEW_PASS` | **PASS WITH RESIDUALS** | [G5A-DEPLOYMENT-INDEPENDENT-REVIEW.md](docs/evidence/G5A-DEPLOYMENT-INDEPENDENT-REVIEW.md); High DB-privilege finding closed and re-verified, residuals listed |
+| `G5A_DEPLOYMENT_READY_AWAITING_OWNER_START` | **MET** | D1–D5 PASS on the actual host; no G5-A authorization is current and none was used |
 | `G5A_REMEDIATION_BLOCKED` | **CLEARED** | Superseded by `G5A_NETWORK_BOUNDARY_VERIFIED`; the earlier state is retained in [G5A-REMEDIATION-REPORT.md](docs/evidence/G5A-REMEDIATION-REPORT.md) |
 | `G5B_OBSERVE_VERIFIED` | NOT AUTHORIZED | Requires G5-A PASS and separate Owner authorization; also requires service-map/WebSocket host admission |
 | `G5C_SEND_VERIFIED` | NOT AUTHORIZED | Requires G5-B PASS and separate Owner authorization |
@@ -60,6 +67,48 @@ added remediation are in [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-R
 §8. The boundary itself remains `G5A_NETWORK_BOUNDARY_VERIFIED`; what failed is
 the live-host provisioning, not the offline boundary.
 
+## Deployment remediation — 2026-11-03
+
+Each of the three bootstrap blockers was reproduced first, then closed on the
+Owner's actual machine (WSL2 Ubuntu 24.04, Docker 29.6.2). No live Zalo action
+was taken.
+
+- **Database TLS (D1).** A dedicated Postgres 17 container `pilot-postgres` runs
+  on the internal `zalo-shared-pilot-db` network with a private ECDSA CA, a
+  `pilot-db` SAN, `hostssl` + `scram-sha-256` and an explicit `hostnossl reject`
+  rule. The connector connects with `sslmode=verify-full` over TLSv1.3. The CA is
+  supplied through `NODE_EXTRA_CA_CERTS`, because `requireTlsDatabaseUrl` refuses
+  an `sslrootcert` query parameter; the gate was not relaxed. The previous
+  blocker — a URL without `sslmode` — is reproduced and refused. The runtime role
+  is `NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION`, cannot create in
+  `public`, cannot modify `audit`, cannot delete ownership, provider-state,
+  budget or ledger rows, and cannot roll the send budget back.
+- **Deployed topology (D2).** The reviewed topology is deployed: the connector
+  joins `pilot-db` and the internal `pilot-egress` network; `egress-gateway` is
+  the sole member of the non-internal `pilot-uplink`, has `ip_forward=0`, no
+  published ports, UID 65532 and `cap_drop: ALL`. Negative tests cover direct
+  IP, IPv6, UDP, DNS, missing/stopped gateway, wrong network attachment,
+  unapproved SNI and an empty egress policy. No Windows Firewall, Docker daemon
+  or unrelated host networking was changed.
+- **Enrollment readiness (D3).** The private template is bound to the reviewed
+  image identity (`2dff06e…`, lock `17dcd254…`, SDK integrity `sha512-pBU0T0…`)
+  and is inert: no live grant exists, no QR was generated. Synthetic grants prove
+  the observe and send-test stages are denied, and the QR path is private to the
+  connector UID and cleaned up.
+- **End-to-end dry run (D4).** All ten required items passed with synthetic
+  inputs: image identity, DB TLS, ownership admission on a disposable clone,
+  network enforcement, bootstrap host allowlist, grant scope and expiry, local
+  synthetic QR handling, encrypted session store, safe shutdown and no external
+  traffic or residual processes. The live ownership row was untouched.
+- **Independent review (D5).** The review's High finding — the runtime role could
+  erase control state and reset the send budget — was fixed and re-verified on
+  the deployed database. Medium and Low findings are recorded with dispositions
+  in [G5A-DEPLOYMENT-INDEPENDENT-REVIEW.md](docs/evidence/G5A-DEPLOYMENT-INDEPENDENT-REVIEW.md).
+
+Residual and UNPROVEN items are listed in the review: local unsigned images,
+Docker daemon trust, host-wide LAN isolation, runtime-only provider hosts, and
+the fact that no real grant, QR scan or session exchange has been exercised.
+
 ## Incident disclosure
 
 An unauthorised diagnostic probe during this directive contacted `id.zalo.me`
@@ -76,22 +125,25 @@ Exactly one connector account, exactly one allowlisted direct peer, 1–10 outbo
 
 ## Next action
 
-The network boundary no longer blocks a bootstrap-only pilot. Remaining Owner
-decisions, none of which blocks authorization:
+The deployment blockers from the failed bootstrap are closed. What remains is the
+Owner's decision, not engineering work:
 
-1. **Observe/send-test inventory:** authorize a time-bounded observation window,
+1. **New G5-A authorization.** Provide an explicit UTC start and expiry (and the
+   stage: bootstrap only). The deployment now supports the reviewed topology, so
+   the previous failure reasons no longer apply. No activation time has been
+   chosen by this mission.
+2. **Observe/send-test inventory:** authorize a time-bounded observation window,
    or defer those stages. Their runtime-only service-map and WebSocket hosts
    cannot be proven offline and currently fail closed.
-2. **LAN evidence (optional):** run one probe from a second physical device, or
+3. **LAN evidence (optional):** run one probe from a second physical device, or
    accept bind-scope evidence with the host firewall recorded as
    `NotConfigured`.
-3. **Image supply chain (optional):** publish to a trusted registry so a
+4. **Image supply chain (optional):** publish to a trusted registry so a
    deployed digest can be verified externally.
-4. **Native Linux (not applicable here):** decide whether host-side
+5. **Native Linux (not applicable here):** decide whether host-side
    `DOCKER-USER` rules are required before deploying on a native Linux host.
 
-A new G5-A authorization with an explicit UTC start and expiry is required
-before any live stage. No activation time has been chosen. G5-B is not
-authorized.
+G5-B is not authorized. No live provider contact, login, QR generation or grant
+is permitted until a new authorization exists.
 
-**STOP — `G5A_NETWORK_BOUNDARY_VERIFIED`. A new G5-A authorization is required; G5-B is not authorized.**
+**STOP — `G5A_DEPLOYMENT_READY_AWAITING_OWNER_START`. A new G5-A authorization is required; G5-B is not authorized.**

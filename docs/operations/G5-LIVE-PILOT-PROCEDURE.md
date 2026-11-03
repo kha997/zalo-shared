@@ -6,6 +6,17 @@
 
 No step in this document authorizes a live action by itself. The Owner must name the exact stage, UTC start and automatic expiry in a separate explicit command. Stop at the end of each stage and wait for the next authorization.
 
+## Deployed environment (2026-11-03)
+
+The deployment blockers recorded in [G5A-BOOTSTRAP-REPORT.md](../evidence/G5A-BOOTSTRAP-REPORT.md) are resolved on the private host:
+
+- the pilot database is the dedicated `pilot-postgres` container reached with `sslmode=verify-full` over the internal `zalo-shared-pilot-db` network, with the private CA supplied through a read-only `NODE_EXTRA_CA_CERTS` mount ([G5A-DB-TLS-VERIFICATION.md](../evidence/G5A-DB-TLS-VERIFICATION.md));
+- the reviewed internal-network and TLS-SNI gateway topology is deployed and verified in place ([G5A-DEPLOYED-NETWORK-VERIFICATION.md](../evidence/G5A-DEPLOYED-NETWORK-VERIFICATION.md));
+- the enrollment template is bound to the reviewed image's build identity and the synthetic admission/denial suite passes ([G5A-ENROLLMENT-PREFLIGHT.md](../evidence/G5A-ENROLLMENT-PREFLIGHT.md));
+- the deployed stack passed the full synthetic dry run ([G5A-LOCAL-END-TO-END-DRYRUN.md](../evidence/G5A-LOCAL-END-TO-END-DRYRUN.md)).
+
+A new Owner authorization is still required; the deployment readiness above is not an authorization.
+
 ## Common preconditions for every stage
 
 1. The Owner has confirmed the dedicated account alias, the single consenting peer alias, the private host and the exact UTC window.

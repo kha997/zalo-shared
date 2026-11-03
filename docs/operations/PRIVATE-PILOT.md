@@ -63,6 +63,8 @@ Keep all material outside the repository, on the private pilot host:
 
 `DATABASE_URL` must be a `postgres://` or `postgresql://` URL. A non-loopback host must also carry `sslmode=require`, `verify-ca` or `verify-full`; `ssl=false` is always refused. Loopback is accepted for a database on the same private host. The pilot connector never accepts a database, key or session value as a command argument.
 
+On the G5-A host the database is the dedicated `pilot-postgres` container, not the shared host cluster. It is provisioned idempotently by [`ops/local/provision-pilot-db.sh`](../../ops/local/provision-pilot-db.sh) on the internal network `zalo-shared-pilot-db` (`172.16.30.0/24`). `DATABASE_URL` uses `sslmode=verify-full`. Because `requireTlsDatabaseUrl` refuses `sslrootcert` as a query parameter, the private CA is supplied as `NODE_EXTRA_CA_CERTS=/run/pilot/db-ca.crt` and mounted read-only; `NODE_EXTRA_CA_CERTS` adds a trust anchor and cannot disable verification. `pg_hba.conf` admits `hostssl` on the internal subnet with `scram-sha-256` and rejects `hostnossl`; the only `local` trust line is the container-private Unix socket. [G5A-DB-TLS-VERIFICATION.md](../evidence/G5A-DB-TLS-VERIFICATION.md) records the certificate, role and restore evidence.
+
 The container runs as UID 65532, so bind-mounted files must be owned by that UID (or a host user with the same numeric UID). The connector rejects symlinks, non-regular files, wrong owners/modes and escaping directories on POSIX.
 
 The session key and any media locator encryption key are separate capabilities with separate files. Select the envelope key identifier explicitly with `PILOT_KEY_ID` (default `v1`); it is bound into both the ciphertext envelope and the AES-GCM associated data, so a record written under one id cannot be read under another. Rotate by installing a new key file, selecting a new id, verifying decryption of a new session write, and only then retiring the old file after the agreed transition. There is no silent migration and no automatic key deletion. The pilot session path uses this private file store; the application's general credential vault is unchanged and is not used by the pilot connector.
@@ -73,7 +75,7 @@ The boundary is the **network topology**, not the Node.js guard. The connector i
 
 The connector image preloads [`ops/pilot-egress-guard.cjs`](../../ops/pilot-egress-guard.cjs) through both `NODE_OPTIONS=--require=/app/egress-guard.cjs` and the image entrypoint (`/nodejs/bin/node --require=/app/egress-guard.cjs`). Clearing `NODE_OPTIONS` through an env file therefore does not remove the guard. The guard also sets a non-enumerable process marker; `preflight` and the live commands refuse when the image contains `/app/egress-guard.cjs` but the marker is absent, so a deliberate entrypoint override cannot run unguarded. The guard installs a default-deny layer before any application module or SDK is imported, so it does not depend on the SDK honouring a proxy or allowlist option.
 
-`pilot-db` is operator-supplied and cannot be declared internal in the compose file, so the precondition is checked twice: `ops/local/preflight-connector.sh` refuses unless `docker network inspect "$PILOT_DB_NETWORK"` reports `Internal=true`, and the image sets `PILOT_REQUIRE_INTERNAL_NETWORK=1`, which makes the guard refuse to start if the namespace has a usable IPv4 or IPv6 default route.
+`pilot-db` is operator-supplied from the compose file's point of view, but this host provisions it as a dedicated internal network; it cannot be declared internal by the service itself, so the precondition is checked twice: `ops/local/preflight-connector.sh` refuses unless `docker network inspect "$PILOT_DB_NETWORK"` reports `Internal=true`, and the image sets `PILOT_REQUIRE_INTERNAL_NETWORK=1`, which makes the guard refuse to start if the namespace has a usable IPv4 or IPv6 default route.
 
 - `PILOT_EGRESS_HOSTS` is a comma-separated list of **exact** provider hostnames; wildcards, IP literals and trailing dots are refused. If it is empty or unset, every provider connection is denied. `PILOT_EGRESS_PORTS` defaults to `443`.
 - The only other permitted destination is the exact `DATABASE_URL` host and port. Database query parameters that could redirect the target (`host`, `port`, `user`, `password`, `ssl`) cause the URL to be treated as unusable, and the connection is denied. Database addresses must resolve to private, loopback or unique-local space; public, link-local, multicast and metadata addresses are refused.
@@ -135,6 +137,29 @@ docker compose --env-file /private/pilot-interpolation.env -f /private/pilot-com
 ```
 
 `--manifest` (or `PILOT_MANIFEST`) must be an absolute path. Credentials, tokens, cookies, keys and URLs are never accepted as arguments. CLI output contains only the command, safe gate outcome, purpose and expiry.
+
+### Local G5-A readiness stack
+
+These scripts provision and verify the dedicated resources on the private host. They never log in, generate a real QR, contact a provider or admit a live grant.
+
+```bash
+# Dedicated TLS-only PostgreSQL on an internal network (idempotent).
+bash ops/local/provision-pilot-db.sh
+bash ops/local/verify-pilot-db-tls.sh
+
+# Deploy and verify the reviewed internal-network + gateway topology.
+bash ops/local/deploy-pilot-topology.sh
+bash ops/local/verify-deployed-pilot.sh      # stops/restarts the dedicated gateway
+
+# Bind and verify an enrollment-only template against the reviewed image.
+node ops/local/make-enroll-fixtures.mjs      # writes only under the private directory
+bash ops/local/verify-enrollment-readiness.sh
+
+# Full deployed dry run with synthetic inputs.
+bash ops/local/verify-local-dryrun.sh
+```
+
+`ops/local/verify-pilot-network.sh` remains the disposable-network suite (safe to run before deployment). `verify-deployed-pilot.sh` asserts the live deployment, including kernel-only denials with the guard absent, an empty policy, a stopped gateway and a wrong network attachment. Evidence is in `docs/evidence/G5A-*`.
 
 Bootstrap writes the QR PNG only to the private view directory for the Owner to view on the local host; it never prints QR/token material, fetches avatars, starts a viewer or retries after expiry/decline. Enrollment requires a private local UID confirmation after final SDK resolution. Ordinary startup can never use the enrollment exception.
 

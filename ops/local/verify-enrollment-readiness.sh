@@ -21,12 +21,20 @@ export PILOT_PRIVATE_DIR=$base
 say() { printf 'pilot-enroll: %s\n' "$*"; }
 fail() { printf 'pilot-enroll: FAIL %s\n' "$*" >&2; exit 1; }
 
-for cmd in docker python3; do
+for cmd in docker python3 node; do
   command -v "$cmd" >/dev/null || fail "$cmd is required"
 done
-[ -f "$template" ] || fail "run ops/local/make-enroll-fixtures.mjs first"
-[ -d "$fixtures" ] || fail "run ops/local/make-enroll-fixtures.mjs first"
 docker image inspect "$image" >/dev/null 2>&1 || fail "$image not found"
+
+# The denial fixtures assert behaviour around absolute synthetic timestamps
+# (expired, issued-in-the-future). Regenerate them immediately before the run so
+# a stale fixture cannot silently become a valid grant while still expecting
+# denial. The generator reads the build block from the reviewed image.
+say "regenerating synthetic fixtures"
+PILOT_CONNECTOR_IMAGE=$image PILOT_PRIVATE_DIR=$base \
+  node ops/local/make-enroll-fixtures.mjs >/dev/null
+[ -f "$template" ] || fail "the fixture generator did not write the template"
+[ -d "$fixtures" ] || fail "the fixture generator did not write the fixtures"
 
 tmp=$(mktemp -d)
 cleanup() { rm -rf "$tmp" 2>/dev/null || sudo rm -rf "$tmp"; }

@@ -165,6 +165,9 @@ const cases = {
 await mkdir(fixtures, { recursive: true, mode: 0o700 });
 await chmod(root, 0o700);
 await chmod(fixtures, 0o700);
+// Prior fixtures are 0600 and owned by the connector UID, so a regeneration
+// cannot overwrite them in place; remove only the known case files first.
+execFileSync("sudo", ["rm", "-f", ...Object.keys(cases).map((name) => join(fixtures, name))]);
 const write = async (path, value) => {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   await chmod(path, 0o600);

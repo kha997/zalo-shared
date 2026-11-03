@@ -26,6 +26,8 @@ app_pw=$(sudo cat "$base/secrets/app.pw")
 
 umask 077
 envfile=$base/secrets/connector-check.env
+plain_env=$base/secrets/connector-check-plain.env
+trap 'rm -f "$envfile" "$plain_env"' EXIT
 printf 'DATABASE_URL=postgresql://%s:%s@%s:5432/%s?sslmode=verify-full\n' \
   "$app_role" "$app_pw" "$host" "$database" >"$envfile"
 printf 'NODE_EXTRA_CA_CERTS=/run/pilot/db-ca.crt\n' >>"$envfile"
@@ -47,7 +49,6 @@ say "gate admitted the verify-full URL; $(sed -E 's/.*"role":"([^"]+)".*"version
 
 # Previous blocker: same host, same credential, no sslmode. The gate must refuse
 # before any socket is opened.
-plain_env=$base/secrets/connector-check-plain.env
 printf 'DATABASE_URL=postgresql://%s@%s:5432/%s\n' "$app_role" "$host" "$database" >"$plain_env"
 printf 'NODE_EXTRA_CA_CERTS=/run/pilot/db-ca.crt\n' >>"$plain_env"
 chmod 0600 "$plain_env"

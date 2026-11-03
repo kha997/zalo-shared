@@ -76,20 +76,22 @@ grep -q '^hostssl' <<<"$hba_conf" && grep -q '^hostnossl.*reject' <<<"$hba_conf"
   pass "pg_hba admits hostssl and rejects hostnossl" || fail "pg_hba is not TLS-only"
 
 # --------------------------------------------------------------- refusals
-neg() { # $1 label, $2 url, $3 password file, $4 SQL
+neg() { # $1 label, $2 url, $3 password file, $4 SQL, $5 expected error pattern
   local out
   if out=$(printf '%s\n' "$4" | psql_run "$2" "$3" 2>&1); then
     fail "$1 was admitted"
+  elif ! grep -qiE "$5" <<<"$out"; then
+    fail "$1 failed for the wrong reason: $(head -1 <<<"$out" | cut -c1-140)"
   else
     pass "$1 was refused: $(head -1 <<<"$out" | sed -E 's/^psql: error: //' | cut -c1-110)"
   fi
 }
 neg "a plaintext connection" \
-  "host=$host dbname=$database user=$app_role sslmode=disable" /run/secrets/app.pw "select 1"
+  "host=$host dbname=$database user=$app_role sslmode=disable" /run/secrets/app.pw "select 1" 'pg_hba\.conf rejects'
 neg "verify-full against a host name outside the certificate" \
-  "host=pilot-postgres dbname=$database user=$app_role sslmode=verify-full sslrootcert=$ca" /run/secrets/app.pw "select 1"
+  "host=pilot-postgres dbname=$database user=$app_role sslmode=verify-full sslrootcert=$ca" /run/secrets/app.pw "select 1" 'certificate'
 neg "verify-full against an unrelated CA" \
-  "host=$host dbname=$database user=$app_role sslmode=verify-full sslrootcert=/tmp/zs-unrelated-ca.crt" /run/secrets/app.pw "select 1"
+  "host=$host dbname=$database user=$app_role sslmode=verify-full sslrootcert=/tmp/zs-unrelated-ca.crt" /run/secrets/app.pw "select 1" 'certificate verify failed'
 
 # --------------------------------------------------------- least privilege
 attrs=$(printf "select rolsuper||'|'||rolcreatedb||'|'||rolcreaterole||'|'||rolreplication from pg_roles where rolname='$app_role';\n" |
@@ -102,8 +104,40 @@ privs=$(printf "select has_schema_privilege('$app_role','public','CREATE')||'|'|
 [ "$privs" = "false|false|false|true" ] && pass "runtime role cannot create in public or modify audit, and can insert messages" ||
   fail "runtime role privileges are $privs"
 
-neg "CREATE TABLE as the runtime role" "$app_url" /run/secrets/app.pw "create table public.zs_must_not_exist(id int);"
-neg "UPDATE audit as the runtime role" "$app_url" /run/secrets/app.pw "update audit set metadata='{}'::jsonb;"
+control=$(printf "select has_table_privilege('$app_role','public.connector_ownership','DELETE')||'|'||has_table_privilege('$app_role','public.provider_state','DELETE')||'|'||has_table_privilege('$app_role','public.pilot_send_budget','DELETE')||'|'||has_table_privilege('$app_role','public.pilot_part_ledger','DELETE')||'|'||has_table_privilege('$app_role','public.pilot_part_ledger','UPDATE');\n" |
+  psql_run "$owner_url" /run/secrets/owner.pw)
+[ "$control" = "false|false|false|false|false" ] &&
+  pass "runtime role cannot delete ownership/budget rows or update the ledger" ||
+  fail "control-table privileges are $control"
+
+trigger=$(printf "select count(*) from pg_trigger where tgname='pilot_budget_monotonic';\n" | psql_run "$owner_url" /run/secrets/owner.pw)
+[ "$trigger" = "1" ] && pass "the send budget is protected by an append-only trigger" ||
+  fail "the send budget trigger is missing"
+
+neg "CREATE TABLE as the runtime role" "$app_url" /run/secrets/app.pw "create table public.zs_must_not_exist(id int);" 'permission denied'
+neg "UPDATE audit as the runtime role" "$app_url" /run/secrets/app.pw "update audit set metadata='{}'::jsonb;" 'permission denied'
+for table in connector_ownership provider_state pilot_send_budget pilot_part_ledger; do
+  neg "DELETE on $table as the runtime role" "$app_url" /run/secrets/app.pw \
+    "delete from $table where account_id='00000000-0000-4000-8000-00000000b001';" 'permission denied'
+done
+neg "UPDATE on pilot_part_ledger as the runtime role" "$app_url" /run/secrets/app.pw \
+  "update pilot_part_ledger set reserved_at=now() where message_id='00000000-0000-4000-8000-00000000b001';" 'permission denied'
+
+# The runtime role must still be able to reserve a part, but not roll the
+# budget back or raise its cap.
+budget_account=00000000-0000-4000-8000-00000000b002
+printf "insert into pilot_send_budget(account_id,day,max_parts,reserved_parts) values('%s',(now() at time zone 'utc')::date,10,1) on conflict (account_id,day) do update set reserved_parts=1;\n" \
+  "$budget_account" | psql_run "$owner_url" /run/secrets/owner.pw >/dev/null
+incremented=$(printf "update pilot_send_budget set reserved_parts=reserved_parts+1 where account_id='%s';\n" "$budget_account" |
+  psql_run "$app_url" /run/secrets/app.pw)
+[ "$incremented" = "UPDATE 1" ] && pass "runtime role can reserve one budget part" ||
+  fail "runtime role could not reserve a budget part: $incremented"
+neg "a budget rollback as the runtime role" "$app_url" /run/secrets/app.pw \
+  "update pilot_send_budget set reserved_parts=0 where account_id='$budget_account';" 'cannot be rolled back'
+neg "a budget cap increase as the runtime role" "$app_url" /run/secrets/app.pw \
+  "update pilot_send_budget set max_parts=30 where account_id='$budget_account';" 'cannot be rolled back'
+printf "delete from pilot_send_budget where account_id='%s';\n" "$budget_account" |
+  psql_run "$owner_url" /run/secrets/owner.pw >/dev/null
 
 # ------------------------------------------------ synthetic data and restart
 seed=$(printf "%s\n" \
@@ -145,12 +179,32 @@ printf "%s\n" "delete from messages where id='00000000-0000-4000-8000-00000000f0
   psql_run "$owner_url" /run/secrets/owner.pw >/dev/null
 
 # ------------------------------------------- unrelated workloads untouched
-host_dbs=$(sudo -u postgres psql -p 5432 -Atc "select string_agg(datname, ',' order by datname) from pg_database" 2>/dev/null || true)
-g2_id=$(docker inspect zalo-shared-g2-postgres-1 --format '{{.Id}}' 2>/dev/null || true)
-[ -n "$host_dbs" ] && pass "host cluster untouched (databases: $(tr ',' '\n' <<<"$host_dbs" | grep -c . ) still present)" ||
-  pass "host cluster not queried (no shared instance used)"
-[ -n "$g2_id" ] && pass "G2 database container identity unchanged (${g2_id:0:12})" ||
-  pass "G2 database container not present"
+# The shared cluster is queried read-only for its start time; the pilot
+# container must have been created after both the host postmaster and the G2
+# database container started. A restart or recreation during provisioning would
+# move those timestamps past the pilot container's creation time.
+pilot_created=$(docker inspect -f '{{.Created}}' "$container")
+pilot_created_epoch=$(date -d "$pilot_created" +%s)
+if host_start=$(sudo -n -u postgres psql -p 5432 -Atc "select pg_postmaster_start_time()" 2>/dev/null) &&
+  [ -n "$host_start" ]; then
+  host_start_epoch=$(date -d "$host_start" +%s)
+  [ "$host_start_epoch" -lt "$pilot_created_epoch" ] &&
+    pass "shared host cluster started before the pilot container (not restarted)" ||
+    fail "shared host cluster started at or after the pilot container"
+else
+  printf 'pilot-db-tls: NOTE  shared host cluster was not queried; restart status UNPROVEN\n'
+fi
+if g2_created=$(docker inspect zalo-shared-g2-postgres-1 --format '{{.Created}}' 2>/dev/null) &&
+  [ -n "$g2_created" ]; then
+  g2_created_epoch=$(date -d "$g2_created" +%s)
+  [ "$g2_created_epoch" -lt "$pilot_created_epoch" ] &&
+    pass "G2 database container predates the pilot container (not recreated)" ||
+    fail "G2 database container was created at or after the pilot container"
+else
+  printf 'pilot-db-tls: NOTE  G2 database container is absent; identity not compared\n'
+fi
+
+docker exec "$container" rm -f /tmp/zs-unrelated-ca.crt >/dev/null 2>&1 || true
 
 if [ "$failures" -ne 0 ]; then
   printf 'pilot-db-tls: %s check(s) FAILED\n' "$failures" >&2

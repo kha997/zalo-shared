@@ -26,6 +26,7 @@ owner_pw=$(sudo cat "$base/secrets/owner.pw")
 
 umask 077
 envfile=$base/secrets/migrate.env
+trap 'rm -f "$envfile"' EXIT
 printf 'MIGRATION_DATABASE_URL=postgresql://%s:%s@%s:5432/%s?sslmode=verify-full\n' \
   "$owner_user" "$owner_pw" "$host" "$database" >"$envfile"
 printf 'APP_DATABASE_ROLE=%s\n' "$app_role" >>"$envfile"
@@ -48,3 +49,29 @@ grants=$(docker exec "$container" bash -lc \
   "PGPASSWORD=\$(cat /run/secrets/owner.pw) psql 'host=$host dbname=$database user=$owner_user sslmode=verify-full sslrootcert=/var/lib/postgresql/tls/ca.crt' -X -tAc \"SELECT has_table_privilege('$app_role','public.messages','SELECT') AND NOT has_table_privilege('$app_role','public.audit','UPDATE') AND NOT has_schema_privilege('$app_role','public','CREATE')\"")
 [ "$grants" = "t" ] || fail "runtime role grants are not the reviewed set"
 say "runtime role $app_role: can read messages, cannot update audit, cannot create in public"
+
+# The migration grants DML on every table, but the connector never deletes
+# ownership, provider state, budget or ledger rows and never updates the ledger.
+# Remove those paths so a compromised runtime credential cannot erase its
+# ownership row or reset the send budget, and make the budget row append-only.
+hardening=$(cat <<SQL
+REVOKE DELETE, TRUNCATE ON connector_ownership, provider_state, pilot_send_budget, pilot_part_ledger FROM "$app_role";
+REVOKE UPDATE ON pilot_part_ledger FROM "$app_role";
+CREATE OR REPLACE FUNCTION pilot_budget_monotonic() RETURNS trigger LANGUAGE plpgsql AS \$\$
+BEGIN
+  IF NEW.day <> OLD.day OR NEW.reserved_parts < OLD.reserved_parts OR NEW.max_parts > OLD.max_parts THEN
+    RAISE EXCEPTION 'pilot_send_budget row cannot be rolled back';
+  END IF;
+  RETURN NEW;
+END \$\$;
+DROP TRIGGER IF EXISTS pilot_budget_monotonic ON pilot_send_budget;
+CREATE TRIGGER pilot_budget_monotonic BEFORE UPDATE ON pilot_send_budget FOR EACH ROW EXECUTE FUNCTION pilot_budget_monotonic();
+SQL
+)
+printf '%s\n' "$hardening" | docker exec -i "$container" bash -lc \
+  "PGPASSWORD=\$(cat /run/secrets/owner.pw) psql 'host=$host dbname=$database user=$owner_user sslmode=verify-full sslrootcert=/var/lib/postgresql/tls/ca.crt' -X -q -v ON_ERROR_STOP=1"
+
+hardened=$(docker exec "$container" bash -lc \
+  "PGPASSWORD=\$(cat /run/secrets/owner.pw) psql 'host=$host dbname=$database user=$owner_user sslmode=verify-full sslrootcert=/var/lib/postgresql/tls/ca.crt' -X -tAc \"SELECT NOT has_table_privilege('$app_role','public.connector_ownership','DELETE') AND NOT has_table_privilege('$app_role','public.provider_state','DELETE') AND NOT has_table_privilege('$app_role','public.pilot_send_budget','DELETE') AND NOT has_table_privilege('$app_role','public.pilot_part_ledger','DELETE') AND NOT has_table_privilege('$app_role','public.pilot_part_ledger','UPDATE') AND (SELECT count(*) FROM pg_trigger WHERE tgname='pilot_budget_monotonic')=1\"")
+[ "$hardened" = "t" ] || fail "runtime role can still roll back ownership, budget or ledger rows"
+say "runtime role $app_role: cannot delete ownership/budget rows or roll back the budget"
