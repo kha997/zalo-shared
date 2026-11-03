@@ -30,6 +30,13 @@ Authoritative state: [PILOT-GATE-STATUS.md](../PILOT-GATE-STATUS.md)
   21/21; container boundary 25/25 (including a non-internal namespace refusal
   and probes with the guard provably absent); LAN 10/10; full suite 327/327 on
   Node v24.19.0.
+- Hosted CI 41650617518 on `b52bc33` passed both jobs: 327/327 units, 2/2
+  guarded SDK checks, 9 browser cases + 1 explicit skip, restore/restart,
+  monitoring and image gates, and the pilot job with the allow-path harness at
+  21/21. The harness stages a digest-verified copy of the code under test and of
+  itself, because the namespace it creates under `sudo` cannot traverse another
+  account's home; the first attempt (run 41649094828) failed there and is
+  recorded rather than hidden.
 - R2 is PASS for bootstrap only. Observe and send-test stay blocked until their
   runtime-only service-map/WebSocket hosts are admitted; the nine-host SDK
   inventory and the three admitted names are in

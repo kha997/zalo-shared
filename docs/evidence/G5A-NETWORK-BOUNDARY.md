@@ -134,9 +134,11 @@ unprivileged user namespace one uid is mapped, so a checkout under another
 account's home is not traversable there. The hosted `pilot` job reaches the
 script through `sudo`, and the first hosted attempt of this step failed for
 exactly that reason (run `41649094828`, `Cannot find module
-.../ops/local/harness/provider.cjs`). The staged harness was then re-verified
-locally through the same `sudo -E` invocation: 21/21 PASS, with the manifest
-`ipaddr.js 546ee2e65468439b8b2ea39bb3ac2ebf52ee7858367040401f876d0037aff205`.
+.../ops/local/harness/provider.cjs`). The staged harness passes through the same
+`sudo -E` invocation locally and in hosted
+[run 41650617518](https://github.com/kha997/zalo-shared/actions/runs/41650617518)
+on `b52bc33`: 21/21 PASS, with the staged manifest
+`ipaddr.js 546ee2e6…7aff205` identical in both.
 
 ## 6. Residual risks
 
