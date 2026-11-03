@@ -2,18 +2,28 @@
 
 // Connector-local egress guard. This file is preloaded with `--require` so it
 // runs before the SDK is imported. It is deliberately independent of SDK code:
-// the pinned SDK uses `fetch` and `ws`, which ultimately call `net`/`tls`, and
-// every TCP connection is checked here. It is not a substitute for a network
-// namespace or host firewall, but it is a default-deny boundary for this
-// process and its worker threads.
+// the pinned SDK uses `fetch` and `ws`, which both reach `tls.connect` and then
+// `net`, so every TCP connection is checked here.
+//
+// This is the innermost of three layers and is NOT the enforcement boundary.
+// The boundary is the network topology: the connector is attached only to
+// Docker networks declared internal=true, so the kernel gives it no route to
+// the internet and no external DNS, and the only sanctioned path out is the
+// separate egress-gateway container, which applies its own allowlist. This
+// guard narrows the process further and fails closed on misconfiguration, but
+// it must never be relied on as the isolation control.
 
+const fs = require("node:fs");
 const net = require("node:net");
 const tls = require("node:tls");
 const dns = require("node:dns");
 const dnsPromises = require("node:dns/promises");
 const dgram = require("node:dgram");
 const childProcess = require("node:child_process");
-const ipaddr = require("ipaddr.js");
+const {
+  matchesDeniedCidr,
+  validateAddress,
+} = require("./egress-address-policy.cjs");
 
 const DENIED = "PILOT_EGRESS_DENIED";
 const PROXY_ENV = [
@@ -43,42 +53,6 @@ const RESOLVE_NAMES = [
   "lookupService",
   "reverse",
 ];
-const PROVIDER_DENIED_CIDRS = [
-  "0.0.0.0/8",
-  "10.0.0.0/8",
-  "100.64.0.0/10",
-  "127.0.0.0/8",
-  "169.254.0.0/16",
-  "172.16.0.0/12",
-  "192.0.0.0/24",
-  "192.0.2.0/24",
-  "192.88.99.0/24",
-  "192.168.0.0/16",
-  "198.18.0.0/15",
-  "198.51.100.0/24",
-  "203.0.113.0/24",
-  "224.0.0.0/4",
-  "240.0.0.0/4",
-  "::/128",
-  "::1/128",
-  "::/96",
-  "::ffff:0:0/96",
-  "64:ff9b::/96",
-  "100::/64",
-  "2001::/32",
-  "2001:2::/48",
-  "2001:10::/28",
-  "2001:20::/28",
-  "2001:db8::/32",
-  "2002::/16",
-  "3fff::/20",
-  "5f00::/16",
-  "fc00::/7",
-  "fe80::/10",
-  "ff00::/8",
-];
-const deniedCidrs = PROVIDER_DENIED_CIDRS.map((cidr) => ipaddr.parseCIDR(cidr));
-
 function denied() {
   const error = new Error(DENIED);
   error.code = DENIED;
@@ -131,12 +105,15 @@ function parsePortList(raw) {
 
 function parseDatabase(raw) {
   if (raw === undefined || raw === null || raw === "") return null;
-  if (typeof raw !== "string" || !/^postgres(ql)?:\/\//.test(raw)) return null;
+  // A configured but malformed URL must stop the process at startup. Treating it
+  // as "no database" would defer the failure to runtime, where every connection
+  // is denied for a reason that looks like a network fault.
+  if (typeof raw !== "string" || !/^postgres(ql)?:\/\//.test(raw)) throw denied();
   let url;
   try {
     url = new URL(raw);
   } catch {
-    return null;
+    throw denied();
   }
   if (
     url.searchParams.has("host") ||
@@ -145,15 +122,35 @@ function parseDatabase(raw) {
     url.searchParams.has("password") ||
     url.searchParams.has("ssl")
   )
-    return null;
+    throw denied();
   let host = url.hostname;
-  if (!host || host.includes("%") || host.includes(",")) return null;
+  if (!host || host.includes("%") || host.includes(",")) throw denied();
   if (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1);
   host = host.toLowerCase();
   const port = url.port === "" ? 5432 : Number(url.port);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
-  if (!validDnsName(host) && net.isIP(host) === 0) return null;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw denied();
+  if (!validDnsName(host) && net.isIP(host) === 0) throw denied();
   return Object.freeze({ host, port });
+}
+
+// The pinned address of the egress gateway. Compose maps each allowlisted
+// provider hostname to this address with `extra_hosts`, so a provider
+// connection is admissible only when it resolves to exactly this address and
+// to no other. This is not a proxy setting: no CONNECT, HTTP or SOCKS proxy is
+// involved, and the standard proxy variables above stay denied.
+function parseGatewayPin(raw) {
+  if (raw === undefined || raw === null || raw === "") return null;
+  if (typeof raw !== "string") throw denied();
+  let address = raw.trim().toLowerCase();
+  if (address.startsWith("[") && address.endsWith("]")) address = address.slice(1, -1);
+  // A literal address only. A name would make the pin depend on resolution,
+  // which is exactly what the pin exists to remove.
+  if (net.isIP(address) === 0) throw denied();
+  // The gateway lives on an internal Docker network, so its address must be
+  // private, loopback or unique-local; a public pin would mean provider
+  // traffic was expected to leave without the gateway.
+  if (!validateAddress(address, "gateway")) throw denied();
+  return address;
 }
 
 function loadConfig(env) {
@@ -170,10 +167,56 @@ function loadConfig(env) {
   const providerPorts = parsePortList(env.PILOT_EGRESS_PORTS);
   const database = parseDatabase(env.DATABASE_URL);
   if (database && providerHosts.has(database.host)) throw denied();
-  return Object.freeze({ providerHosts, providerPorts, database });
+  const gatewayPin = parseGatewayPin(env.PILOT_EGRESS_GATEWAY);
+  // A gateway address that is also the database address would collapse two
+  // distinct trust levels into one endpoint.
+  if (gatewayPin && database && database.host === gatewayPin) throw denied();
+  return Object.freeze({ providerHosts, providerPorts, database, gatewayPin });
 }
 
 const config = loadConfig(process.env);
+
+// The boundary is the network namespace: the connector must have no usable
+// default route. That property belongs to the operator-supplied external
+// database network, which compose cannot assert. The image therefore refuses to
+// start when it is attached to a network that provides a default route. This is
+// a misconfiguration guard, not the isolation control: a process that never
+// loads the module is still bounded by the kernel.
+function routeHasUsableDefault(ipv4Text, ipv6Text) {
+  for (const line of (ipv4Text ?? "").trim().split("\n").slice(1)) {
+    const field = line.trim().split(/\s+/);
+    if (field.length < 8) continue;
+    // /proc/net/route: iface destination gateway flags ... mask ...
+    if (field[1] !== "00000000" || field[7] !== "00000000") continue;
+    if ((parseInt(field[3], 16) & 0x1) !== 0) return true;
+  }
+  for (const line of (ipv6Text ?? "").trim().split("\n")) {
+    const field = line.trim().split(/\s+/);
+    if (field.length < 10) continue;
+    // The kernel always lists an unreachable default route; only RTF_UP without
+    // RTF_REJECT is a usable one. Fields: destination, prefix, ..., flags, dev.
+    if (field[0] !== "0".repeat(32) || field[1] !== "00") continue;
+    const flags = parseInt(field[8], 16);
+    if ((flags & 0x1) !== 0 && (flags & 0x200) === 0) return true;
+  }
+  return false;
+}
+
+if (process.env.PILOT_REQUIRE_INTERNAL_NETWORK === "1") {
+  const read = (path) => {
+    try {
+      return fs.readFileSync(path, "utf8");
+    } catch {
+      return null;
+    }
+  };
+  const ipv4 = read("/proc/net/route");
+  const ipv6 = read("/proc/net/ipv6_route");
+  // An unreadable route table cannot prove the namespace has no default route,
+  // so it is denied rather than treated as empty.
+  if (ipv4 === null || ipv6 === null) throw denied();
+  if (routeHasUsableDefault(ipv4, ipv6)) throw denied();
+}
 
 // Marker consumed by the connector CLI. The image entrypoint preloads this
 // module; if a deliberate entrypoint override skips it, preflight and live
@@ -213,31 +256,18 @@ function classifyHostname(host) {
   return null;
 }
 
-function matchesDeniedCidr(address) {
-  return deniedCidrs.some(
-    (cidr) =>
-      address.kind() === cidr[0].kind() && address.match(cidr),
-  );
-}
-
-function validateAddress(raw, kind) {
-  if (typeof raw !== "string" || net.isIP(raw) === 0) return false;
-  let address;
-  try {
-    address = ipaddr.parse(raw);
-  } catch {
-    return false;
-  }
-  if (address.kind() === "ipv6" && address.isIPv4MappedAddress()) {
-    if (kind === "provider") return false;
-    address = address.toIPv4Address();
-  }
-  const range = address.range();
-  if (kind === "provider")
-    return range === "unicast" && !matchesDeniedCidr(address);
-  if (kind === "database")
-    return ["private", "loopback", "uniqueLocal"].includes(range);
-  return false;
+// Every answer must be admissible. For a provider, the gateway pin is the only
+// permitted address, so a resolver that returns the pin alongside any second
+// address is refused outright rather than filtered: filtering would let the
+// resolver choose the direct route.
+function answersAdmissible(list, kind, gatewayPin) {
+  if (!Array.isArray(list) || list.length === 0) return false;
+  return list.every((entry) => {
+    if (!entry || typeof entry.address !== "string") return false;
+    if (kind === "provider" && gatewayPin)
+      return entry.address.toLowerCase() === gatewayPin;
+    return validateAddress(entry.address, kind);
+  });
 }
 
 function resolveAndValidate(hostname, options, kind, callback) {
@@ -250,15 +280,8 @@ function resolveAndValidate(hostname, options, kind, callback) {
   nativeLookup(hostname, { ...opts, all: true }, (error, addresses) => {
     if (error) return callback(error);
     const list = Array.isArray(addresses) ? addresses : [];
-    if (list.length === 0) return callback(denied());
-    for (const entry of list) {
-      if (
-        !entry ||
-        typeof entry.address !== "string" ||
-        !validateAddress(entry.address, kind)
-      )
-        return callback(denied());
-    }
+    if (!answersAdmissible(list, kind, config.gatewayPin))
+      return callback(denied());
     if (opts.all) return callback(null, list);
     return callback(null, list[0].address, list[0].family);
   });
@@ -499,8 +522,11 @@ module.exports = Object.freeze({
     parseHostList,
     parsePortList,
     parseDatabase,
+    parseGatewayPin,
     classifyTarget,
     classifyHostname,
     validateAddress,
+    answersAdmissible,
+    routeHasUsableDefault,
   }),
 });

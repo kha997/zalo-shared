@@ -191,6 +191,32 @@ jobs:
           grep -q '"gate":"denied"' docs/evidence/ci-g5-preflight-denied.json
       - name: Separate connector scan, SDK inventory and nonroot/port assertions
         run: bash ops/pilot-scan.sh zalo-shared-connector:ci
+      - name: Egress gateway image and OS-enforced network boundary
+        run: |
+          set -o pipefail
+          docker build -f ops/Dockerfile.gateway -t zalo-shared-egress-gateway:ci .
+          bash ops/local/check-pilot-network.sh | tee docs/evidence/ci-pilot-network.txt
+          PILOT_CONNECTOR_IMAGE=zalo-shared-connector:ci \
+          PILOT_EGRESS_GATEWAY_IMAGE=zalo-shared-egress-gateway:ci \
+            bash ops/local/verify-pilot-network.sh | tee docs/evidence/ci-pilot-boundary.txt
+      - name: Offline egress allow-path harness
+        run: |
+          set +e
+          # Root here only to create an unprivileged user+mount+network
+          # namespace; the harness itself runs node as an ordinary user inside
+          # that namespace and contains all traffic to loopback.
+          sudo -E bash ops/local/verify-egress-allowpath.sh | tee docs/evidence/ci-egress-allowpath.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 77 ]; then
+            # Exit 77 is the harness's own "cannot run here" result. A broken
+            # harness (exit 2 or anything else) must fail the job.
+            echo "SKIP: unprivileged namespaces unavailable on this runner" | tee -a docs/evidence/ci-egress-allowpath.log
+          elif [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+      - name: Egress gateway image scan
+        run: bash ops/scan-image.sh zalo-shared-egress-gateway:ci gateway
       - name: Image build identity matches this commit and the connector lock
         run: |
           node -e '

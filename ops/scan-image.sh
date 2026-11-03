@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Reproducible scanner binary from the official release; no Docker socket is given to it.
 set -euo pipefail
-image=${1:?Usage: scan-image.sh IMAGE}
+image=${1:?Usage: scan-image.sh IMAGE [OUTPUT_PREFIX]}
+# A distinct prefix keeps the gateway scan from overwriting the connector's
+# evidence files.
+prefix=${2:-container}
 mkdir -p docs/evidence
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -10,18 +13,19 @@ printf '%s  %s\n' c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9
 tar -xzf "$work/trivy.tar.gz" -C "$work" trivy
 docker save "$image" -o "$work/image.tar"
 "$work/trivy" --version
-"$work/trivy" image --input "$work/image.tar" --scanners vuln --severity HIGH,CRITICAL --format json --output docs/evidence/container-vulnerabilities.json --exit-code 0
-python3 - "$image" <<'PY'
+"$work/trivy" image --input "$work/image.tar" --scanners vuln --severity HIGH,CRITICAL --format json --output "docs/evidence/$prefix-vulnerabilities.json" --exit-code 0
+python3 - "$image" "$prefix" <<'PY'
 import json, sys
 from pathlib import Path
 image=sys.argv[1]
-report=json.loads(Path('docs/evidence/container-vulnerabilities.json').read_text())
+prefix=sys.argv[2]
+report=json.loads(Path(f'docs/evidence/{prefix}-vulnerabilities.json').read_text())
 findings=[]
 for result in report.get('Results',[]):
  for v in result.get('Vulnerabilities',[]):
   findings.append({'target':result.get('Target'),'id':v.get('VulnerabilityID'),'package':v.get('PkgName'),'installed':v.get('InstalledVersion'),'fixed':v.get('FixedVersion'),'severity':v.get('Severity'),'url':v.get('PrimaryURL')})
 summary={'scanner':'Trivy0.76.1','image':image,'highCriticalCount':len(findings),'fixableHighCriticalCount':sum(bool(x['fixed']) for x in findings),'findings':findings}
-Path('docs/evidence/container-scan-summary.json').write_text(json.dumps(summary,indent=2)+'\n')
+Path(f'docs/evidence/{prefix}-scan-summary.json').write_text(json.dumps(summary,indent=2)+'\n')
 print(json.dumps(summary))
 if summary['highCriticalCount']: raise SystemExit('High/critical image vulnerabilities remain')
 PY

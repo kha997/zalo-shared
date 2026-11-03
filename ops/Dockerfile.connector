@@ -51,7 +51,16 @@ ENV NODE_ENV=production
 # The entrypoint repeats the preload so an env_file or compose override of
 # NODE_OPTIONS cannot silently remove the guard. Node caches the module, so the
 # duplicate path is a no-op.
+# This guard is defense in depth, not the enforcement boundary. The boundary is
+# the compose topology: the connector is attached only to networks declared
+# internal=true, so the kernel gives it no default route and no external DNS,
+# and the only sanctioned path out is the separate egress-gateway container.
 ENV NODE_OPTIONS=--require=/app/egress-guard.cjs
+# The external database network is operator-supplied, so compose cannot assert
+# that it is internal. The guard refuses to start when the namespace has a
+# usable default route, which is what a non-internal attachment provides. This
+# is a misconfiguration stop, not the isolation control.
+ENV PILOT_REQUIRE_INTERNAL_NETWORK=1
 ENTRYPOINT ["/nodejs/bin/node", "--require=/app/egress-guard.cjs"]
 WORKDIR /app
 COPY --from=build --chown=65532:65532 /app/dist/connector ./dist/connector
@@ -59,6 +68,7 @@ COPY --from=build --chown=65532:65532 /app/build-identity.json ./build-identity.
 COPY --from=runtime-deps --chown=65532:65532 /app/connector/node_modules ./node_modules
 COPY --from=runtime-deps --chown=65532:65532 /app/connector/package.json ./package.json
 COPY --chown=65532:65532 ops/pilot-egress-guard.cjs ./egress-guard.cjs
+COPY --chown=65532:65532 ops/egress-address-policy.cjs ./egress-address-policy.cjs
 USER 65532:65532
 # No EXPOSE: the pilot connector serves no HTTP endpoint. Dry-run fails closed
 # without a private manifest and never reads the vault, imports the SDK, or

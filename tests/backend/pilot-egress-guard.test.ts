@@ -22,6 +22,8 @@ function environment(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   delete env.DATABASE_URL;
   delete env.PILOT_EGRESS_HOSTS;
   delete env.PILOT_EGRESS_PORTS;
+  delete env.PILOT_EGRESS_GATEWAY;
+  delete env.PILOT_REQUIRE_INTERNAL_NETWORK;
   for (const key of proxyKeys) delete env[key];
   return { ...env, ...extra };
 }
@@ -304,3 +306,150 @@ test("wildcard provider hosts are rejected", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /PILOT_EGRESS_DENIED/);
 });
+
+test("the gateway pin accepts only a literal address on the internal network", () => {
+  const result = guarded(
+    `const g = require(${JSON.stringify(guard)})._internal;
+     const attempt = (value) => {
+       try { return g.parseGatewayPin(value); } catch (error) { return error.code; }
+     };
+     console.log(JSON.stringify({
+       missing: attempt(undefined),
+       blank: attempt(""),
+       loopback: attempt("127.0.0.1"),
+       ipv6Loopback: attempt("::1"),
+       rfc1918: attempt("172.29.0.10"),
+       ten: attempt("10.5.6.7"),
+       uniqueLocal: attempt("fd12:3456:789a::1"),
+       bracketed: attempt("[172.29.0.10]"),
+       padded: attempt("  172.29.0.10  "),
+       publicV4: attempt("93.184.216.34"),
+       publicV6: attempt("2606:2800:220:1:248:1893:25c8:1946"),
+       linkLocal: attempt("169.254.169.254"),
+       unspecified: attempt("0.0.0.0"),
+       name: attempt("gateway.test"),
+       withPort: attempt("172.29.0.10:443"),
+       notAString: attempt(172),
+     }));`,
+    {},
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    missing: null,
+    blank: null,
+    loopback: "127.0.0.1",
+    ipv6Loopback: "::1",
+    rfc1918: "172.29.0.10",
+    ten: "10.5.6.7",
+    uniqueLocal: "fd12:3456:789a::1",
+    bracketed: "172.29.0.10",
+    padded: "172.29.0.10",
+    publicV4: "PILOT_EGRESS_DENIED",
+    publicV6: "PILOT_EGRESS_DENIED",
+    linkLocal: "PILOT_EGRESS_DENIED",
+    unspecified: "PILOT_EGRESS_DENIED",
+    name: "PILOT_EGRESS_DENIED",
+    withPort: "PILOT_EGRESS_DENIED",
+    notAString: "PILOT_EGRESS_DENIED",
+  });
+});
+
+test("a gateway pin that is also the database address fails closed at startup", () => {
+  const result = guarded("", {
+    DATABASE_URL: "postgres://pilot:fake@127.0.0.1:5432/pilot",
+    PILOT_EGRESS_GATEWAY: "127.0.0.1",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /PILOT_EGRESS_DENIED/);
+});
+
+test("a provider name that does not resolve to the pinned gateway address is denied", async () => {
+  await withServer((port, connections) => {
+    const result = guarded(connectScript(port, "localhost"), {
+      PILOT_EGRESS_HOSTS: "localhost",
+      PILOT_EGRESS_PORTS: String(port),
+      PILOT_EGRESS_GATEWAY: "172.29.0.10",
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout + result.stderr, /PILOT_EGRESS_DENIED/);
+    assert.equal(connections(), 0);
+  });
+});
+
+test("a malformed gateway pin fails closed at startup rather than being ignored", () => {
+  for (const pin of ["93.184.216.34", "gateway.test", "169.254.169.254"]) {
+    const result = guarded("", {
+      PILOT_EGRESS_HOSTS: "example.test",
+      PILOT_EGRESS_GATEWAY: pin,
+    });
+    assert.notEqual(result.status, 0, pin);
+    assert.match(result.stderr, /PILOT_EGRESS_DENIED/, pin);
+  }
+});
+
+test("a mixed resolver answer set is denied rather than filtered to the pin", () => {
+  const result = guarded(
+    `const g=require(${JSON.stringify(guard)})._internal;
+     const pin="172.29.0.10";
+     console.log(JSON.stringify({
+       pinned:g.answersAdmissible([{address:pin,family:4}],"provider",pin),
+       upper:g.answersAdmissible([{address:"172.29.0.10",family:4}],"provider",pin),
+       mixed:g.answersAdmissible([{address:pin,family:4},{address:"93.184.216.34",family:4}],"provider",pin),
+       empty:g.answersAdmissible([],"provider",pin),
+       privateSecond:g.answersAdmissible([{address:pin,family:4},{address:"127.0.0.1",family:4}],"provider",pin)
+     }));`,
+    { PILOT_EGRESS_HOSTS: "example.test" },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    pinned: true,
+    upper: true,
+    mixed: false,
+    empty: false,
+    privateSecond: false,
+  });
+});
+
+test("a configured but malformed DATABASE_URL fails closed at startup", () => {
+  for (const url of [
+    "not-a-url",
+    "mysql://pilot:fake@127.0.0.1:5432/pilot",
+    "postgres://pilot:fake@127.0.0.1:0/pilot",
+  ]) {
+    const result = guarded("", { DATABASE_URL: url });
+    assert.notEqual(result.status, 0, url);
+    assert.match(result.stderr, /PILOT_EGRESS_DENIED/, url);
+  }
+});
+
+test("the route guard ignores the kernel reject default and detects a usable one", () => {
+  const v4Default =
+    "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\n" +
+    "eth0\t00000000\t0101A8C0\t0003\t0\t0\t0\t00000000\t0\t0\t0\n";
+  const v4Scoped =
+    "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\n" +
+    "eth0\t000A1CA8\t00000000\t0001\t0\t0\t0\t00FFFFFF\t0\t0\t0\n";
+  const v6Reject =
+    "00000000000000000000000000000000 00 00000000000000000000000000000000 00 00000400 00000001 00000000 00000000 00200200 eth0\n";
+  const v6Usable =
+    "00000000000000000000000000000000 00 00000000000000000000000000000000 00 00000400 00000001 00000000 00000000 00000001 eth0\n";
+  const result = guarded(
+    `const g=require(${JSON.stringify(guard)})._internal;
+     console.log(JSON.stringify({
+       v4:g.routeHasUsableDefault(${JSON.stringify(v4Default)},null),
+       v4Scoped:g.routeHasUsableDefault(${JSON.stringify(v4Scoped)},null),
+       v6Reject:g.routeHasUsableDefault(null,${JSON.stringify(v6Reject)}),
+       v6Usable:g.routeHasUsableDefault(null,${JSON.stringify(v6Usable)}),
+       absent:g.routeHasUsableDefault(null,null)
+     }));`,
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    v4: true,
+    v4Scoped: false,
+    v6Reject: false,
+    v6Usable: true,
+    absent: false,
+  });
+});
+

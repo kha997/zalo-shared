@@ -14,6 +14,23 @@ case "$stage" in
   invalid) expected= ;;
   *) echo "unknown stage: $stage" >&2; exit 2 ;;
 esac
+# The connector's database network is external to the pilot compose file, so
+# its internal flag cannot be asserted there. Check the network that will be
+# attached rather than a placeholder name. The connector image repeats this
+# check at startup by refusing a namespace with a usable default route.
+if [ -z "${PILOT_DB_NETWORK:-}" ]; then
+  echo "refusing: PILOT_DB_NETWORK is unset; the connector's database network cannot be checked" >&2
+  exit 1
+fi
+internal=$(docker network inspect "$PILOT_DB_NETWORK" --format '{{.Internal}}' 2>/dev/null) || {
+  echo "refusing: PILOT_DB_NETWORK=$PILOT_DB_NETWORK is not an existing Docker network" >&2
+  exit 1
+}
+if [ "$internal" != "true" ]; then
+  echo "refusing: PILOT_DB_NETWORK=$PILOT_DB_NETWORK is not internal=true; the connector would have a default route" >&2
+  exit 1
+fi
+echo "network precondition: $PILOT_DB_NETWORK is internal=true"
 # The parent directory is 0700 owned by the connector UID, so the login user
 # cannot stat the file; the Docker daemon performs the read.
 sudo test -f "$manifest" || { echo "missing manifest: $manifest; generate a synthetic fixture with node --import tsx ops/g5-synthetic-manifest.ts OUTPUT STAGE or pass an explicit path" >&2; exit 2; }

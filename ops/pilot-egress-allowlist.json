@@ -1,0 +1,108 @@
+{
+  "$comment": [
+    "Reviewed provider endpoint allowlist for the G5-A pilot connector.",
+    "This file is the single source of truth for three runtime values, which",
+    "ops/local/check-pilot-network.sh asserts agree with ops/pilot-compose.example.yml:",
+    "  1. the connector's PILOT_EGRESS_HOSTS",
+    "  2. the connector's extra_hosts pins (every admitted host -> gateway.address)",
+    "  3. the egress gateway's GATEWAY_ALLOW_HOSTS",
+    "Hosts listed under `pending` are NOT admitted and must not appear in any",
+    "runtime configuration. Adding a host means moving it from `pending` to",
+    "`admitted` with evidence, then re-running the checker.",
+    "Every hostname here is derived from the shipped zca-js@2.2.0 artifacts.",
+    "Nothing was guessed and no hostname was observed from live traffic; see",
+    "docs/evidence/G5A-PROVIDER-ENDPOINT-POLICY.md."
+  ],
+  "version": 1,
+  "sdk": {
+    "name": "zca-js",
+    "version": "2.2.0",
+    "lockfile": "connector/package-lock.json"
+  },
+  "gateway": {
+    "network": "pilot-egress",
+    "subnet": "172.16.29.0/24",
+    "address": "172.16.29.10",
+    "port": 443,
+    "uplinkNetwork": "pilot-uplink",
+    "$comment": "The subnet sits inside RFC1918 172.16.0.0/12 but below Docker's default address pool (172.17.0.0/16 through 172.31.0.0/16), so it cannot be auto-assigned to an unrelated project's network. The address is private, which is what the connector's PILOT_EGRESS_GATEWAY pin requires."
+  },
+  "admitted": [
+    {
+      "host": "id.zalo.me",
+      "classification": "confirmed-static",
+      "stages": ["bootstrap"],
+      "evidence": "zca-js@2.2.0 dist/apis/loginQR.js:16,44,70,95,124,163,195 - request() target for /account, /account/logininfo, /account/verify-client, /account/authen/qr/generate, /account/authen/qr/waiting-scan, /account/authen/qr/waiting-confirm, /account/checksession"
+    },
+    {
+      "host": "wpa.chat.zalo.me",
+      "classification": "confirmed-static",
+      "stages": ["bootstrap"],
+      "evidence": "zca-js@2.2.0 dist/apis/login.js:6 (/api/login/getLoginInfo) and login.js:25 (/api/login/getServerInfo); both are awaited by zalo.js loginCookie() before an API object is returned"
+    },
+    {
+      "host": "jr.chat.zalo.me",
+      "classification": "confirmed-static",
+      "stages": ["bootstrap"],
+      "evidence": "zca-js@2.2.0 dist/apis/loginQR.js:215 (/jr/userinfo), reached from qr-bootstrap.ts loginQR()"
+    }
+  ],
+  "pending": [
+    {
+      "classification": "dynamic-service-map",
+      "reason": "The base URLs for every post-login API come from loginInfo.zpw_service_map_v3 in the provider's login response (zca-js@2.2.0 dist/zalo.js:72). The hostnames exist only at runtime and are provider-controlled, so they cannot be reconstructed from reviewed artifacts.",
+      "keysOnConnectorPath": ["chat", "group", "file"],
+      "keysNotOnConnectorPath": [
+        "friend",
+        "conversation",
+        "profile",
+        "sticker",
+        "quick_message",
+        "group_board",
+        "catalog",
+        "zimsg",
+        "label",
+        "auto_reply",
+        "alias",
+        "reaction",
+        "group_poll",
+        "friend_board",
+        "aext"
+      ],
+      "evidence": "dist/apis/sendMessage.js:60,63 use chat[0] and group[0]; 68,69 use file[0]. The connector's SDK surface is getCookie, getOwnId, listener, login, loginQR and sendMessage only",
+      "stages": ["observe", "send-test"]
+    },
+    {
+      "classification": "websocket",
+      "reason": "The listener connects to zpw_ws[] from the login response. zca-js@2.2.0 dist/zalo.js:72 passes loginInfo.zpw_ws into new API(...), dist/apis.js:160 builds new Listener(ctx, wsUrls), and dist/apis/listen.js:27 uses urls[0] as the first wsURL and 84-96 rotates through the array on provider close codes. No WebSocket hostname appears anywhere in the reviewed artifacts.",
+      "stages": ["observe"]
+    },
+    {
+      "classification": "redirect-target",
+      "reason": "zca-js@2.2.0 dist/utils.js:289-298 follows any Location response header with request(ctx, redirectURL, ...). A provider redirect can therefore name a host that is not in this file. The gateway allowlist and the connector's internal-network topology both refuse it: an unpinned name has no route and no external resolver. Redirect targets must be admitted here before they can be followed.",
+      "stages": ["bootstrap", "observe", "send-test"]
+    }
+  ],
+  "excluded": [
+    {
+      "host": "chat.zalo.me",
+      "reason": "Appears only as a cookie domain (dist/zalo.js:25, dist/apis/listen.js:40), an Origin/Referer header value (dist/utils.js:231,242,243) and a `continue` form field (dist/apis/loginQR.js:122,160). It is never a request target on the connector's path."
+    },
+    {
+      "host": "zalo.me",
+      "reason": "Appears only as a `continue` query parameter value in dist/apis/loginQR.js:42,68,93 and as a cookie-domain comparison in dist/utils.js. Never a request target."
+    },
+    {
+      "host": "registry.npmjs.org",
+      "reason": "dist/update.js:4 NPM_REGISTRY, called from dist/zalo.js:51 checkUpdate(ctx), which returns immediately when ctx.options.checkUpdate is falsy. adapters/zalo/sdk-facade.ts sets checkUpdate:false, so no request is made. Not admitted; if it were ever reached, the gateway would refuse it."
+    },
+    {
+      "host": "catalog.zalo.me",
+      "reason": "Present only in TypeScript declaration comments; no runtime reference."
+    },
+    {
+      "host": "developers.zalo.me",
+      "reason": "Present only in a JSDoc comment in dist/models/Bank.js:3; no runtime reference."
+    }
+  ]
+}
