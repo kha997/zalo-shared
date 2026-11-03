@@ -458,17 +458,20 @@ if (typeof childProcess.ChildProcess === "function") {
   }
 }
 
-// Raw socket bindings would bypass the net/dgram hooks. Node internals use
-// internalBinding, so blocking these public process.binding names does not
-// affect the runtime's own net/TLS setup.
-if (typeof process.binding === "function") {
-  const nativeBinding = process.binding.bind(process);
-  const blockedBindings = /^(tcp_wrap|udp_wrap|pipe_wrap)$/;
-  process.binding = function (name) {
-    if (typeof name === "string" && blockedBindings.test(name)) throw denied();
-    return nativeBinding(name);
-  };
-}
+// Raw bindings bypass every JavaScript-level hook: tcp_wrap/udp_wrap/pipe_wrap
+// create sockets, spawn_sync/process_wrap create processes, stream_wrap creates
+// libuv streams and cares_wrap performs DNS queries. A blocklist is not enough
+// (the name can be a String object or another coercible value), and a partial
+// block leaves sibling bindings reachable, so all public raw-binding paths fail
+// closed. Node internals use internalBinding, and the reviewed dependency tree
+// does not call process.binding, process._linkedBinding or process.dlopen.
+const denyRawBinding = () => {
+  throw denied();
+};
+if (typeof process.binding === "function") process.binding = denyRawBinding;
+if (typeof process._linkedBinding === "function")
+  process._linkedBinding = denyRawBinding;
+if (typeof process.dlopen === "function") process.dlopen = denyRawBinding;
 
 try {
   const workerThreads = require("node:worker_threads");

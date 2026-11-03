@@ -150,6 +150,10 @@ dns.resolve4("example.test", (error) => outcomes.push("dns-" + (error && error.c
 try { child.execSync("true"); outcomes.push("child-allowed"); } catch (error) { outcomes.push("child-" + error.code); }
 try { new child.ChildProcess().spawn({ file: "/bin/true" }); outcomes.push("proto-spawn-allowed"); } catch (error) { outcomes.push("proto-spawn-" + error.code); }
 try { process.binding("tcp_wrap"); outcomes.push("binding-allowed"); } catch (error) { outcomes.push("binding-" + error.code); }
+try { process.binding(new String("tcp_wrap")); outcomes.push("binding-obj-allowed"); } catch (error) { outcomes.push("binding-obj-" + error.code); }
+try { process.binding("spawn_sync"); outcomes.push("binding-spawn-allowed"); } catch (error) { outcomes.push("binding-spawn-" + error.code); }
+try { process._linkedBinding("spawn_sync"); outcomes.push("linked-allowed"); } catch (error) { outcomes.push("linked-" + error.code); }
+try { process.dlopen({}); outcomes.push("dlopen-allowed"); } catch (error) { outcomes.push("dlopen-" + error.code); }
 setTimeout(() => console.log(outcomes.join(",")), 50);
 `, { PILOT_EGRESS_HOSTS: "example.test" });
   assert.equal(result.status, 0, result.stderr);
@@ -157,8 +161,12 @@ setTimeout(() => console.log(outcomes.join(",")), 50);
     result.stdout.trim().split(",").sort(),
     [
       "binding-PILOT_EGRESS_DENIED",
+      "binding-obj-PILOT_EGRESS_DENIED",
+      "binding-spawn-PILOT_EGRESS_DENIED",
       "child-PILOT_EGRESS_DENIED",
+      "dlopen-PILOT_EGRESS_DENIED",
       "dns-PILOT_EGRESS_DENIED",
+      "linked-PILOT_EGRESS_DENIED",
       "proto-spawn-PILOT_EGRESS_DENIED",
       "udp-PILOT_EGRESS_DENIED",
     ],
