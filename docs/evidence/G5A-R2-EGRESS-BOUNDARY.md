@@ -33,7 +33,7 @@ of `NODE_OPTIONS` cannot silently remove the guard.
 | Database destination | Parsed from `DATABASE_URL`; only that exact host and port are admitted. Query overrides for host, port, user, password or TLS are rejected. |
 | Address validation | Provider targets must resolve to public unicast addresses outside reserved/private/loopback/link-local/documentation/IPv4-compatible ranges, so a DNS answer cannot redirect to an internal address. Database targets must be private, loopback or unique-local. |
 | DNS | `dns.lookup` and `dns.promises.lookup` are pinned to the validated address; `dns.resolve*`, `lookupService`, `reverse`, `dns/promises` and `dns.Resolver` instances are denied. |
-| Other egress | UDP sockets and `dgram.Socket`, module-level and prototype `child_process` spawns, all public raw binding paths (`process.binding`, `process._linkedBinding`, `process.dlopen`) and `worker_threads` are denied. Blocking the whole binding surface closes String-object names and sibling bindings such as `spawn_sync`, `process_wrap`, `stream_wrap` and `cares_wrap`. |
+| Other egress | UDP sockets and `dgram.Socket`, module-level and prototype `child_process` spawns, all public raw binding paths (`process.binding`, `process._linkedBinding`, `process.dlopen`), the exported `net._createServerHandle`/`dgram._createSocketHandle` factories and `worker_threads` are denied. Blocking the whole binding surface closes String-object names and sibling bindings such as `spawn_sync`, `process_wrap`, `stream_wrap` and `cares_wrap`. |
 | Socket options | A bare Unix-socket `path` is denied. An HTTP request `path` is dropped while the TCP target is still checked, so `http`/`https` requests reach only an allowlisted host/port. Inherited `fd`/`handle` and caller-supplied lookups cannot redirect a connection. |
 | Proxy paths | Proxy environment variables, `NODE_OPTIONS=--use-env-proxy` and `NODE_TLS_REJECT_UNAUTHORIZED=0` fail closed at startup. |
 | Preload integrity | The image entrypoint carries `--require=/app/egress-guard.cjs`, so clearing or overriding `NODE_OPTIONS` through an env file does not remove the guard. |
@@ -56,6 +56,8 @@ operation.
 ## 3. Offline verification
 
 Focused test file `tests/backend/pilot-egress-guard.test.ts`: **16/16 PASS**.
+The in-image checks below ran against artifact
+`8d40c0f934aef10f8470cf7cc5bcd7402710f6bd` (`g5-8d40c0f9`).
 
 | Test | Result |
 | --- | --- |
@@ -79,8 +81,9 @@ Focused test file `tests/backend/pilot-egress-guard.test.ts`: **16/16 PASS**.
 Additional in-image checks during remediation observed the same fail-closed
 behaviour: direct-IP, UDP, child-process, DNS-resolve, wildcard and proxy cases
 were denied; `ChildProcess.prototype.spawn`, `process.binding(new
-String("tcp_wrap"))`, `process.binding("spawn_sync")`, `process._linkedBinding`
-and `process.dlopen` were denied; the configured internal database host/port
+String("tcp_wrap"))`, `process.binding("spawn_sync")`, `process._linkedBinding`,
+`process.dlopen` and the exported `net`/`dgram` handle factories were denied;
+the configured internal database host/port
 was reachable; a wrong database port, a loopback DNS answer and an IPv6 target
 were denied. The checks were repeated with `NODE_OPTIONS` cleared: the
 entrypoint preload kept the direct-IP, UDP, DNS, child, raw-binding, `fd`,

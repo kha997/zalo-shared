@@ -1,7 +1,7 @@
 # Pilot gate status
 
 **Date:** 2026-11-03
-**Branch:** `feat/shared-inbox`; reviewed connector artifact source `fdb0704ba9384c4fad45df0c9910fa369b059efa`
+**Branch:** `feat/shared-inbox`; reviewed connector artifact source `8d40c0f934aef10f8470cf7cc5bcd7402710f6bd`
 **PR #3:** OPEN, **Draft** (not merged, not deployed)
 **Owner decision:** `G5_SCOPE_APPROVED_ACTIVATION_PENDING` — D1–D7 approved in scope; live activation withheld
 **G5-A authorization:** none current. The earlier `2026-11-03T02:00Z`–`02:30Z` window is invalid and was not reused.
@@ -22,7 +22,7 @@
 | `R2_EGRESS_ENFORCEMENT_PASS` | **BLOCKED** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); guard implemented and tested, live endpoint inventory unprovable offline |
 | `R3_LAN_ISOLATION_PASS` | **UNPROVEN** | [G5A-R3-LAN-ISOLATION.md](docs/evidence/G5A-R3-LAN-ISOLATION.md); no independent LAN device, firewall defaults not an explicit deny |
 | `R4_MANIFEST_PREFLIGHT_PASS` | **PASS** | [G5A-R4-MANIFEST-PREFLIGHT.md](docs/evidence/G5A-R4-MANIFEST-PREFLIGHT.md); placeholder template only, no live grant |
-| `R5_INDEPENDENT_REVIEW_PASS` | **IN PROGRESS** | [G5A-R5-INDEPENDENT-REVIEW.md](docs/evidence/G5A-R5-INDEPENDENT-REVIEW.md) |
+| `R5_INDEPENDENT_REVIEW_PASS` | **PASS WITH FINDINGS** | [G5A-R5-INDEPENDENT-REVIEW.md](docs/evidence/G5A-R5-INDEPENDENT-REVIEW.md); all P1/P2 closed; documented residual is the process-local marker and the local image identity |
 | `G5A_REMEDIATED_AWAITING_NEW_OWNER_START` | **NOT MET** | Blocked by R2 and R3 |
 | `G5A_REMEDIATION_BLOCKED` | **ACTIVE** | [G5A-REMEDIATION-REPORT.md](docs/evidence/G5A-REMEDIATION-REPORT.md) |
 | `G5B_OBSERVE_VERIFIED` | NOT AUTHORIZED | Requires G5-A PASS and separate Owner authorization |
@@ -32,9 +32,9 @@
 
 ## Verified identity and offline status
 
-- Connector image `zalo-shared-connector:g5-fdb0704b`, local image digest `sha256:2cc1af75d3ac5d8fbaca79d8af8c37db1053ef9507375af13a8ebd2f359d0966`.
-- Embedded build identity matches `fdb0704b`, `connector/package-lock.json` (`17dcd254…030c9b`) and the locked SDK integrity; UID 65532; no exposed ports; no `manifest.json`, `session.key`, `session.enc` or `qr.png` in the image.
-- The egress guard is preloaded by the image entrypoint and by `NODE_OPTIONS`, so clearing `NODE_OPTIONS` through an env file does not remove it. Direct `ChildProcess.prototype.spawn`, every public raw binding path (`process.binding`, `process._linkedBinding`, `process.dlopen`) and IPv4-compatible IPv6 addresses are denied.
+- Connector image `zalo-shared-connector:g5-8d40c0f9`, local image digest `sha256:2dec14e3d732b6f4a2686bb3220fe9f3e39678997d054a9cf51a5e5758ffd2a1`.
+- Embedded build identity matches `8d40c0f9`, `connector/package-lock.json` (`17dcd254…030c9b`) and the locked SDK integrity; UID 65532; no exposed ports; no `manifest.json`, `session.key`, `session.enc` or `qr.png` in the image.
+- The egress guard is preloaded by the image entrypoint and by `NODE_OPTIONS`, so clearing `NODE_OPTIONS` through an env file does not remove it. Direct `ChildProcess.prototype.spawn`, every public raw binding path (`process.binding`, `process._linkedBinding`, `process.dlopen`), the exported `net`/`dgram` native handle factories and IPv4-compatible IPv6 addresses are denied.
 - Full local suite **304/304 PASS** on Node `v24.19.0`; typecheck and connector build PASS; guard suite 16/16 PASS.
 - In-image `preflight` under `--network none` admitted the synthetic bootstrap, observe and send-test manifests and denied expired, out-of-scope, extra-field, missing-build, wrong-identity, placeholder and stage-mismatch cases. An entrypoint override that removed the guard was refused.
 - A local image digest is not a registry digest or signed attestation; CI does not push an image. This remains a deployment limitation.

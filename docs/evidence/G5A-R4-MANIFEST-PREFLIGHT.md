@@ -7,18 +7,19 @@
 
 ## 1. Artifact identity
 
-The final remediation commit is `fdb0704ba9384c4fad45df0c9910fa369b059efa`. It
+The final remediation commit is `8d40c0f934aef10f8470cf7cc5bcd7402710f6bd`. It
 supersedes the pre-remediation artifact `6d199162`, which lacks the egress
 guard and the preflight identity check and must not be used. It also supersedes
-the earlier remediation artifacts `2963e1a`, `244ef7f` and `6f28836`, which
-predate the whole-surface raw-binding denial.
+the earlier remediation artifacts `2963e1a`, `244ef7f`, `6f28836` and
+`fdb0704`, which predate the whole-surface raw-binding denial or the removal of
+the exported native handle factories.
 
 | Item | Value |
 | --- | --- |
-| Connector source commit | `fdb0704ba9384c4fad45df0c9910fa369b059efa` |
-| Image | `zalo-shared-connector:g5-fdb0704b` |
-| Local image digest | `sha256:2cc1af75d3ac5d8fbaca79d8af8c37db1053ef9507375af13a8ebd2f359d0966` |
-| Embedded `sourceCommit` | `fdb0704ba9384c4fad45df0c9910fa369b059efa` |
+| Connector source commit | `8d40c0f934aef10f8470cf7cc5bcd7402710f6bd` |
+| Image | `zalo-shared-connector:g5-8d40c0f9` |
+| Local image digest | `sha256:2dec14e3d732b6f4a2686bb3220fe9f3e39678997d054a9cf51a5e5758ffd2a1` |
+| Embedded `sourceCommit` | `8d40c0f934aef10f8470cf7cc5bcd7402710f6bd` |
 | Embedded `lockSha256` | `17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b` |
 | Embedded `sdkIntegrity` | `sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA==` |
 | `zca-js` / `crypto-js` | `2.2.0` / `4.2.0` |
@@ -36,7 +37,7 @@ The private directory `/home/zen/pilot-private/zalo-shared/g5-enroll` is `0700`
 and owned by UID 65532. It contains:
 
 - `manifest.enroll.private.json` — `0600`, UID 65532, SHA-256
-  `c9c9f034079ce432a9a74e321a8db3269c2b1617f594892aa4f0d185c239c60a`.
+  `68dfa80f1e311e91559e5e67dcdcfc0eb7c94142d06e54ab8a66380ee09dfc63`.
   It is a **template with placeholders**, not a valid grant, rebound to the
   reviewed commit above.
 - `README.private.txt` — `0600`, UID 65532, fill-in instructions.
@@ -74,17 +75,17 @@ container, all capabilities dropped, `no-new-privileges`, UID 65532.
 The valid, invalid, expired, extra-field, missing-build and wrong-identity
 manifests were synthetic fixtures generated from the final commit. They were
 deleted immediately after the matrix. Their SHA-256 values before deletion were:
-bootstrap `45b314735c72865930d3fa71621a0bc490642e9d109ad0cdb883531a10afc7d0`,
-observe `480a6aa29ba22ef706a0b22e459142f0ebcb473e97514b07c8eefc5bfdbe165c`,
-send-test `20962a70a25261c0dbf341717ac269c769fab2b0ee4b051970fe9baa52fa6b9b`,
-invalid `24553f32ee9cfaba120db7e6654d9dd95d106326cf4253d4c81e3e30a2609f74`,
-expired `7bc0c8e38a7756c81de72a78cf7bb93de68c9342c7f17284a34143b792b415f5`,
-wrong-commit `a1fc6170f241482b29b12836dc595fa72e31fcf23fb29995c0027ab709068dcd`,
-extra-field `193ca65efee5ae6ede69105807b65f1e963ce7514da6beadbff90d11dfd0740b`,
-missing-build `6b8eb7e7f83ecf08108293b9d92c54ac44f5f50e613152d019b7fe5e3eca5da6`,
+bootstrap `ce0e9ca7a57235a4b5f2e078334054442dd605f5c2c3750dd6df3bf255fe1f36`,
+observe `485ab571b9275e14a3f8c99a6c029b32b7081f05c6888df1c74ba46ab50a9b53`,
+send-test `c0a343a9b7d9bff2934a82dcd6f1c2e39d862937d60198841aed6c77c710981b`,
+invalid `cbaeb46aeecef5870611512b7eded2b29bf5011335dc13fc984367e929128ffd`,
+expired `a2e9f8ccaf6bcf093d95c272a0f8f0eaf1c583c9004afd23369e418618fd3b51`,
+wrong-commit `3b994a7735443d82c3933ed43de2b097a9adabe424fbbc911f362aa73d123735`,
+extra-field `d1160457d1fe4c49fd3f5a49da2976f5ce224bb6823ab7ba3ac96f05c780724b`,
+missing-build `cdff6af6502b4e7a53f46aaa335bd7d96e7435414df06f300daaa4ed5e30606d`,
 malformed `92072df399cb74703f8e86f450d552bc0bb01eeeb98a90985a1b7772c8fd0016`.
 No synthetic or live grant remains in the private directory; only the
-placeholder template and non-admissible negative fixtures remain.
+placeholder template remains.
 
 ## 4. Preflight hardening
 

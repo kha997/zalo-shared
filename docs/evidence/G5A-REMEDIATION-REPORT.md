@@ -21,7 +21,7 @@ reused. No Zalo login, QR enrollment, SDK authentication, `run-observe`,
 | R2 egress boundary | `R2_BLOCKED` | [G5A-R2-EGRESS-BOUNDARY.md](G5A-R2-EGRESS-BOUNDARY.md) |
 | R3 LAN isolation | `R3_UNPROVEN` | [G5A-R3-LAN-ISOLATION.md](G5A-R3-LAN-ISOLATION.md) |
 | R4 manifest and preflight | `R4_MANIFEST_PREFLIGHT_PASS` | [G5A-R4-MANIFEST-PREFLIGHT.md](G5A-R4-MANIFEST-PREFLIGHT.md) |
-| R5 independent review | `R5_REVIEW_COMPLETE_WITH_FINDINGS` | [G5A-R5-INDEPENDENT-REVIEW.md](G5A-R5-INDEPENDENT-REVIEW.md) |
+| R5 independent review | `R5_PASS_WITH_FINDINGS` | [G5A-R5-INDEPENDENT-REVIEW.md](G5A-R5-INDEPENDENT-REVIEW.md) |
 
 ## 3. What changed
 
@@ -29,11 +29,12 @@ reused. No Zalo login, QR enrollment, SDK authentication, `run-observe`,
   preloaded by both the image entrypoint and `NODE_OPTIONS`, with exact provider
   host/port and database host/port admission, address validation, DNS pinning
   and denial of UDP, `dns.resolve*`, `dns.Resolver`, child processes, workers,
-  proxy environment paths, `fd`-based sockets and every public raw binding path
-  (`process.binding`, `process._linkedBinding`, `process.dlopen`). Closing the
-  whole binding surface followed an independent finding that a blocklist could
-  be bypassed with a String object or the `spawn_sync`/`process_wrap`/
-  `stream_wrap`/`cares_wrap` siblings.
+  proxy environment paths, `fd`-based sockets, every public raw binding path
+  (`process.binding`, `process._linkedBinding`, `process.dlopen`) and the
+  exported `net`/`dgram` native handle factories. Closing the whole binding
+  surface followed independent findings that a blocklist could be bypassed with
+  a String object or the `spawn_sync`/`process_wrap`/`stream_wrap`/`cares_wrap`
+  siblings.
 - Preflight now verifies the manifest build block against the running image
   identity before scope validation; live commands repeat the check.
 - A names-only private-env inspection helper and test prevent future diagnostic
@@ -44,15 +45,16 @@ Commits: `66af5ef` (guard, preflight hardening, R1–R4 evidence), `2963e1a`
 (entrypoint preload enforcement), `e6fbad1` (R4 evidence rebound), `244ef7f`
 (unguarded-preflight refusal and HTTP path handling), `6f28836`
 (direct-spawn denial), `3d5adcb` (whole-surface binding denial), `fdb0704`
-(evidence alignment).
+(evidence alignment), `af85c27` (blocked verdict), `8d40c0f` (native handle
+factory removal).
 
 ## 4. Final artifact
 
 | Item | Value |
 | --- | --- |
-| Connector source commit | `fdb0704ba9384c4fad45df0c9910fa369b059efa` |
-| Image | `zalo-shared-connector:g5-fdb0704b` |
-| Local image digest | `sha256:2cc1af75d3ac5d8fbaca79d8af8c37db1053ef9507375af13a8ebd2f359d0966` |
+| Connector source commit | `8d40c0f934aef10f8470cf7cc5bcd7402710f6bd` |
+| Image | `zalo-shared-connector:g5-8d40c0f9` |
+| Local image digest | `sha256:2dec14e3d732b6f4a2686bb3220fe9f3e39678997d054a9cf51a5e5758ffd2a1` |
 | Embedded `lockSha256` | `17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b` |
 | Embedded `sdkIntegrity` | `sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA==` |
 | Runtime UID / Node | `65532` / `v24.22.1` |
