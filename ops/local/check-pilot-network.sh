@@ -17,6 +17,7 @@ cfg=$(
   PILOT_MANIFEST_FILE=/nonexistent/manifest.json \
   PILOT_KEY_FILE=/nonexistent/session.key \
   PILOT_STATE_DIR=/nonexistent/state \
+  PILOT_DB_CA_FILE=/nonexistent/db-ca.crt \
   PILOT_CONNECTOR_IMAGE=placeholder-connector:check \
   PILOT_EGRESS_GATEWAY_IMAGE=placeholder-gateway:check \
     docker compose -f ops/pilot-compose.example.yml config --format json
@@ -123,6 +124,17 @@ assert gateway["environment"]["GATEWAY_BIND_ADDRESS"] == gw["address"], gateway[
 assert conn["environment"]["PILOT_REQUIRE_INTERNAL_NETWORK"] == "1", conn["environment"]
 assert gateway.get("healthcheck"), gateway.get("healthcheck")
 ok("gateway binds only the egress address; connector requires an internal network; gateway has a healthcheck")
+
+# 7c. verify-full needs a trust anchor, and requireTlsDatabaseUrl refuses a
+#     sslrootcert parameter, so the CA arrives as a read-only mount referenced
+#     by NODE_EXTRA_CA_CERTS. The variable only adds a trust anchor; it cannot
+#     disable verification.
+ca_mounts = [v for v in conn.get("volumes", []) if v.get("target") == "/run/pilot/db-ca.crt"]
+assert len(ca_mounts) == 1, ca_mounts
+assert ca_mounts[0]["read_only"] is True, ca_mounts[0]
+assert ca_mounts[0]["source"] == "/nonexistent/db-ca.crt", ca_mounts[0]
+assert conn["environment"]["NODE_EXTRA_CA_CERTS"] == "/run/pilot/db-ca.crt", conn["environment"]
+ok("connector mounts the pilot CA read-only and trusts it via NODE_EXTRA_CA_CERTS")
 
 # 8. No pending or excluded host is admitted, compared as whole tokens so that
 #    chat.zalo.me is not mistaken for a substring of wpa.chat.zalo.me.

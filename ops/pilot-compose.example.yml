@@ -115,6 +115,11 @@ services:
       PILOT_EGRESS_HOSTS: id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me
       PILOT_EGRESS_PORTS: "443"
       PILOT_EGRESS_GATEWAY: 172.16.29.10
+      # The database URL is admitted only with sslmode=verify-full, and
+      # requireTlsDatabaseUrl refuses a sslrootcert parameter, so the pilot CA is
+      # supplied through the Node trust store instead. NODE_EXTRA_CA_CERTS only
+      # adds a trust anchor; it cannot disable verification.
+      NODE_EXTRA_CA_CERTS: /run/pilot/db-ca.crt
     # Each allowlisted provider name is pinned to the gateway's static address,
     # so the connector's own resolution of a provider name yields exactly one
     # address and the guard's PILOT_EGRESS_GATEWAY pin check accepts it. A name
@@ -136,6 +141,10 @@ services:
       - type: bind
         source: ${PILOT_STATE_DIR:?Private state directory for session.enc and local QR view}
         target: /run/pilot/state
+      - type: bind
+        source: ${PILOT_DB_CA_FILE:?Private pilot database CA certificate}
+        target: /run/pilot/db-ca.crt
+        read_only: true
     # No published ports. The connector image preloads a default-deny egress
     # guard from its entrypoint and NODE_OPTIONS, so clearing NODE_OPTIONS in
     # the env file cannot remove it. The guard is defense in depth on top of the
