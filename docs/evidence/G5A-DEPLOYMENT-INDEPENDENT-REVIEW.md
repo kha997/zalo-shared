@@ -92,6 +92,7 @@ the D3/D4 runs inherited the revoked grants and the budget trigger.
 | D3 enrollment readiness | `verify-enrollment-readiness.sh`: 46 assertions PASS (11 denials) |
 | D4 end-to-end dry run | `verify-local-dryrun.sh`: all D4 assertions PASS |
 | Product source unchanged | `git diff 2dff06e..HEAD -- connector server tools adapters` is empty; the 327/327 local suite and CI run 41650617518 still describe the same source |
+| Hosted CI on the committed change set | [CI 41669199182](https://github.com/kha997/zalo-shared/actions/runs/41669199182) on `ecc0600`: both jobs `test` and `pilot` succeeded |
 
 ## 5. Residual risks and what remains UNPROVEN
 

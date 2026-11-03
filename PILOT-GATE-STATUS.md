@@ -104,6 +104,9 @@ was taken.
   erase control state and reset the send budget — was fixed and re-verified on
   the deployed database. Medium and Low findings are recorded with dispositions
   in [G5A-DEPLOYMENT-INDEPENDENT-REVIEW.md](docs/evidence/G5A-DEPLOYMENT-INDEPENDENT-REVIEW.md).
+- **Reproducibility.** The scripts and evidence are committed in `9d94a26` and
+  cited in `ecc0600`. Hosted [CI 41669199182](https://github.com/kha997/zalo-shared/actions/runs/41669199182)
+  on `ecc0600` passed both jobs.
 
 Residual and UNPROVEN items are listed in the review: local unsigned images,
 Docker daemon trust, host-wide LAN isolation, runtime-only provider hosts, and
