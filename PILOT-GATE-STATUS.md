@@ -1,7 +1,7 @@
 # Pilot gate status
 
 **Date:** 2026-11-03
-**Branch:** `feat/shared-inbox`; reviewed connector artifact source `8d40c0f934aef10f8470cf7cc5bcd7402710f6bd`
+**Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`
 **PR #3:** OPEN, **Draft** (not merged, not deployed)
 **Owner decision:** `G5_SCOPE_APPROVED_ACTIVATION_PENDING` — D1–D7 approved in scope; live activation withheld
 **G5-A authorization:** none current. The earlier `2026-11-03T02:00Z`–`02:30Z` window is invalid and was not reused.
@@ -19,25 +19,38 @@
 | `G5A_AWAITING_OWNER_START` | **SUPERSEDED** | Old authorization window invalidated by `G5A_BLOCKED` |
 | `G5A_BOOTSTRAP_VERIFIED` | **BLOCKED** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md); no live action, egress isolation and credential containment failed preflight |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
-| `R2_EGRESS_ENFORCEMENT_PASS` | **BLOCKED** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); guard implemented and tested, live endpoint inventory unprovable offline |
-| `R3_LAN_ISOLATION_PASS` | **UNPROVEN** | [G5A-R3-LAN-ISOLATION.md](docs/evidence/G5A-R3-LAN-ISOLATION.md); no independent LAN device, firewall defaults not an explicit deny |
+| `R2_EGRESS_ENFORCEMENT_PASS` | **PASS (bootstrap)** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); kernel boundary plus SNI gateway verified; observe/send-test remain functionally blocked until their runtime-only hosts are admitted |
+| `R3_LAN_ISOLATION_PASS` | **PASS (pilot resources)** | [G5A-R3-LAN-ISOLATION.md](docs/evidence/G5A-R3-LAN-ISOLATION.md); host-wide isolation remains UNPROVEN (no independent LAN device, firewall defaults not an explicit deny) |
 | `R4_MANIFEST_PREFLIGHT_PASS` | **PASS** | [G5A-R4-MANIFEST-PREFLIGHT.md](docs/evidence/G5A-R4-MANIFEST-PREFLIGHT.md); placeholder template only, no live grant |
-| `R5_INDEPENDENT_REVIEW_PASS` | **PASS WITH FINDINGS** | [G5A-R5-INDEPENDENT-REVIEW.md](docs/evidence/G5A-R5-INDEPENDENT-REVIEW.md); all P1/P2 closed; documented residual is the process-local marker and the local image identity |
-| `G5A_REMEDIATED_AWAITING_NEW_OWNER_START` | **NOT MET** | Blocked by R2 and R3 |
-| `G5A_REMEDIATION_BLOCKED` | **ACTIVE** | [G5A-REMEDIATION-REPORT.md](docs/evidence/G5A-REMEDIATION-REPORT.md) |
-| `G5B_OBSERVE_VERIFIED` | NOT AUTHORIZED | Requires G5-A PASS and separate Owner authorization |
+| `R5_INDEPENDENT_REVIEW_PASS` | **PASS WITH FINDINGS** | [G5A-R5-INDEPENDENT-REVIEW.md](docs/evidence/G5A-R5-INDEPENDENT-REVIEW.md); boundary-specific closure in [G5A-NETWORK-BOUNDARY-REVIEW.md](docs/evidence/G5A-NETWORK-BOUNDARY-REVIEW.md) |
+| `G5A_NETWORK_BOUNDARY_VERIFIED` | **PASS** | [G5A-NETWORK-BOUNDARY.md](docs/evidence/G5A-NETWORK-BOUNDARY.md); [review and dispositions](docs/evidence/G5A-NETWORK-BOUNDARY-REVIEW.md) |
+| `G5A_REMEDIATED_AWAITING_NEW_OWNER_START` | **MET** | R1–R5 and the network boundary are closed; a new G5-A authorization is still required before any live stage |
+| `G5A_REMEDIATION_BLOCKED` | **CLEARED** | Superseded by `G5A_NETWORK_BOUNDARY_VERIFIED`; the earlier state is retained in [G5A-REMEDIATION-REPORT.md](docs/evidence/G5A-REMEDIATION-REPORT.md) |
+| `G5B_OBSERVE_VERIFIED` | NOT AUTHORIZED | Requires G5-A PASS and separate Owner authorization; also requires service-map/WebSocket host admission |
 | `G5C_SEND_VERIFIED` | NOT AUTHORIZED | Requires G5-B PASS and separate Owner authorization |
 | `G5_LIVE_PILOT_VERIFIED` | NOT AUTHORIZED | Requires all stages and a final Owner review |
 | `G6_SOAK` | NOT AUTHORIZED | Out of scope |
 
 ## Verified identity and offline status
 
-- Connector image `zalo-shared-connector:g5-8d40c0f9`, local image digest `sha256:2dec14e3d732b6f4a2686bb3220fe9f3e39678997d054a9cf51a5e5758ffd2a1`.
-- Embedded build identity matches `8d40c0f9`, `connector/package-lock.json` (`17dcd254…030c9b`) and the locked SDK integrity; UID 65532; no exposed ports; no `manifest.json`, `session.key`, `session.enc` or `qr.png` in the image.
-- The egress guard is preloaded by the image entrypoint and by `NODE_OPTIONS`, so clearing `NODE_OPTIONS` through an env file does not remove it. Direct `ChildProcess.prototype.spawn`, every public raw binding path (`process.binding`, `process._linkedBinding`, `process.dlopen`), the exported `net`/`dgram` native handle factories and IPv4-compatible IPv6 addresses are denied.
-- Full local suite **304/304 PASS** on Node `v24.19.0`; typecheck and connector build PASS; guard suite 16/16 PASS.
+- Reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`. The connector image records that commit in its embedded build identity, together with `connector/package-lock.json` (`17dcd254…030c9b`) and SDK integrity `sha512-pBU0T0/…Ox4pgA==`.
+- Connector image `zalo-shared-connector:g5-local`, local image digest `sha256:9bced3eba32ae900d427542a03c06275a39acd91e8caa284e433d0ebc8427998`.
+- Gateway image `zalo-shared-egress-gateway:g5-local`, local image digest `sha256:bfde5c7a96ca7155473ee305a96b51b05eb3d7ac680c27ba37250fdc85ad4e75`.
+- Both images are local and unsigned. A `docker image inspect` digest is not a registry digest or a signed attestation; CI does not push images. This remains a deployment limitation.
+- Connector: UID 65532, `cap_drop: ALL`, no exposed ports, `PILOT_REQUIRE_INTERNAL_NETWORK=1`, and no `manifest.json`, `session.key`, `session.enc` or `qr.png` in the image. The guard is preloaded by both the entrypoint and `NODE_OPTIONS`.
+- Enforcement is the Docker `internal=true` topology plus the separate TLS-SNI gateway, not the process-local guard. The container verifier proves the denials with the guard provably absent, and proves that a non-internal namespace is refused at startup.
+- Full local suite **327/327 PASS** on Node `v24.19.0`; typecheck and connector build PASS; guard tests 23/23 and gateway tests 16/16; allow-path harness 21/21; container boundary 25/25; LAN exposure 10/10; static topology 15 assertion groups.
 - In-image `preflight` under `--network none` admitted the synthetic bootstrap, observe and send-test manifests and denied expired, out-of-scope, extra-field, missing-build, wrong-identity, placeholder and stage-mismatch cases. An entrypoint override that removed the guard was refused.
-- A local image digest is not a registry digest or signed attestation; CI does not push an image. This remains a deployment limitation.
+
+## Incident disclosure
+
+An unauthorised diagnostic probe during this directive contacted `id.zalo.me`
+(`GET /probe`) and `wss://jr.chat.zalo.me/ws` from the workstation, without the
+SDK, credentials or a session. No account state or session was created. It is
+disclosed in [G5A-BOUNDARY-PROBE-INCIDENT.md](docs/evidence/G5A-BOUNDARY-PROBE-INCIDENT.md)
+and is not treated as evidence for any gate. The "no provider communication"
+statements inside the boundary evidence are scoped to the work they describe
+and link that record.
 
 ## Enforced G5 limits
 
@@ -45,11 +58,22 @@ Exactly one connector account, exactly one allowlisted direct peer, 1–10 outbo
 
 ## Next action
 
-Resolve the two open blockers before requesting a new G5-A window:
+The network boundary no longer blocks a bootstrap-only pilot. Remaining Owner
+decisions, none of which blocks authorization:
 
-1. **R2:** authorize a time-bounded endpoint-observation stage, an Owner-approved network egress gateway, or a narrow first-party bootstrap allowlist. The exact redirect and later-stage service hosts cannot be proven offline, and live discovery is currently prohibited.
-2. **R3:** run the LAN probes from an independent device, or obtain Owner approval for an explicit inbound-deny firewall policy.
+1. **Observe/send-test inventory:** authorize a time-bounded observation window,
+   or defer those stages. Their runtime-only service-map and WebSocket hosts
+   cannot be proven offline and currently fail closed.
+2. **LAN evidence (optional):** run one probe from a second physical device, or
+   accept bind-scope evidence with the host firewall recorded as
+   `NotConfigured`.
+3. **Image supply chain (optional):** publish to a trusted registry so a
+   deployed digest can be verified externally.
+4. **Native Linux (not applicable here):** decide whether host-side
+   `DOCKER-USER` rules are required before deploying on a native Linux host.
 
-No activation time has been chosen. This status does not authorize G5-B or G5-C.
+A new G5-A authorization with an explicit UTC start and expiry is required
+before any live stage. No activation time has been chosen. G5-B is not
+authorized.
 
-**STOP — `G5A_REMEDIATION_BLOCKED`. A new G5-A authorization is required; G5-B is not authorized.**
+**STOP — `G5A_NETWORK_BOUNDARY_VERIFIED`. A new G5-A authorization is required; G5-B is not authorized.**

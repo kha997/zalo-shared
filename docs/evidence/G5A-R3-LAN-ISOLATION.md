@@ -1,9 +1,11 @@
 # G5-A R3 — LAN isolation assessment
 
 **Date:** 2026-11-03
-**Gate:** `R3_UNPROVEN`
+**Gate:** `R3_LAN_ISOLATION_PASS` (pilot resources; see §8)
 **Scope:** pilot app, pilot PostgreSQL, pilot connector and private resources
-**Live Zalo action:** none
+**Live Zalo action:** none from this LAN assessment. (An unrelated unauthorised
+provider probe earlier in the G5-A session is disclosed in
+[G5A-BOUNDARY-PROBE-INCIDENT.md](G5A-BOUNDARY-PROBE-INCIDENT.md).)
 **Host changes:** none
 
 ## 1. Verdict
@@ -13,6 +15,10 @@ on its internal Docker network. LAN isolation as a whole is **UNPROVEN** because
 no independent LAN device was available and the Windows/WSL defaults observed
 here are not an explicit deny boundary. No global firewall or network setting
 was changed.
+
+*Updated 2026-11-03:* the pilot-resource conclusion is now PASS because it rests
+on bind scope and network attachment, which are OS state, rather than on the
+host firewall. The host-wide limitation remains and is recorded in §8.
 
 ## 2. Pilot resources
 
@@ -95,3 +101,54 @@ real peer.
 This record contains no Zalo account identifier, peer identifier, password,
 cookie, key, session, QR or raw connection string. The LAN address is redacted.
 These are local/offline observations, not live provider evidence.
+
+## 8. Resolution — bind-scope isolation (2026-11-03)
+
+`ops/local/check-lan-exposure.sh` re-measured the running stack and now asserts
+the property the earlier assessment left implicit: the pilot does not depend on
+the host firewall at all. Latest run: **10/10 assertions PASS**.
+
+| Assertion | Observed |
+| --- | --- |
+| The app publishes exactly one port, on loopback only | `3100/tcp -> 127.0.0.1:3100` |
+| PostgreSQL publishes no host port | no mapping |
+| Neither workload uses host networking | bridge networks only |
+| The private network is `internal=true` | true |
+| The private network holds only the app and its database | both, nothing else (the connector is not running; when started it is the only additional admitted member) |
+| The host listener table shows the app only on `127.0.0.1:3100` | `ss -ltnH` reports no other `:3100` bind |
+| The database has an address on the private network | `172.19.0.2` |
+| The app is not reachable at the LAN address | `192.168.1.246:3100` not connected from a non-loopback source |
+| The database is not reachable from another bridge network | not connected |
+
+The script runs its probe with `NODE_OPTIONS=` and a plain entrypoint
+(`check-lan-exposure.sh:55-56`), so the connector guard is provably not part of
+these results.
+
+The LAN IP is selected by excluding loopback and Docker's default pools
+(`172.16.0.0/12`), so a container bridge address can never be mistaken for the
+host's LAN address. The negative probes ran from a container on the default
+bridge, so the source address was not loopback. That is the closest
+approximation to an independent device available on this host, and it is
+recorded as an approximation, not as an independent-device result.
+
+Why the bind scope is sufficient for the pilot: a socket bound to `127.0.0.1`
+cannot accept a packet addressed to the LAN IP, whatever the firewall does, and
+an `internal=true` Docker network has no route off the host. The pilot connector,
+the egress gateway and PostgreSQL publish nothing at all. Authorized host-local
+access is unchanged: `Test-NetConnection 127.0.0.1 -Port 3100` from Windows still
+succeeds.
+
+Remaining host-wide limitation, unchanged and out of scope:
+
+- Windows firewall profiles are enabled with `DefaultInboundAction
+  NotConfigured`, and the WSL Hyper-V firewall setting is also `NotConfigured`.
+  That is the effective default-deny, but it is not an explicit rule and no host
+  change was authorized.
+- Pre-existing, unrelated `0.0.0.0` listeners remain on this host (host
+  PostgreSQL 16 on 5432, nginx on 2026, an application on 8080). They were not
+  started, stopped or reconfigured by this work.
+- Only a second physical device can exercise the mirrored-WSL interface path and
+  the firewall end to end. That test has not been run.
+
+Verdict for the pilot resources: **PASS**. Verdict for the host as a whole:
+**UNPROVEN**, with the four items above stated as the exact reason.

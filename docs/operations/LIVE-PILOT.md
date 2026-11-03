@@ -1,6 +1,6 @@
 # Personal Zalo pilot handoff
 
-> **CURRENT STATUS (2026-11-02):** historical engineering handoff. The Owner approved the narrower D1–D7 G5 scope but withheld live activation; the authoritative staged procedure is [G5-LIVE-PILOT-PROCEDURE.md](G5-LIVE-PILOT-PROCEDURE.md) and the current stop point is `G5A_AWAITING_OWNER_START`. This document grants no production approval and its 7–14 day soak / four-workstation plan is out of the approved G5 scope.
+> **CURRENT STATUS (2026-11-02):** historical engineering handoff. The Owner approved the narrower D1–D7 G5 scope but withheld live activation; the authoritative staged procedure is [G5-LIVE-PILOT-PROCEDURE.md](G5-LIVE-PILOT-PROCEDURE.md). The network boundary is now verified and the current stop point is `G5A_NETWORK_BOUNDARY_VERIFIED` ([PILOT-GATE-STATUS.md](../../PILOT-GATE-STATUS.md)); a new G5-A authorization is required. This document grants no production approval and its 7–14 day soak / four-workstation plan is out of the approved G5 scope.
 
 Prepared 2026-10-28. **Runbook preparation only: live integration is not complete and this document grants no production approval.** See [current evidence and open gates](../READINESS.md) and [operations runbook](RUNBOOK.md).
 

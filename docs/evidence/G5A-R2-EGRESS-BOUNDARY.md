@@ -1,9 +1,13 @@
 # G5-A R2 — connector egress boundary
 
 **Date:** 2026-11-03
-**Gate:** `R2_BLOCKED`
+**Gate:** `R2_EGRESS_ENFORCEMENT_PASS` (see §7)
 **Mechanism status:** implemented and verified offline
-**Live Zalo action:** none
+**Live Zalo action:** none from this boundary work. (An unauthorised diagnostic
+probe during the same directive contacted `id.zalo.me` and
+`wss://jr.chat.zalo.me/ws`; it is disclosed in
+[G5A-BOUNDARY-PROBE-INCIDENT.md](G5A-BOUNDARY-PROBE-INCIDENT.md) and is not
+evidence for this gate.)
 **Host/network changes:** none
 
 ## 1. Verdict
@@ -17,6 +21,11 @@ The gate is nevertheless **`R2_BLOCKED`** because a complete, offline-provable
 endpoint inventory for the live bootstrap cannot be established, and no
 network-level boundary is in place. The live gate must remain blocked until a
 narrowly reviewed solution exists.
+
+*Updated 2026-11-03:* both reasons are resolved in §7. The boundary no longer
+depends on a complete inventory, because unknown destinations now fail closed at
+the kernel and at a separate gateway. The gate is PASS for bootstrap, with the
+observe/send-test limitation stated there.
 
 ## 2. Mechanism
 
@@ -55,9 +64,12 @@ operation.
 
 ## 3. Offline verification
 
-Focused test file `tests/backend/pilot-egress-guard.test.ts`: **16/16 PASS**.
-The in-image checks below ran against artifact
-`8d40c0f934aef10f8470cf7cc5bcd7402710f6bd` (`g5-8d40c0f9`).
+Focused test file `tests/backend/pilot-egress-guard.test.ts`: **23/23 PASS**.
+`tests/backend/egress-gateway.test.ts`: **16/16 PASS**. The in-image checks below
+were re-run against an image built from working-tree commit
+`f71ae069b40b0f560aaaebdbb5e612f191197f83` (`zalo-shared-connector:g5-local`);
+the earlier artifact was `8d40c0f934aef10f8470cf7cc5bcd7402710f6bd`
+(`g5-8d40c0f9`).
 
 | Test | Result |
 | --- | --- |
@@ -147,3 +159,54 @@ None of these options is executed by this remediation.
 This record contains no credential, cookie, key, session, QR, real account
 identifier or raw connection string. It is offline source and test evidence, not
 live provider evidence.
+
+## 7. Resolution — OS-enforced boundary plus admission gateway (2026-11-03)
+
+Option 2 of §5 was implemented without a host-wide change: the egress boundary is
+a Docker network topology plus a dedicated allowlist gateway inside the pilot
+compose stack. Nothing on the host was reconfigured.
+
+- The connector is attached only to `pilot-db` and `pilot-egress`, both
+  `internal=true`. It has no default route and no external resolver, so an
+  unknown destination fails at the kernel before any application code runs.
+  Because `pilot-db` is operator-supplied and therefore cannot be declared
+  internal in the compose file, the precondition is independently checked twice:
+  `ops/local/preflight-connector.sh` inspects the named network and refuses
+  unless Docker reports `Internal=true`, and the connector image refuses to
+  start when its own namespace has a usable IPv4 or IPv6 default route
+  (`PILOT_REQUIRE_INTERNAL_NETWORK=1`). The container verifier runs that refusal
+  against a deliberately non-internal fixture and watches the image exit with
+  `PILOT_EGRESS_DENIED`.
+- The only container with an uplink is `egress-gateway`. It admits an exact
+  allowlisted TLS SNI on port 443, resolves the name itself, validates that every
+  answer is public unicast, and splices opaque bytes. TLS is not intercepted.
+- Every decision is a JSON audit line. A denied SNI is recorded by name, which
+  makes the gateway the discovery instrument for a future authorized observation
+  window: an unknown host is refused, never reached, and named.
+- The connector guard remains as defense in depth, now with a
+  `PILOT_EGRESS_GATEWAY` pin: a provider name must resolve to the gateway's
+  address and to no other answer.
+
+The endpoint inventory is complete for bootstrap and explicitly incomplete for
+later stages; see [G5A-PROVIDER-ENDPOINT-POLICY.md](G5A-PROVIDER-ENDPOINT-POLICY.md).
+The three admitted names cover QR enrollment, stored-credential login and the
+exact-UID check. The service-map, WebSocket and redirect destinations are
+provider-selected at runtime and cannot be known offline; they are now denied
+rather than depended upon.
+
+Verification, all offline and re-run against the current working tree:
+`ops/local/check-pilot-network.sh` (15 assertion groups; rendered topology
+matches the reviewed allowlist), `ops/local/verify-egress-allowpath.sh` (21/21,
+real TLS spliced to a synthetic provider inside a loopback-only namespace, plus
+the guard pin), `ops/local/verify-pilot-network.sh` (25/25 on real containers,
+including a probe that runs with the guard provably absent and still cannot
+reach the internet, and the default-route refusal), and 39/39 guard and gateway
+unit tests.
+
+Consequence for the pilot: bootstrap can proceed under a new authorization.
+Observe and send-test cannot run until their runtime-only hosts are observed and
+admitted. That is the intended fail-closed behaviour and the only remaining R2
+item for an Owner decision, recorded in §7 of the provider endpoint policy.
+
+Verdict: **`R2_EGRESS_ENFORCEMENT_PASS`** for bootstrap and for the enforcement
+boundary; observe/send-test remain functionally blocked pending admission.

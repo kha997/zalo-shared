@@ -1,6 +1,6 @@
 # Qoder handoff — Zalo Shared
 
-Updated: 2026-11-02
+Updated: 2026-11-03
 Repository: https://github.com/kha997/zalo-shared
 Working branch: feat/shared-inbox
 Pull request: #3 (keep draft; do not merge or deploy)
@@ -10,6 +10,41 @@ Pull request: #3 (keep draft; do not merge or deploy)
 Continue only with synthetic/offline work until the Owner supplies and approves a dedicated legitimate test account, official phone, consenting peer, four physical workstations, and private host for the staged pilot. Never use HANU production or real customer data. Do not put QR codes, cookies, session keys, account identifiers, or raw provider payloads in GitHub. No public listener or production deployment.
 
 The main application remains provider-disabled/mock and SDK-free in its production image. The pinned `zca-js@2.2.0` is only for development/research/guard tests; no authenticated session was used.
+
+## Network boundary resolution — G5-A (2026-11-03)
+
+The R2 egress and R3 LAN blockers are resolved. The enforcement boundary is the
+Docker `internal=true` topology plus a separate TLS-SNI gateway, not the
+process-local Node guard. Implementation is committed at `2dff06e`; evidence is
+in [G5A-NETWORK-BOUNDARY.md](evidence/G5A-NETWORK-BOUNDARY.md) with independent
+review dispositions in
+[G5A-NETWORK-BOUNDARY-REVIEW.md](evidence/G5A-NETWORK-BOUNDARY-REVIEW.md).
+Authoritative state: [PILOT-GATE-STATUS.md](../PILOT-GATE-STATUS.md)
+(`G5A_NETWORK_BOUNDARY_VERIFIED`).
+
+- Connector image `zalo-shared-connector:g5-local`
+  `sha256:9bced3eb…c8427998`; gateway
+  `zalo-shared-egress-gateway:g5-local` `sha256:bfde5c7a…85ad4e75`. Embedded
+  build identity matches `2dff06e`, the connector lock and the SDK integrity.
+- Verified offline: static topology 15 assertion groups; unit 39/39; allow-path
+  21/21; container boundary 25/25 (including a non-internal namespace refusal
+  and probes with the guard provably absent); LAN 10/10; full suite 327/327 on
+  Node v24.19.0.
+- R2 is PASS for bootstrap only. Observe and send-test stay blocked until their
+  runtime-only service-map/WebSocket hosts are admitted; the nine-host SDK
+  inventory and the three admitted names are in
+  [G5A-PROVIDER-ENDPOINT-POLICY.md](evidence/G5A-PROVIDER-ENDPOINT-POLICY.md).
+- R3 is PASS for the pilot resources (bind scope and `internal=true`). The host
+  as a whole remains UNPROVEN without an independent LAN device, and native
+  Linux host-service reachability is a documented residual.
+- Incident: an unauthorised diagnostic probe earlier in this directive
+  contacted `id.zalo.me` and `wss://jr.chat.zalo.me/ws` without credentials or a
+  session. Disclosed in
+  [G5A-BOUNDARY-PROBE-INCIDENT.md](evidence/G5A-BOUNDARY-PROBE-INCIDENT.md); it
+  is not evidence for any gate.
+- No live login, QR scan, session, send or deployment occurred. No activation
+  window is selected. A new G5-A authorization is required.
+
 
 ## Latest evidenced hosted baseline — restore re-audit
 

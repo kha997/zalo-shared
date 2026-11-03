@@ -142,4 +142,4 @@ Hosted CI `41430051691` on `8886f94` and `41431903557` on the artifact commit `6
 
 ## Stop point
 
-**STOP — `G5A_AWAITING_OWNER_START`.** No live login, QR scan, session write, observation or send may occur until the Owner explicitly authorizes G5-A with a UTC start and expiry. Technical readiness does not authorize activation.
+**STOP — `G5A_AWAITING_OWNER_START` (historical).** Superseded on 2026-11-03 by `G5A_NETWORK_BOUNDARY_VERIFIED`; see [PILOT-GATE-STATUS.md](../../PILOT-GATE-STATUS.md). No live login, QR scan, session write, observation or send may occur until the Owner explicitly authorizes G5-A with a UTC start and expiry. Technical readiness does not authorize activation.

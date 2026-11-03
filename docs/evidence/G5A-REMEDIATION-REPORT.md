@@ -1,5 +1,11 @@
 # G5-A remediation report
 
+> **Superseded 2026-11-03.** The R2 and R3 blockers below were resolved by the
+> OS-enforced network boundary in
+> [G5A-NETWORK-BOUNDARY.md](G5A-NETWORK-BOUNDARY.md) and the endpoint policy in
+> [G5A-PROVIDER-ENDPOINT-POLICY.md](G5A-PROVIDER-ENDPOINT-POLICY.md). This file
+> is retained as the record of the earlier `G5A_REMEDIATION_BLOCKED` state.
+
 **Date:** 2026-11-03
 **Directive:** G5-A remediation and reactivation readiness
 **Final verdict:** `G5A_REMEDIATION_BLOCKED`
