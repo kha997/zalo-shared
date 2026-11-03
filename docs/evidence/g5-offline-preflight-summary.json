@@ -1,6 +1,9 @@
 {
   "gate": "G5_OFFLINE_PREFLIGHT",
   "status": "PASS",
+  "superseded": true,
+  "supersededBy": "docs/evidence/G5A-R4-MANIFEST-PREFLIGHT.md",
+  "supersededNote": "Historical summary bound to the pre-remediation artifact 6d199162. Its 'scope and shape only' preflight limitation no longer applies: preflight now verifies the embedded build identity. See the remediation evidence for the current artifact.",
   "evidenceType": "synthetic-offline",
   "liveAction": "none",
   "recordedAt": "2026-11-02T10:52:38.762Z",

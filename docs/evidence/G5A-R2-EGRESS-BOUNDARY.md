@@ -33,7 +33,7 @@ of `NODE_OPTIONS` cannot silently remove the guard.
 | Database destination | Parsed from `DATABASE_URL`; only that exact host and port are admitted. Query overrides for host, port, user, password or TLS are rejected. |
 | Address validation | Provider targets must resolve to public unicast addresses outside reserved/private/loopback/link-local/documentation/IPv4-compatible ranges, so a DNS answer cannot redirect to an internal address. Database targets must be private, loopback or unique-local. |
 | DNS | `dns.lookup` and `dns.promises.lookup` are pinned to the validated address; `dns.resolve*`, `lookupService`, `reverse`, `dns/promises` and `dns.Resolver` instances are denied. |
-| Other egress | UDP sockets and `dgram.Socket`, module-level `child_process` helpers, `ChildProcess.prototype.spawn`/`spawnSync`, raw `tcp_wrap`/`udp_wrap`/`pipe_wrap` bindings and `worker_threads` are denied. |
+| Other egress | UDP sockets and `dgram.Socket`, module-level and prototype `child_process` spawns, all public raw binding paths (`process.binding`, `process._linkedBinding`, `process.dlopen`) and `worker_threads` are denied. Blocking the whole binding surface closes String-object names and sibling bindings such as `spawn_sync`, `process_wrap`, `stream_wrap` and `cares_wrap`. |
 | Socket options | A bare Unix-socket `path` is denied. An HTTP request `path` is dropped while the TCP target is still checked, so `http`/`https` requests reach only an allowlisted host/port. Inherited `fd`/`handle` and caller-supplied lookups cannot redirect a connection. |
 | Proxy paths | Proxy environment variables, `NODE_OPTIONS=--use-env-proxy` and `NODE_TLS_REJECT_UNAUTHORIZED=0` fail closed at startup. |
 | Preload integrity | The image entrypoint carries `--require=/app/egress-guard.cjs`, so clearing or overriding `NODE_OPTIONS` through an env file does not remove the guard. |
@@ -43,10 +43,15 @@ of `NODE_OPTIONS` cannot silently remove the guard.
 The guard is process-local. It is a strong default-deny control in a distroless
 image that contains only Node and the connector, but it is not a substitute for
 a network-level egress gateway. Defense in depth still requires network
-enforcement for a production boundary. Arbitrary in-process code can reach
-native bindings (`process.binding`) or native constructors through a prototype
-chain; the pinned SDK does not use those paths, and stopping hostile code
-inside the process is outside this control's scope.
+enforcement for a production boundary. The activation marker defeats operator
+misconfiguration (for example, an entrypoint or `NODE_OPTIONS` override); it
+does not defeat code that executes before the preload, because any module can
+forge a `Symbol.for` marker. Code running inside the connector process before
+the guard is outside this control's scope, which is why R2 remains blocked on a
+network-level boundary rather than on this mechanism alone. The pinned
+dependency tree does not call `process.binding`, `process._linkedBinding` or
+`process.dlopen`, so denying the whole binding surface does not affect normal
+operation.
 
 ## 3. Offline verification
 
@@ -60,11 +65,12 @@ Focused test file `tests/backend/pilot-egress-guard.test.ts`: **16/16 PASS**.
 | Public IP literal not admitted as a provider host | PASS |
 | IPv6 loopback denied | PASS |
 | Provider hostname resolving to loopback denied | PASS |
-| UDP, DNS resolve and child processes denied | PASS |
+| UDP, DNS resolve, child processes and raw bindings denied | PASS |
 | Internal database reachable on exact host and port | PASS |
 | Database connection to any other port denied | PASS |
 | `DATABASE_URL` query overrides cannot redirect the connection | PASS |
-| HTTP to the exact allowed host/port admitted, bare Unix path denied | PASS |
+| HTTP to the exact allowed host/port admitted | PASS |
+| A bare Unix socket path is denied | PASS |
 | Proxy environment variables fail closed at startup | PASS |
 | `NODE_OPTIONS=--use-env-proxy` cannot re-enable proxy handling | PASS |
 | `dns.Resolver` instances and `fd`-based sockets cannot bypass | PASS |
@@ -72,11 +78,15 @@ Focused test file `tests/backend/pilot-egress-guard.test.ts`: **16/16 PASS**.
 
 Additional in-image checks during remediation observed the same fail-closed
 behaviour: direct-IP, UDP, child-process, DNS-resolve, wildcard and proxy cases
-were denied; the configured internal database host/port was reachable; a wrong
-database port, a loopback DNS answer and an IPv6 target were denied. The checks
-were repeated with `NODE_OPTIONS` cleared: the entrypoint preload kept the
-direct-IP, UDP, DNS, child, `fd`, `Resolver` and proxy controls active, so an
-env-file override does not remove the guard.
+were denied; `ChildProcess.prototype.spawn`, `process.binding(new
+String("tcp_wrap"))`, `process.binding("spawn_sync")`, `process._linkedBinding`
+and `process.dlopen` were denied; the configured internal database host/port
+was reachable; a wrong database port, a loopback DNS answer and an IPv6 target
+were denied. The checks were repeated with `NODE_OPTIONS` cleared: the
+entrypoint preload kept the direct-IP, UDP, DNS, child, raw-binding, `fd`,
+`Resolver` and proxy controls active, so an env-file override does not remove
+the guard. An entrypoint override that removed the preload was refused by the
+CLI because the guard marker was absent.
 
 The connector image also preloads the guard before `dry-run` and `preflight`;
 with no allowlist configured, preflight still runs because it opens no socket,

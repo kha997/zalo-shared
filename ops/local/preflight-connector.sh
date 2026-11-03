@@ -16,7 +16,7 @@ case "$stage" in
 esac
 # The parent directory is 0700 owned by the connector UID, so the login user
 # cannot stat the file; the Docker daemon performs the read.
-sudo test -f "$manifest" || { echo "missing manifest: $manifest; run make-g5-synthetic-manifests.sh" >&2; exit 2; }
+sudo test -f "$manifest" || { echo "missing manifest: $manifest; generate a synthetic fixture with node --import tsx ops/g5-synthetic-manifest.ts OUTPUT STAGE or pass an explicit path" >&2; exit 2; }
 run=(
   docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,size=16m
   --cap-drop ALL --security-opt no-new-privileges:true
