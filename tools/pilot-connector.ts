@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { dirname, isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 import { readPrivateTextFile } from "../server/private-pilot-files.js";
@@ -228,6 +229,19 @@ function safeOutcome(
   });
 }
 
+const EGRESS_GUARD_MARK = Symbol.for("zalo.pilot.egress.guard");
+
+function egressGuardRequired(): boolean {
+  return existsSync("/app/egress-guard.cjs");
+}
+
+function egressGuardActive(): boolean {
+  return (
+    (process as unknown as Record<symbol, unknown>)[EGRESS_GUARD_MARK] ===
+    "active"
+  );
+}
+
 /** Dry-run is the default and never reads the vault, imports the SDK, writes a QR, or touches DB/network. */
 export async function runPilotCli(options: {
   argv: readonly string[];
@@ -253,6 +267,12 @@ export async function runPilotCli(options: {
     command !== "preflight" &&
     parsed.acknowledge !== true
   )
+    return {
+      exitCode: 1,
+      stdout: safeOutcome(command, false, "denied"),
+    };
+
+  if (command !== "dry-run" && egressGuardRequired() && !egressGuardActive())
     return {
       exitCode: 1,
       stdout: safeOutcome(command, false, "denied"),

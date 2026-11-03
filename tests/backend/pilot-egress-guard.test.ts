@@ -193,6 +193,49 @@ test("database URL query overrides cannot redirect the internal connection", asy
   });
 });
 
+test("HTTP requests to the exact allowed host and port are admitted", () => {
+  const result = guarded(
+    `
+const net = require("node:net");
+const http = require("node:http");
+const server = net.createServer((socket) => {
+  socket.once("data", () => {
+    socket.end("HTTP/1.1 200 OK\\r\\nContent-Length: 2\\r\\nConnection: close\\r\\n\\r\\nOK");
+  });
+});
+server.listen(45442, "127.0.0.1", () => {
+  http.get({ host: "127.0.0.1", port: 45442, path: "/" }, (response) => {
+    response.resume();
+    response.on("end", () => {
+      console.log("HTTP-" + response.statusCode);
+      server.close();
+    });
+  }).on("error", (error) => {
+    console.log("HTTP-ERROR", error.code || error.message);
+    server.close();
+    process.exitCode = 2;
+  });
+});
+`,
+    { DATABASE_URL: "postgres://pilot:fake@127.0.0.1:45442/pilot" },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /HTTP-200/);
+});
+
+test("a bare unix socket path is denied", () => {
+  const result = guarded(`
+try {
+  require("node:net").connect({ path: "/tmp/pilot.sock" });
+  console.log("UNIX-ALLOWED");
+} catch (error) {
+  console.log("UNIX-" + error.code);
+}
+`);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /UNIX-PILOT_EGRESS_DENIED/);
+});
+
 test("proxy environment variables fail closed at startup", () => {
   const result = guarded("", { HTTP_PROXY: "http://127.0.0.1:1" });
   assert.notEqual(result.status, 0);

@@ -174,6 +174,18 @@ function loadConfig(env) {
 
 const config = loadConfig(process.env);
 
+// Marker consumed by the connector CLI. The image entrypoint preloads this
+// module; if a deliberate entrypoint override skips it, preflight and live
+// commands refuse instead of running unguarded.
+const GUARD_MARK = Symbol.for("zalo.pilot.egress.guard");
+if (!(GUARD_MARK in process))
+  Object.defineProperty(process, GUARD_MARK, {
+    value: "active",
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+
 function classifyTarget(host, port) {
   const normalized = normalizedHost(host);
   const numericPort = Number(port);
@@ -324,7 +336,17 @@ function parseConnectArguments(args) {
   if (Array.isArray(first)) return parseConnectArguments(first);
   if (typeof first === "string") return null;
   if (first && typeof first === "object") {
-    if (first.path !== undefined) return null;
+    // A bare `path` is a Unix socket. Node's HTTP client also sets `path` for
+    // the request target, so only a path without a TCP target is treated as a
+    // socket path; a TCP target keeps the address check and the path is
+    // dropped before connect.
+    if (
+      first.path !== undefined &&
+      first.host === undefined &&
+      first.hostname === undefined &&
+      first.port === undefined
+    )
+      return null;
     const host =
       first.host !== undefined
         ? first.host
@@ -386,8 +408,14 @@ net.Socket.prototype.connect = function (...args) {
 
 const nativeTlsConnect = tls.connect;
 tls.connect = function (...args) {
-  if (args.length > 0 && args[0] && typeof args[0] === "object") {
-    if (args[0].path !== undefined) throw denied();
+  const first = args[0];
+  if (first && typeof first === "object" && first.path !== undefined) {
+    if (
+      first.host === undefined &&
+      first.hostname === undefined &&
+      first.port === undefined
+    )
+      throw denied();
   }
   return nativeTlsConnect.apply(this, args);
 };

@@ -34,19 +34,23 @@ of `NODE_OPTIONS` cannot silently remove the guard.
 | Address validation | Provider targets must resolve to public unicast addresses outside reserved/private/loopback/link-local/documentation ranges, so a DNS answer cannot redirect to an internal address. Database targets must be private, loopback or unique-local. |
 | DNS | `dns.lookup` and `dns.promises.lookup` are pinned to the validated address; `dns.resolve*`, `lookupService`, `reverse`, `dns/promises` and `dns.Resolver` instances are denied. |
 | Other egress | UDP sockets and `dgram.Socket`, `child_process` methods and `worker_threads` are denied. |
-| Socket options | Unix paths, inherited `fd`/`handle` and caller-supplied lookups cannot redirect a connection. |
+| Socket options | A bare Unix-socket `path` is denied. An HTTP request `path` is dropped while the TCP target is still checked, so `http`/`https` requests reach only an allowlisted host/port. Inherited `fd`/`handle` and caller-supplied lookups cannot redirect a connection. |
 | Proxy paths | Proxy environment variables, `NODE_OPTIONS=--use-env-proxy` and `NODE_TLS_REJECT_UNAUTHORIZED=0` fail closed at startup. |
 | Preload integrity | The image entrypoint carries `--require=/app/egress-guard.cjs`, so clearing or overriding `NODE_OPTIONS` through an env file does not remove the guard. |
+| Activation marker | The guard sets a non-enumerable process marker; `preflight` and live commands refuse when the image contains the guard file but the marker is absent. |
 | TLS | `tls.connect` paths that bypass the socket policy are denied. |
 
 The guard is process-local. It is a strong default-deny control in a distroless
 image that contains only Node and the connector, but it is not a substitute for
 a network-level egress gateway. Defense in depth still requires network
-enforcement for a production boundary.
+enforcement for a production boundary. Arbitrary in-process code can reach
+native bindings (`process.binding`) or native constructors through a prototype
+chain; the pinned SDK does not use those paths, and stopping hostile code
+inside the process is outside this control's scope.
 
 ## 3. Offline verification
 
-Focused test file `tests/backend/pilot-egress-guard.test.ts`: **14/14 PASS**.
+Focused test file `tests/backend/pilot-egress-guard.test.ts`: **16/16 PASS**.
 
 | Test | Result |
 | --- | --- |
@@ -60,6 +64,7 @@ Focused test file `tests/backend/pilot-egress-guard.test.ts`: **14/14 PASS**.
 | Internal database reachable on exact host and port | PASS |
 | Database connection to any other port denied | PASS |
 | `DATABASE_URL` query overrides cannot redirect the connection | PASS |
+| HTTP to the exact allowed host/port admitted, bare Unix path denied | PASS |
 | Proxy environment variables fail closed at startup | PASS |
 | `NODE_OPTIONS=--use-env-proxy` cannot re-enable proxy handling | PASS |
 | `dns.Resolver` instances and `fd`-based sockets cannot bypass | PASS |

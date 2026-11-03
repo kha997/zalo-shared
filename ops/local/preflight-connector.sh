@@ -25,9 +25,19 @@ run=(
   dist/connector/tools/pilot-connector.js preflight
 )
 if [[ $stage == invalid ]]; then
-  # The out-of-scope manifest must be denied with a non-zero exit.
-  "${run[@]}"
-  exit 1
+  # The out-of-scope manifest must be denied. Succeed only when the denial is
+  # observed, so an accidental admission cannot look like a pass.
+  if output=$("${run[@]}" 2>&1); then
+    printf '%s\n' "$output"
+    echo "invalid manifest was admitted" >&2
+    exit 1
+  fi
+  printf '%s\n' "$output"
+  grep -q '"gate":"denied"' <<<"$output" || {
+    echo "invalid manifest did not return a denial" >&2
+    exit 1
+  }
+  exit 0
 fi
 # Preflight derives the stage from the grant purpose, so the host wrapper must
 # reject a manifest that belongs to a different stage than the operator asked.

@@ -34,17 +34,20 @@ services:
         source: ${PILOT_STATE_DIR:?Private state directory for session.enc and local QR view}
         target: /run/pilot/state
     # No published ports. The connector image preloads a default-deny egress
-    # guard: only exact provider hosts/ports listed in PILOT_EGRESS_HOSTS and
-    # the private DATABASE_URL host/port are reachable. Set exact hostnames
-    # (comma-separated, no wildcards) and optionally PILOT_EGRESS_PORTS
-    # (default 443) in the private env file. An empty host list denies all
-    # provider egress. DATABASE_URL must be a postgres URL; a non-loopback
+    # guard from its entrypoint and NODE_OPTIONS, so clearing NODE_OPTIONS in
+    # the env file cannot remove it. Only exact provider hosts/ports listed in
+    # PILOT_EGRESS_HOSTS and the private DATABASE_URL host/port are reachable.
+    # Set exact hostnames (comma-separated, no wildcards) and optionally
+    # PILOT_EGRESS_PORTS (default 443) in the private env file. An empty host
+    # list denies all provider egress. DATABASE_URL must be a postgres URL and
+    # must resolve to private, loopback or unique-local space; a non-loopback
     # database host also requires sslmode=require, verify-ca or verify-full.
     #
     # pilot-db is the application's internal database network. It has no
     # egress by itself, so the connector joins a second, non-internal network
     # for provider TLS. Never publish PostgreSQL or attach it to pilot-egress.
-    # For a remote database, point pilot-db at a network that can reach it.
+    # A remote database is usable only through an address inside the approved
+    # private ranges; changing that rule requires a new security review.
     networks: [pilot-db, pilot-egress]
     # Live commands additionally require --acknowledge-pilot-risk and the
     # matching unexpired grant. Example:
