@@ -1,9 +1,11 @@
 # G5-A activation readiness report
 
 **Date:** 2026-11-02
-**Status:** `G5A_AWAITING_OWNER_START`
+**Status:** `G5A_BLOCKED` (readiness record superseded by the authorized attempt)
 **Decision:** `G5_SCOPE_APPROVED_ACTIVATION_PENDING` ([record](G5-SCOPE-APPROVAL.md))
 **Live action:** none. No QR enrollment, Zalo authentication, session write, observation or external send has occurred.
+
+**Post-authorization outcome (2026-11-03):** the Owner authorized G5-A for `02:00Z`–`02:30Z`. Mandatory preflight returned `G5A_BLOCKED` before the window opened; no QR, SDK authentication or session write occurred. See [G5A-BOOTSTRAP-REPORT.md](G5A-BOOTSTRAP-REPORT.md).
 
 This report covers the Owner's required pre-G5-A items. It contains aliases and synthetic values only. Live evidence is identified separately from offline/CI evidence.
 
