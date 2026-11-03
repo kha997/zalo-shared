@@ -68,7 +68,10 @@ Focused test file `tests/backend/pilot-egress-guard.test.ts`: **14/14 PASS**.
 Additional in-image checks during remediation observed the same fail-closed
 behaviour: direct-IP, UDP, child-process, DNS-resolve, wildcard and proxy cases
 were denied; the configured internal database host/port was reachable; a wrong
-database port, a loopback DNS answer and an IPv6 target were denied.
+database port, a loopback DNS answer and an IPv6 target were denied. The checks
+were repeated with `NODE_OPTIONS` cleared: the entrypoint preload kept the
+direct-IP, UDP, DNS, child, `fd`, `Resolver` and proxy controls active, so an
+env-file override does not remove the guard.
 
 The connector image also preloads the guard before `dry-run` and `preflight`;
 with no allowlist configured, preflight still runs because it opens no socket,

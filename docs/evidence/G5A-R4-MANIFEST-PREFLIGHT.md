@@ -7,16 +7,22 @@
 
 ## 1. Artifact identity
 
+The remediation commit is `2963e1ad73151059b0c92af9a9a5ddb2e582c799`. It
+supersedes the pre-remediation artifact `6d199162`, which lacks the egress
+guard and the preflight identity check and must not be used.
+
 | Item | Value |
 | --- | --- |
-| Connector source commit | `6d199162e8b00d7b4968b6b1fd82450b4387f4df` |
-| Image | `zalo-shared-connector:g5-6d199162` |
-| Local image digest | `sha256:6b1f0100017d067f24d18eee53ffbfcffe7562ac3f79fd98283097ef1938d781` |
-| Embedded `sourceCommit` | `6d199162e8b00d7b4968b6b1fd82450b4387f4df` |
+| Connector source commit | `2963e1ad73151059b0c92af9a9a5ddb2e582c799` |
+| Image | `zalo-shared-connector:g5-2963e1ad` |
+| Local image digest | `sha256:a1d6f79a26309494878958d6e9272cc1de1b7f67af4804afb2efffcd29707197` |
+| Embedded `sourceCommit` | `2963e1ad73151059b0c92af9a9a5ddb2e582c799` |
 | Embedded `lockSha256` | `17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b` |
 | Embedded `sdkIntegrity` | `sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA==` |
 | `zca-js` / `crypto-js` | `2.2.0` / `4.2.0` |
-| Runtime UID | `65532` |
+| Runtime UID / Node | `65532` / `v24.22.1` |
+| Exposed ports | none |
+| Preloaded guard | entrypoint `--require=/app/egress-guard.cjs` and `NODE_OPTIONS` |
 
 The image's `/app/build-identity.json` matches the manifest build block, the
 connector lock hash and the locked SDK integrity. The image was read with
@@ -28,8 +34,9 @@ The private directory `/home/zen/pilot-private/zalo-shared/g5-enroll` is `0700`
 and owned by UID 65532. It contains:
 
 - `manifest.enroll.private.json` — `0600`, UID 65532, SHA-256
-  `e31ddfb1f2c2f368dd27e85204e68884a00891a2e3e08639d78ce693707abf7b`.
-  It is a **template with placeholders**, not a valid grant.
+  `5b77d4f9fffd42f8dc91fe017a24690425e2495e4d54c8bcafb62bb4601c8fb0`.
+  It is a **template with placeholders**, not a valid grant, rebound to the
+  reviewed commit above.
 - `README.private.txt` — `0600`, UID 65532, fill-in instructions.
 
 The template fixes the reviewed build identity, purpose `enroll-session`,
@@ -52,17 +59,24 @@ container, all capabilities dropped, `no-new-privileges`, UID 65532.
 | Case | Manifest | Result |
 | --- | --- | --- |
 | Valid synthetic enrollment | fresh synthetic grant, null account, zero peers | **admitted** |
-| Expired enrollment | prior synthetic bootstrap manifest | **denied** (exit 1) |
+| Valid synthetic observe | fresh synthetic grant, one peer | **admitted** |
+| Valid synthetic send-test | fresh synthetic grant, one peer | **admitted** |
+| Expired enrollment | bootstrap manifest with past `expiresAt`/`notAfter` | **denied** |
 | Out-of-scope | `maxPartsPerDay: 11`, two peers | **denied** |
 | Extra field | valid manifest plus an unexpected key | **denied** |
+| Missing build block | valid manifest without `build` | **denied** |
 | Placeholder template | `g5-enroll/manifest.enroll.private.json` | **denied** |
 | Stage mismatch | observe manifest requested as bootstrap stage | **rejected by host wrapper** |
-| Wrong build identity | manifest bound to another source commit | **denied by hardened preflight** (unit test); the old image admitted it, closing a preflight gap |
+| Wrong build identity | manifest bound to another source commit | **denied in-image by hardened preflight** |
 
-The fresh synthetic rehearsal manifest (SHA-256
-`a6bb9edc6fae4232ab8aa7e9325a7c215a3dcf4c0a02c5fca0b4787ccfc2d227`) was
-deleted immediately after the test. It was synthetic, expired within 30
-minutes, and contained no real account or peer. No live grant remains.
+The valid, invalid, expired, extra-field, missing-build and wrong-identity
+manifests were synthetic fixtures generated from the reviewed commit. They were
+deleted immediately after the matrix. Their SHA-256 values before deletion were:
+bootstrap `2d6fcd88b3e6a25d4c1fd861f42e2e644f87a95116c40ebc9edcaa2858b321df`,
+observe `f3601dcf866a8896131f89a3838d1cf2b77eac359c8111dc7d6518ab40d9bbc6`,
+send-test `9c196c7bd85266704c66ad4eac9f5f1c83db3c7034ee3c5728a775fc5526e6a3`,
+invalid `ae1d06a400840bbf295e4ba08eebeb805cd4498845ae21a4777383631b6a0df0`.
+No synthetic or live grant remains in the private directory.
 
 ## 4. Preflight hardening
 
@@ -85,8 +99,15 @@ Focused offline suites passed:
 - `pilot-egress-guard.test.ts` — 14/14 egress boundary tests.
 - `private-pilot-flow.test.ts` — 29/29 PASS with the live disposable test
   database; covers private file modes, QR view, runtime identity and scope.
-- Full local suite: **300/300 PASS**; `npm run typecheck` and
+- Full local suite: **302/302 PASS**; `npm run typecheck` and
   `npm run build:connector` PASS.
+
+In-image guard checks on the reviewed artifact, all with `--network none` and
+UID 65532: direct-IP TCP, UDP, `dns.resolve4`, child process, `fd`-based socket
+and `dns.Resolver` were denied even with `NODE_OPTIONS` cleared, because the
+entrypoint carries the preload; proxy environment variables failed closed at
+startup; a loopback listener on the exact `DATABASE_URL` host/port was
+reachable while the same host on another port was denied.
 
 ## 6. Limitations
 
