@@ -30,8 +30,9 @@ IMAGE=${PILOT_CONNECTOR_IMAGE:-zalo-shared-connector:g5-8d40c0f9}
 GATEWAY_IMAGE=${PILOT_EGRESS_GATEWAY_IMAGE:-zalo-shared-egress-gateway:verify}
 ALLOW_NAME=pilot-target.test
 DENY_NAME=denied-target.test
-GATEWAY_ADDRESS=172.16.29.10
-HOST_BRIDGE=172.16.29.1
+GATEWAY_ADDRESS=${PILOT_VERIFY_GATEWAY:-172.16.29.10}
+EGRESS_SUBNET=${PILOT_VERIFY_SUBNET:-172.16.29.0/24}
+HOST_BRIDGE=${GATEWAY_ADDRESS%.*}.1
 PUBLIC_CANARY=1.1.1.1
 PUBLIC_UDP=8.8.8.8
 
@@ -65,7 +66,7 @@ share() {
 # Same subnet as the reviewed allowlist, so this also proves it can be created
 # without colliding with an existing network.
 docker network create --driver bridge --internal \
-  --subnet 172.16.29.0/24 --gateway 172.16.29.1 "$egress_net" >/dev/null
+  --subnet "$EGRESS_SUBNET" --gateway "$HOST_BRIDGE" "$egress_net" >/dev/null
 docker network create --driver bridge "$uplink_net" >/dev/null
 
 docker run -d --name "$gateway" \
@@ -175,12 +176,11 @@ uplink_members=$(docker network inspect "$uplink_net" --format '{{range .Contain
 published=$(docker port "$gateway" 2>/dev/null | wc -l)
 ip_forward=$(docker exec "$gateway" /nodejs/bin/node -e 'process.stdout.write(require("node:fs").readFileSync("/proc/sys/net/ipv4/ip_forward","utf8").trim())')
 
-python3 - "$logdir" "$egress_internal" "$uplink_members" "$published" "$ip_forward" "$gateway" "$guard_status" <<'PY'
+python3 - "$logdir" "$egress_internal" "$uplink_members" "$published" "$ip_forward" "$gateway" "$guard_status" "$GATEWAY_ADDRESS" <<'PY'
 import json, os, sys
 
-logdir, egress_internal, uplink_members, published, ip_forward, gateway_name, guard_status = sys.argv[1:8]
+logdir, egress_internal, uplink_members, published, ip_forward, gateway_name, guard_status, GATEWAY = sys.argv[1:9]
 ALLOW, DENY = "pilot-target.test", "denied-target.test"
-GATEWAY = "172.16.29.10"
 DENIED = "PILOT_EGRESS_DENIED"
 
 def load(label):
