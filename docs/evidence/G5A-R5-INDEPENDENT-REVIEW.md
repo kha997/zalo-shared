@@ -102,6 +102,7 @@ All probes used the default image entrypoint, `--network none`, UID 65532.
 | Synthetic bootstrap/observe/send-test preflight | admitted |
 | Expired, wrong-commit, extra-field, missing-build, malformed, placeholder | denied |
 | Guard suite on the final artifact | 16/16 PASS |
+| Runtime dependencies `ipaddr.js`, `pg`, `zca-js` imported under the guard | loaded |
 
 The image's `/app/build-identity.json` matches `8d40c0f`, the connector lock
 hash and the locked SDK integrity. The guard file in the image matches the
