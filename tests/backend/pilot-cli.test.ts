@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { PilotBootstrapError } from "../../adapters/zalo/qr-bootstrap.js";
 import {
   parsePilotArgs,
   parsePilotManifest,
@@ -637,4 +638,54 @@ test("manifest parsing rejects extra keys and returns a frozen grant", () => {
       now,
     ),
   );
+});
+
+test("a bootstrap failure exposes its closed reason code, never provider detail", async () => {
+  const failed = await runPilotCli({
+    argv: [
+      "bootstrap",
+      "--manifest",
+      "/private/pilot/manifest.json",
+      "--acknowledge-pilot-risk",
+    ],
+    dependencies: {
+      readFile: async () => manifestText("enroll-session"),
+      now: () => now,
+      runCommand: async () => {
+        throw new PilotBootstrapError("login-failed");
+      },
+    },
+  });
+  assert.equal(failed.exitCode, 1);
+  assert.deepEqual(JSON.parse(failed.stdout!), {
+    command: "bootstrap",
+    ok: false,
+    gate: "unavailable",
+    reason: "login-failed",
+    purpose: "enroll-session",
+    expiresAt: "2026-11-02T01:00:00.000Z",
+  });
+
+  for (const code of ["future-unknown", account, "reason with space"]) {
+    const hidden = await runPilotCli({
+      argv: [
+        "bootstrap",
+        "--manifest",
+        "/private/pilot/manifest.json",
+        "--acknowledge-pilot-risk",
+      ],
+      dependencies: {
+        readFile: async () => manifestText("enroll-session"),
+        now: () => now,
+        runCommand: async () => {
+          throw Object.assign(new Error("raw"), { code });
+        },
+      },
+    });
+    assert.equal(hidden.exitCode, 1);
+    const output = JSON.parse(hidden.stdout!);
+    assert.equal(output.gate, "unavailable");
+    assert.equal("reason" in output, false);
+    assert.equal(hidden.stdout!.includes(code), false);
+  }
 });

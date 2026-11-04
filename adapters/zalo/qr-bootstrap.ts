@@ -1,5 +1,9 @@
 import type { OwnershipHandle } from "../../server/connector-ownership.js";
 import type {
+  BootstrapStage,
+  PilotReason,
+} from "../../server/pilot-reasons.js";
+import type {
   PrivateQrView,
   PrivateSessionStore,
 } from "../../server/private-pilot-files.js";
@@ -15,6 +19,34 @@ const VIEW_SETTLE_MS = 5_000;
 const accountIdPattern = /^[A-Za-z0-9_-]{1,200}$/;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const unavailable = () => new Error("SDK facade unavailable");
+
+export {
+  BOOTSTRAP_REASONS,
+  BOOTSTRAP_STAGES,
+  type BootstrapStage,
+  type PilotReason,
+} from "../../server/pilot-reasons.js";
+
+export class PilotBootstrapError extends Error {
+  readonly code: PilotReason;
+  constructor(code: PilotReason) {
+    super("SDK facade unavailable");
+    this.name = "PilotBootstrapError";
+    this.code = code;
+  }
+}
+
+const fail = (code: PilotReason) => new PilotBootstrapError(code);
+const ABORT_REASONS: Record<string, PilotReason> = {
+  signal: "aborted",
+  deadline: "deadline",
+  "qr-expired": "qr-expired",
+  "qr-declined": "qr-declined",
+  "callback-invalid": "callback-invalid",
+  "owner-lost": "owner-lost",
+  "view-failed": "view-failed",
+};
+
 export const QUARANTINE_UNCONFIRMED = "quarantine-unconfirmed";
 export class PilotSessionQuarantineError extends Error {
   readonly code = QUARANTINE_UNCONFIRMED;
@@ -129,6 +161,8 @@ export async function bootstrapPilotSession(options: {
   signal: AbortSignal;
   now?: Date;
   deadlineMs?: number;
+  /** Optional sink for the closed stage vocabulary; must never throw outward. */
+  onStage?: (stage: BootstrapStage) => void;
 }): Promise<{ boundAccountId: string }> {
   try {
     const grant = options?.grant;
@@ -157,9 +191,10 @@ export async function bootstrapPilotSession(options: {
       typeof loader !== "function" ||
       !signal ||
       typeof signal.aborted !== "boolean" ||
-      typeof signal.addEventListener !== "function"
+      typeof signal.addEventListener !== "function" ||
+      (options.onStage !== undefined && typeof options.onStage !== "function")
     )
-      throw unavailable();
+      throw fail("input-invalid");
     const issuedAt = Date.parse(grant.issuedAt);
     const expiresAt = Date.parse(grant.expiresAt);
     if (
@@ -177,7 +212,7 @@ export async function bootstrapPilotSession(options: {
           options.deadlineMs < 1 ||
           options.deadlineMs > BOOTSTRAP_DEADLINE_MS))
     )
-      throw unavailable();
+      throw fail("grant-invalid");
     const fresh = () => {
       const current = options?.now ?? new Date();
       const nowMs = current instanceof Date ? current.getTime() : NaN;
@@ -189,9 +224,14 @@ export async function bootstrapPilotSession(options: {
     };
     if (signal.aborted) {
       await Promise.resolve(view.clear()).catch(() => {});
-      throw unavailable();
+      throw fail("aborted");
     }
 
+    const stage = (name: BootstrapStage) => {
+      try {
+        options.onStage?.(name);
+      } catch {}
+    };
     const expected = grant.expectedAccountId;
     let finished = false,
       aborted = false,
@@ -199,6 +239,7 @@ export async function bootstrapPilotSession(options: {
       qrSeen = false,
       writeAttempted = false,
       cleared = false;
+    let abortCode: PilotReason = "internal";
     let abortAction: (() => void) | undefined;
     let imei: string | undefined;
     let userAgent: string | undefined;
@@ -216,13 +257,14 @@ export async function bootstrapPilotSession(options: {
     let deadline: ReturnType<typeof setTimeout> | undefined;
     let poll: ReturnType<typeof setInterval> | undefined;
     const onSignal = () => abort("signal");
-    const abort = (_reason: string) => {
+    const abort = (reason: string) => {
       if (finished || aborted) return;
       aborted = true;
+      abortCode = ABORT_REASONS[reason] ?? "internal";
       try {
         abortAction?.();
       } catch {}
-      rejectAbort(unavailable());
+      rejectAbort(fail(abortCode));
       if (resolvedApi) disposeApi(resolvedApi, disposed);
     };
 
@@ -274,6 +316,7 @@ export async function bootstrapPilotSession(options: {
           qrSeen = true;
           viewTail = viewTail
             .then(() => (finished || aborted ? undefined : view.showPng(png)))
+            .then(() => stage("qr-shown"))
             .catch(() => {
               viewFailure = true;
               abort("view-failed");
@@ -289,6 +332,7 @@ export async function bootstrapPilotSession(options: {
           captureAbort(record(value.actions));
           const data = record(value.data);
           displayLabel = safeLabel(data.display_name);
+          stage("scanned");
           return;
         }
         if (value.type === 3) {
@@ -315,18 +359,41 @@ export async function bootstrapPilotSession(options: {
       }
     };
 
+    const requireOwner = async () => {
+      try {
+        await race(owner.assertCurrent());
+      } catch (error) {
+        if (error instanceof PilotBootstrapError) throw error;
+        throw fail("owner-lost");
+      }
+    };
+
     try {
-      await race(owner.assertCurrent());
-      const module = record(await race(loader()));
-      if (aborted) throw unavailable();
-      if (typeof module.Zalo !== "function") throw unavailable();
-      const instance = new module.Zalo({
-        logging: false,
-        selfListen: true,
-        checkUpdate: false,
-      });
+      await requireOwner();
+      stage("owner-checked");
+      let module: RecordValue;
+      try {
+        module = record(await race(loader()));
+      } catch (error) {
+        if (error instanceof PilotBootstrapError) throw error;
+        throw fail("sdk-load-failed");
+      }
+      if (aborted) throw fail(abortCode);
+      if (typeof module.Zalo !== "function") throw fail("sdk-invalid");
+      let instance: any;
+      try {
+        instance = new (module.Zalo as new (options: unknown) => any)({
+          logging: false,
+          selfListen: true,
+          checkUpdate: false,
+        });
+      } catch {
+        throw fail("sdk-invalid");
+      }
       if (aborted || !instance || typeof instance.loginQR !== "function")
-        throw unavailable();
+        throw fail(aborted ? abortCode : "sdk-invalid");
+      stage("sdk-loaded");
+      stage("login-requested");
       const login = Promise.resolve().then(() =>
         instance.loginQR({}, (event: unknown) => onEvent(event)),
       );
@@ -337,68 +404,113 @@ export async function bootstrapPilotSession(options: {
         },
         () => {},
       );
-      const api = await race(login);
+      let api: unknown;
+      try {
+        api = await race(login);
+      } catch (error) {
+        // This is the provider-facing failure: loginQR never resolved, so no
+        // API exists to dispose and no listener was ever started.
+        if (error instanceof PilotBootstrapError) throw error;
+        throw fail("login-failed");
+      }
       resolvedApi = api;
       if (aborted || finished) {
         disposeApi(api, disposed);
-        throw unavailable();
+        throw fail(aborted ? abortCode : "internal");
       }
+      stage("login-resolved");
 
-      await race(owner.assertCurrent());
-      const raw = record(api);
-      if (typeof raw.getOwnId !== "function") throw unavailable();
-      const uid = raw.getOwnId();
+      await requireOwner();
+      let raw: RecordValue;
+      try {
+        raw = record(api);
+      } catch {
+        throw fail("sdk-invalid");
+      }
+      let uid: unknown;
+      try {
+        if (typeof raw.getOwnId !== "function") throw 0;
+        uid = raw.getOwnId();
+      } catch {
+        throw fail("uid-invalid");
+      }
       if (typeof uid !== "string" || !accountIdPattern.test(uid))
-        throw unavailable();
-      if (expected !== null && uid !== expected) throw unavailable();
-      if (!qrSeen || viewFailure || aborted) throw unavailable();
+        throw fail("uid-invalid");
+      if (expected !== null && uid !== expected) throw fail("uid-mismatch");
+      stage("uid-verified");
+      if (!qrSeen) throw fail("qr-missing");
+      if (viewFailure) throw fail("view-failed");
+      if (aborted) throw fail(abortCode);
       if (
         !imei ||
         !userAgent ||
         !validIdentity(imei, 512) ||
         !validIdentity(userAgent, 1024)
       )
-        throw unavailable();
-      const confirmed = await race(
-        view.confirmIdentity({ uid, displayLabel: safeLabel(displayLabel) }),
-      );
-      if (confirmed !== true || aborted) throw unavailable();
+        throw fail("login-info-invalid");
+      let confirmed: unknown;
+      try {
+        confirmed = await race(
+          view.confirmIdentity({ uid, displayLabel: safeLabel(displayLabel) }),
+        );
+      } catch (error) {
+        if (error instanceof PilotBootstrapError) throw error;
+        throw fail("identity-declined");
+      }
+      if (confirmed !== true || aborted)
+        throw fail(aborted ? abortCode : "identity-declined");
+      stage("identity-confirmed");
 
-      await race(owner.assertCurrent());
-      if (typeof raw.getCookie !== "function") throw unavailable();
-      const jar = record(raw.getCookie());
-      if (typeof jar.serializeSync !== "function") throw unavailable();
-      const snapshot = boundedClone(jar.serializeSync());
-      if (!snapshot || typeof snapshot !== "object" || aborted)
-        throw unavailable();
-      const cookie = validCookies(record(snapshot).cookies);
+      await requireOwner();
+      let cookie: any[];
+      try {
+        if (typeof raw.getCookie !== "function") throw 0;
+        const jar = record(raw.getCookie());
+        if (typeof jar.serializeSync !== "function") throw 0;
+        const snapshot = boundedClone(jar.serializeSync());
+        if (!snapshot || typeof snapshot !== "object") throw 0;
+        cookie = validCookies(record(snapshot).cookies);
+      } catch {
+        throw fail("cookie-invalid");
+      }
+      stage("cookie-captured");
 
       const value = {
         version: 1 as const,
         accountId: uid,
         session: { imei, userAgent, cookie },
       };
-      await race(owner.assertCurrent());
-      if (!fresh() || aborted) throw unavailable();
+      await requireOwner();
+      if (!fresh()) throw fail("grant-expired");
+      if (aborted) throw fail(abortCode);
       writeAttempted = true;
       const writing = Promise.resolve().then(() => sessionStore.write(value));
       try {
         await Promise.race([writing, abortedPromise]);
-      } catch {
+      } catch (error) {
         writing
           .then(() => sessionStore.quarantine?.())
           .catch(() => {});
-        throw unavailable();
+        throw error instanceof PilotBootstrapError
+          ? error
+          : fail("session-write-failed");
       }
-      await race(owner.assertCurrent());
+      stage("session-written");
+      await requireOwner();
       await race(settleViewTail());
-      if (aborted) throw unavailable();
-      await race(view.clear());
+      if (aborted) throw fail(abortCode);
+      try {
+        await race(view.clear());
+      } catch (error) {
+        if (error instanceof PilotBootstrapError) throw error;
+        throw fail("view-failed");
+      }
       cleared = true;
+      stage("qr-cleared");
       return { boundAccountId: uid };
-    } catch {
+    } catch (error) {
       if (writeAttempted) await quarantine();
-      throw unavailable();
+      throw error instanceof PilotBootstrapError ? error : fail("internal");
     } finally {
       finished = true;
       signal.removeEventListener("abort", onSignal);
@@ -412,6 +524,7 @@ export async function bootstrapPilotSession(options: {
     }
   } catch (error) {
     if (error instanceof PilotSessionQuarantineError) throw error;
-    throw unavailable();
+    if (error instanceof PilotBootstrapError) throw error;
+    throw fail("internal");
   }
 }

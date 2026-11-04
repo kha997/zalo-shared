@@ -11,6 +11,10 @@ the authorization is **consumed** (`G5A_BOOTSTRAP_FAIL`). The earlier
 `2026-11-03T02:00Z`–`02:30Z` window is invalid; neither is reusable.
 **Live pilot:** **NOT ACTIVATED** — one provider contact and one QR emission on
 2026-11-04, no completed login, no session, no real account operation, no send
+**Owner reconciliation gate:** `G5A_AWAITING_OWNER_RECONCILIATION` — the
+authorization is consumed, the abort is narrowed but UNPROVEN, and the fenced
+control state needs an Owner-approved, reviewed reconciliation before any
+further preflight can pass
 **Deployment remediation:** `G5A_DEPLOYMENT_READY_AWAITING_OWNER_START` was met
 before the 2026-11-04 attempt; the deployment remained healthy, the enrollment
 itself did not complete
@@ -25,7 +29,8 @@ itself did not complete
 | `G4_PILOT_ACTIVATION_PACKAGE` | **SUPERSEDED IN SCOPE** | [G4-PILOT-ACTIVATION-PACKAGE.md](docs/evidence/G4-PILOT-ACTIVATION-PACKAGE.md); D1–D7 accepted in scope by the G5 decision |
 | `G5_SCOPE_APPROVED_ACTIVATION_PENDING` | **APPROVED IN SCOPE** | [G5-SCOPE-APPROVAL.md](docs/evidence/G5-SCOPE-APPROVAL.md) |
 | `G5A_AWAITING_OWNER_START` | **SUPERSEDED** | Old authorization window invalidated by `G5A_BLOCKED` |
-| `G5A_BOOTSTRAP_VERIFIED` | **FAIL (2026-11-04 attempt)** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §9; the single authorized bootstrap emitted a QR and contacted only `id.zalo.me`, then exited 1 without a session or UID binding; abort cause UNPROVEN. The 02:00Z and 14:56Z attempts were `G5A_BLOCKED` before live action |
+| `G5A_BOOTSTRAP_VERIFIED` | **FAIL (2026-11-04 attempt)** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §9–§10; the single authorized bootstrap emitted a QR and contacted only `id.zalo.me`, then exited 1 without a session or UID binding. Post-window analysis narrows the abort to the SDK's `checkSession` handshake (redirect to the excluded `chat.zalo.me` refused locally) but does not prove it; the exact gate remains UNPROVEN. The 02:00Z and 14:56Z attempts were `G5A_BLOCKED` before live action |
+| `G5A_AWAITING_OWNER_RECONCILIATION` | **PENDING (Owner gate)** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §10.4; `connector_ownership` is `uncertain` and `provider_state` requires reconciliation. No reviewed path clears `uncertain`; a new reviewed, Owner-approved reconciliation operation is required. Not reset, not executed |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
 | `R2_EGRESS_ENFORCEMENT_PASS` | **PASS (bootstrap)** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); kernel boundary plus SNI gateway verified; observe/send-test remain functionally blocked until their runtime-only hosts are admitted |
 | `R3_LAN_ISOLATION_PASS` | **PASS (pilot resources)** | [G5A-R3-LAN-ISOLATION.md](docs/evidence/G5A-R3-LAN-ISOLATION.md); host-wide isolation remains UNPROVEN (no independent LAN device, firewall defaults not an explicit deny) |
@@ -156,13 +161,40 @@ first attempt with a valid live grant and a deployed boundary.
   phone; the phone remains logged in and operational. A provider-side session
   may therefore exist and must be revoked from the phone; no local credential
   was read or written.
+- **Owner device history:** one entry for the attempt, QR method, login, last
+  activity and logout all in the same minute (`07:56` Vietnam, `00:56Z`), the
+  phone unaffected. The provider therefore recorded a login that ended at once.
+  That proves acceptance, not that the SDK received or saved a session. No IP,
+  UID, phone number or device identifier is recorded in this repository.
+- **Post-window analysis (offline):** the abort is now narrowed to the SDK's
+  own `checkSession` handshake between the phone confirmation and event type 4 —
+  it follows a provider `Location` to the excluded `chat.zalo.me`, which the
+  local guard refuses before the gateway, so no denial is logged and only one
+  tunnel appears. This is a hypothesis, not proof; the diagnostic sink below
+  will attribute the next attempt. See
+  [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §10.2.
+- **Connector shutdown did not end the provider session:** zca-js 2.2.0 exposes
+  no logout API, the SDK instance is never resolved when `loginQR` rejects, and
+  the adapter's cleanup only aborts a local controller and clears a local
+  timeout.
+- **Attribution work completed offline:** closed 26-code/15-stage vocabulary
+  (`server/pilot-reasons.ts`), `PilotBootstrapError` per gate, a `reason` field
+  on the CLI outcome, an opt-in `PILOT_DIAGNOSTIC_FILE` sink
+  (`0600`, `O_NOFOLLOW`, closed vocabularies), the real prompt made testable,
+  and synthetic end-to-end coverage with the real private view and encrypted
+  store. Typecheck and connector build clean; both changed suites pass; the full
+  suite passes except one pre-existing environmental flake in
+  `tests/backend/pilot-egress-guard.test.ts` that also fails on unmodified
+  `HEAD`. None of it is live evidence.
 - **Control state:** `connector_ownership` is `uncertain` and `provider_state`
   has `reconciliation_required=true`. Both are the fail-closed result of the
   close path and were not reset; a further G5-A preflight will refuse until the
-  Owner authorizes a reviewed reconciliation.
+  Owner authorizes a reviewed reconciliation. No reviewed path can currently
+  clear `uncertain`: re-acquisition requires `idle` and gap acknowledgement
+  requires `idle`/`active`.
 
 Details and the required changes are in
-[G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §9.
+[G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §9–§10.
 
 ## Incident disclosure
 
@@ -180,24 +212,31 @@ Exactly one connector account, exactly one allowlisted direct peer, 1–10 outbo
 
 ## Next action
 
-The 2026-11-04 authorization is consumed, not extended. The immediate blockers
-are now the un-attributable abort and the fenced control state, not deployment:
+The 2026-11-04 authorization is consumed, not extended, and the report now stops
+at the **Owner Reconciliation Gate**. The remaining blockers are the fenced
+control state and the fact that the abort is narrowed but still UNPROVEN — not
+deployment.
 
-1. **Attribute the abort.** Capture the connector console to a `0600` private
-   log (never committed) and add reviewed, non-secret abort reason codes for the
-   post-login gates: the CLI currently collapses every bootstrap failure into
-   `"gate":"unavailable"` (`tools/pilot-connector.ts:374-383`).
-2. **Prove the confirmation path offline.** `tests/transport/qr-bootstrap.test.ts`
-   injects a fake view, so the real `defaultConfirm` TTY gate is untested. Add a
-   non-TTY refusal test and run the synthetic QR fixture end to end in a
-   disposable topology: a `confirm` answer writes the session, a refused answer
-   writes nothing.
-3. **Owner decision on control state.** Authorize and review the reconciliation
-   of `connector_ownership` (`uncertain`) and `provider_state`
-   (`reconciliation_required=true`). This record does not reset either.
-4. **Revoke the provider session.** The phone confirmation completed a provider
-   login; the Owner logs out that session from the phone's logged-in device list
-   and confirms the phone remains normal. No local session exists to reuse.
+1. **Owner decision on control state (blocking).** Authorize and review a new
+   reconciliation operation for `connector_ownership` (`uncertain`) and
+   `provider_state` (`reconciliation_required=true`). No reviewed path clears
+   `uncertain` today: re-acquisition requires `idle` and gap acknowledgement
+   requires `idle`/`active`. The proposed shape is in
+   [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §10.4. This
+   record does not reset either row and the operation is not implemented.
+2. **Confirm the provider session (Owner).** The device history already reports
+   the entry logged out in the same minute it was created, so this is a
+   confirmation, not a cleanup: verify no active entry remains on the official
+   phone. No local session exists to reuse.
+3. **Attribution is implemented, not yet exercised.** Closed reason codes
+   (`server/pilot-reasons.ts`), the CLI `reason` field and the opt-in
+   `PILOT_DIAGNOSTIC_FILE` sink are in the tree with tests. They become useful
+   only in a rebuilt image during the next authorized attempt, with the console
+   also captured to a `0600` private log (never committed).
+4. **Offline regression is in place.** The real `promptConfirmation` (non-TTY
+   refusal, literal `confirm` only) and the real private view plus encrypted
+   store (confirmed writes, declined writes nothing) are covered. The in-image
+   fixture replay belongs to the next authorized build.
 5. **QR handoff rehearsal.** Pre-open the local viewer and rehearse reaching the
    terminal `confirm` prompt (and typing `confirm`) within the QR lifetime.
 6. **New G5-A authorization.** Provide a fresh explicit UTC start and expiry for
@@ -208,6 +247,7 @@ are now the un-attributable abort and the fenced control state, not deployment:
    `DOCKER-USER` rules on native Linux.
 
 G5-B is not authorized. No retry, login, QR generation, observe, send or media
-action is permitted until a new authorization exists.
+action is permitted until a new authorization exists, and no control state is
+reset in the meantime.
 
-**STOP — `G5A_BOOTSTRAP_FAIL`. The 2026-11-04 authorization is consumed; a new G5-A authorization is required and G5-B is not authorized.**
+**STOP — `G5A_AWAITING_OWNER_RECONCILIATION`. The 2026-11-04 authorization is consumed; reconciliation and a new G5-A authorization are Owner decisions, and G5-B is not authorized.**

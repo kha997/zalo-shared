@@ -3,12 +3,20 @@ import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { bootstrapPilotSession } from "../../adapters/zalo/qr-bootstrap.js";
+import { PassThrough } from "node:stream";
+import {
+  BOOTSTRAP_STAGES,
+  bootstrapPilotSession,
+  type BootstrapStage,
+  type TrustedSdkLoader,
+} from "../../adapters/zalo/qr-bootstrap.js";
 import type { OwnershipHandle } from "../../server/connector-ownership.js";
 import {
   ensurePrivateDirectory,
+  PrivateDiagnosticFile,
   PrivateQrFileView,
   PrivateSessionFile,
+  promptConfirmation,
   readPrivateKeyFile,
   readPrivateTextFile,
   type PrivateQrView,
@@ -294,6 +302,17 @@ async function withTimeout<T>(promise: Promise<T>, ms = 1000): Promise<T> {
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+async function rejectionCode(
+  promise: Promise<unknown>,
+): Promise<string | undefined> {
+  try {
+    await withTimeout(promise, 2000);
+  } catch (error) {
+    return (error as { code?: string } | null)?.code;
+  }
+  throw new Error("expected the bootstrap to fail");
 }
 
 test("successful bootstrap shows a bounded QR, confirms the UID and writes only the bound session", async () => {
@@ -1067,6 +1086,383 @@ test("private directories, QR files, session files and keys reject unsafe inputs
         new PrivateSessionFile({ path: linkedSession, key }).read(),
       );
     }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("every bootstrap gate reports a closed, non-secret reason code", async () => {
+  const run = (
+    loader: TrustedSdkLoader,
+    options: Record<string, unknown> = {},
+  ) => {
+    const pending = bootstrapPilotSession({
+      grant: grant(),
+      owner: fakeOwner().handle,
+      view: fakeView().view,
+      sessionStore: fakeStore().store,
+      loader,
+      signal: new AbortController().signal,
+      ...options,
+    });
+    // The table builds every scenario up front; keep an immediate rejection
+    // from being reported before its own assertion awaits it.
+    pending.catch(() => {});
+    return pending;
+  };
+  const scanning = (
+    build: (state: Counters) => unknown = (state) => fakeApi(state),
+  ) => {
+    const state = counters();
+    return fakeLoader(async (callback) => {
+      callback(qrEvent(state));
+      callback(infoEvent());
+      return build(state);
+    }, state);
+  };
+  const never = (event: (state: Counters) => unknown) => {
+    const state = counters();
+    return fakeLoader((callback) => {
+      callback(event(state));
+      return new Promise(() => {});
+    }, state);
+  };
+  const noInfo = counters();
+  const loaderNoInfo = fakeLoader(async (callback) => {
+    callback(qrEvent(noInfo));
+    return fakeApi(noInfo);
+  }, noInfo);
+  const lost = fakeOwner();
+  lost.fail();
+  const aborted = new AbortController();
+  aborted.abort();
+
+  const cases: Array<[string, Promise<unknown>]> = [
+    [
+      "login-failed",
+      run(async () => ({
+        Zalo: class {
+          async loginQR() {
+            throw new Error("provider detail must not leak");
+          }
+        },
+      })),
+    ],
+    [
+      "uid-mismatch",
+      run(scanning((s) => fakeApi(s, { uid: "zalo-uid-other" }))),
+    ],
+    ["uid-invalid", run(scanning((s) => fakeApi(s, { getOwnId: () => 42 })))],
+    [
+      "qr-missing",
+      run(async () => ({
+        Zalo: class {
+          async loginQR() {
+            return fakeApi(counters());
+          }
+        },
+      })),
+    ],
+    [
+      "view-failed",
+      run(scanning(), {
+        view: fakeView({
+          show: async () => {
+            throw new Error("view");
+          },
+        }).view,
+      }),
+    ],
+    ["login-info-invalid", run(loaderNoInfo)],
+    [
+      "identity-declined",
+      run(scanning(), { view: fakeView({ confirm: async () => false }).view }),
+    ],
+    ["cookie-invalid", run(scanning((s) => fakeApi(s, { serialized: {} })))],
+    [
+      "session-write-failed",
+      run(scanning(), {
+        sessionStore: fakeStore({
+          write: async () => {
+            throw new Error("disk");
+          },
+        }).store,
+      }),
+    ],
+    ["deadline", run(never((state) => qrEvent(state)), { deadlineMs: 25 })],
+    [
+      "aborted",
+      run(async () => ({ Zalo: class {} }), { signal: aborted.signal }),
+    ],
+    [
+      "owner-lost",
+      run(async () => ({ Zalo: class {} }), { owner: lost.handle }),
+    ],
+    ["qr-expired", run(never((state) => expiredEvent(state)))],
+    ["qr-declined", run(never((state) => declinedEvent(state)))],
+    [
+      "callback-invalid",
+      run(never(() => ({ type: 99, data: null, actions: null }))),
+    ],
+    [
+      "input-invalid",
+      run(async () => ({ Zalo: class {} }), {
+        grant: grant({ purpose: "send-test" }),
+      }),
+    ],
+    [
+      "grant-invalid",
+      run(async () => ({ Zalo: class {} }), {
+        grant: { ...grant(), expiresAt: "not-a-time" },
+      }),
+    ],
+  ];
+
+  for (const [expected, pending] of cases)
+    assert.equal(await rejectionCode(pending), expected, expected);
+});
+
+test("a provider rejection never reaches the error text", async () => {
+  await assert.rejects(
+    bootstrapPilotSession({
+      grant: grant(),
+      owner: fakeOwner().handle,
+      view: fakeView().view,
+      sessionStore: fakeStore().store,
+      loader: async () => ({
+        Zalo: class {
+          async loginQR() {
+            throw new Error("provider text must not leak");
+          }
+        },
+      }),
+      signal: new AbortController().signal,
+    }),
+    (error: unknown) => {
+      assert.equal((error as Error).message, "SDK facade unavailable");
+      assert.equal((error as { code?: string }).code, "login-failed");
+      assert.equal((error as Error).message.includes("provider text"), false);
+      return true;
+    },
+  );
+});
+
+test("a grant that expires after confirmation is refused before any write", async () => {
+  const state = counters();
+  const clock = new Date();
+  const loader = fakeLoader(async (callback) => {
+    callback(qrEvent(state));
+    callback(infoEvent());
+    return fakeApi(state);
+  }, state);
+  const view = fakeView({
+    confirm: async () => {
+      clock.setTime(clock.getTime() + 120_000);
+      return true;
+    },
+  });
+  const store = fakeStore();
+  const result = await rejectionCode(
+    bootstrapPilotSession({
+      grant: grant({
+        issuedAt: new Date(clock.getTime() - 60_000).toISOString(),
+        expiresAt: new Date(clock.getTime() + 60_000).toISOString(),
+      }),
+      owner: fakeOwner().handle,
+      view: view.view,
+      sessionStore: store.store,
+      loader,
+      signal: new AbortController().signal,
+      now: clock,
+    }),
+  );
+  assert.equal(result, "grant-expired");
+  assert.equal(store.writes.length, 0);
+});
+
+test("stage reports follow the reviewed vocabulary and carry no identity", async () => {
+  const state = counters();
+  const seen: BootstrapStage[] = [];
+  const loader = fakeLoader(async (callback) => {
+    callback(qrEvent(state));
+    callback(scannedEvent("Synthetic Label", state));
+    callback(infoEvent());
+    return fakeApi(state);
+  }, state);
+  const result = await bootstrapPilotSession({
+    grant: grant(),
+    owner: fakeOwner().handle,
+    view: fakeView().view,
+    sessionStore: fakeStore().store,
+    loader,
+    signal: new AbortController().signal,
+    onStage: (stage) => seen.push(stage),
+  });
+  assert.deepEqual(result, { boundAccountId: sentinelUid });
+  for (const stage of seen)
+    assert.equal(BOOTSTRAP_STAGES.includes(stage), true, stage);
+  const order: BootstrapStage[] = [
+    "login-requested",
+    "login-resolved",
+    "uid-verified",
+    "identity-confirmed",
+    "cookie-captured",
+    "session-written",
+    "qr-cleared",
+  ];
+  let previous = -1;
+  for (const stage of order) {
+    const index = seen.indexOf(stage);
+    assert.equal(index > previous, true, stage);
+    previous = index;
+  }
+  assert.equal(seen.includes("qr-shown"), true);
+  assert.equal(seen.includes("scanned"), true);
+  assert.equal(JSON.stringify(seen).includes(sentinelUid), false);
+});
+
+test("a real private view and store persist only a confirmed session", async () => {
+  const root = await mkdtemp(join(tmpdir(), "zalo-pilot-e2e-"));
+  try {
+    const keys = join(root, "keys");
+    await ensurePrivateDirectory(keys);
+    const keyPath = join(keys, "session.key");
+    const key = Buffer.alloc(32, 5);
+    await writeFile(keyPath, key, { mode: 0o600 });
+    const sessionDirectory = join(root, "session");
+    await ensurePrivateDirectory(sessionDirectory);
+    const sessionPath = join(sessionDirectory, "session.enc");
+    const viewDirectory = join(root, "view");
+    await ensurePrivateDirectory(viewDirectory);
+
+    const runE2E = async (confirmed: boolean) => {
+      const state = counters();
+      const loader = fakeLoader(async (callback) => {
+        callback(qrEvent(state));
+        callback(scannedEvent("Synthetic", state));
+        callback(infoEvent());
+        return fakeApi(state);
+      }, state);
+      return bootstrapPilotSession({
+        grant: grant(),
+        owner: fakeOwner().handle,
+        view: new PrivateQrFileView({
+          directory: viewDirectory,
+          confirm: async () => confirmed,
+        }),
+        sessionStore: new PrivateSessionFile({
+          path: sessionPath,
+          key: await readPrivateKeyFile(keyPath),
+        }),
+        loader,
+        signal: new AbortController().signal,
+      });
+    };
+
+    assert.equal(await rejectionCode(runE2E(false)), "identity-declined");
+    assert.deepEqual(await readdir(sessionDirectory), []);
+    assert.deepEqual(await readdir(viewDirectory), []);
+
+    assert.deepEqual(await runE2E(true), { boundAccountId: sentinelUid });
+    assert.deepEqual(await readdir(sessionDirectory), ["session.enc"]);
+    assert.deepEqual(await readdir(viewDirectory), []);
+    if (POSIX) assert.equal((await stat(sessionPath)).mode & 0o777, 0o600);
+    const stored = (await new PrivateSessionFile({
+      path: sessionPath,
+      key,
+    }).read()) as any;
+    assert.equal(stored.accountId, sentinelUid);
+    assert.equal(stored.session.cookie[0].value, sentinelCookie);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("the private diagnostic log records stages only, never secrets", async () => {
+  const root = await mkdtemp(join(tmpdir(), "zalo-pilot-diag-"));
+  try {
+    const directory = join(root, "state");
+    await ensurePrivateDirectory(directory);
+    const path = join(directory, "diagnostic.log");
+    const log = new PrivateDiagnosticFile({ path });
+    await log.ready();
+    const state = counters();
+    const loader = fakeLoader(async (callback) => {
+      callback(qrEvent(state));
+      callback(scannedEvent("Synthetic Label", state));
+      callback(infoEvent());
+      return fakeApi(state);
+    }, state);
+    await bootstrapPilotSession({
+      grant: grant(),
+      owner: fakeOwner().handle,
+      view: fakeView().view,
+      sessionStore: fakeStore().store,
+      loader,
+      signal: new AbortController().signal,
+      onStage: (stage) => {
+        void log.append(stage);
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const text = await readFile(path, "utf8");
+    assert.equal(text.includes(sentinelUid), false);
+    assert.equal(text.includes(sentinelCookie), false);
+    assert.equal(text.includes("synthetic-imei"), false);
+    assert.equal(text.includes("synthetic-user-agent"), false);
+    assert.equal(text.includes("Synthetic Label"), false);
+    assert.match(text, /"stage":"qr-cleared"/);
+    if (POSIX) assert.equal((await stat(path)).mode & 0o777, 0o600);
+
+    await assert.rejects(log.append("Bad Stage"));
+    await assert.rejects(log.append(`leak-${sentinelUid}`));
+    await assert.rejects(log.append("failed", "reason with space"));
+    assert.throws(() => new PrivateDiagnosticFile({ path: "relative.log" }));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("the interactive confirmation fails closed and accepts only the literal word", async () => {
+  const pipe = (tty: boolean) => {
+    const stream = new PassThrough();
+    Object.defineProperty(stream, "isTTY", { value: tty });
+    return stream;
+  };
+  const ask = (input: PassThrough, output: PassThrough, answer?: string) => {
+    const pending = promptConfirmation(
+      { uid: sentinelUid, displayLabel: null },
+      { input: input as any, output: output as any },
+    );
+    if (answer !== undefined) input.write(answer);
+    return pending;
+  };
+
+  await assert.rejects(
+    ask(pipe(false), pipe(true), "confirm\n"),
+    /Private pilot files unavailable/,
+  );
+  await assert.rejects(
+    ask(pipe(true), pipe(false), "confirm\n"),
+    /Private pilot files unavailable/,
+  );
+  assert.equal(await ask(pipe(true), pipe(true), "confirm\n"), true);
+  for (const answer of ["CONFIRM\n", "yes\n", "\n", "confirm please\n"])
+    assert.equal(await ask(pipe(true), pipe(true), answer), false);
+});
+
+test("the production view refuses when stdio is not interactive", async (t) => {
+  if (process.stdin.isTTY && process.stdout.isTTY)
+    return t.skip("interactive terminal");
+  const root = await mkdtemp(join(tmpdir(), "zalo-pilot-confirm-"));
+  try {
+    const directory = join(root, "view");
+    await ensurePrivateDirectory(directory);
+    const view = new PrivateQrFileView({ directory });
+    await assert.rejects(
+      view.confirmIdentity({ uid: sentinelUid, displayLabel: null }),
+      /Private pilot files unavailable/,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

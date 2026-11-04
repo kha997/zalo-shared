@@ -1,6 +1,11 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  BOOTSTRAP_REASONS,
+  PilotBootstrapError,
+  type PilotReason,
+} from "../adapters/zalo/qr-bootstrap.js";
 import { readPrivateTextFile } from "../server/private-pilot-files.js";
 import {
   validatePilotGrant,
@@ -81,7 +86,16 @@ const MANIFEST_KEYS = ["version", "build", "consent", "grant"] as const;
 const BUILD_KEYS = ["sourceCommit", "lockSha256", "sdkIntegrity"] as const;
 const MAX_MANIFEST_BYTES = 64 * 1024;
 const QUARANTINE_GATE = "quarantine-unconfirmed";
+const PILOT_REASONS = new Set<string>(BOOTSTRAP_REASONS);
 const unavailable = () => new Error("Pilot CLI unavailable");
+
+/** Only a reviewed code may be echoed; anything else stays unattributed. */
+function reasonOf(error: unknown): PilotReason | undefined {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && PILOT_REASONS.has(code)
+    ? (code as PilotReason)
+    : undefined;
+}
 
 const object = (value: unknown): value is Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -214,6 +228,7 @@ function safeOutcome(
   gate: string,
   manifest?: PilotManifest,
   outcome?: PilotCommandOutcome,
+  reason?: string,
 ): string {
   const ticks = counter(outcome?.ticks);
   const rejectedInbound = counter(outcome?.rejectedInbound);
@@ -221,6 +236,7 @@ function safeOutcome(
     command,
     ok,
     gate,
+    ...(reason ? { reason } : {}),
     ...(manifest
       ? { purpose: manifest.grant.purpose, expiresAt: manifest.grant.expiresAt }
       : {}),
@@ -372,13 +388,13 @@ export async function runPilotCli(options: {
       stdout: safeOutcome(command, true, halt ?? "completed", manifest, outcome),
     };
   } catch (error) {
-    const gate =
-      (error as { code?: unknown } | null)?.code === QUARANTINE_GATE
-        ? QUARANTINE_GATE
-        : "unavailable";
+    // The gate stays the coarse safety verdict; reason is the closed-set code
+    // that says which reviewed gate stopped the command.
+    const reason = reasonOf(error);
+    const gate = reason === QUARANTINE_GATE ? QUARANTINE_GATE : "unavailable";
     return {
       exitCode: 1,
-      stdout: safeOutcome(command, false, gate, manifest),
+      stdout: safeOutcome(command, false, gate, manifest, undefined, reason),
     };
   }
 }
@@ -388,29 +404,43 @@ async function liveBootstrap(input: {
   manifest: PilotManifest;
   env: Record<string, string | undefined>;
 }) {
-  if (input.command !== "bootstrap") throw unavailable();
-  if (process.platform !== "linux") throw unavailable();
+  if (input.command !== "bootstrap")
+    throw new PilotBootstrapError("input-invalid");
+  if (process.platform !== "linux")
+    throw new PilotBootstrapError("input-invalid");
   const { env, manifest } = input;
   try {
     assertG5Scope("bootstrap", manifest.grant);
   } catch {
-    throw unavailable();
+    throw new PilotBootstrapError("scope-denied");
   }
   // Enrollment must also bind to the reviewed image, not a copied manifest.
-  assertBuildIdentity(await readBuildIdentity(), manifest.build);
-  const databaseUrl = requireTlsDatabaseUrl(env.DATABASE_URL);
+  try {
+    assertBuildIdentity(await readBuildIdentity(), manifest.build);
+  } catch {
+    throw new PilotBootstrapError("build-mismatch");
+  }
+  let databaseUrl: string;
+  try {
+    databaseUrl = requireTlsDatabaseUrl(env.DATABASE_URL);
+  } catch {
+    throw new PilotBootstrapError("database-url-invalid");
+  }
   const keyPath = env.PILOT_KEY_FILE;
   const sessionPath = env.PILOT_SESSION_FILE;
   const viewDirectory = env.PILOT_VIEW_DIR;
+  const diagnosticPath = env.PILOT_DIAGNOSTIC_FILE;
   if (
     !keyPath ||
     !isAbsolute(keyPath) ||
     !sessionPath ||
     !isAbsolute(sessionPath) ||
     !viewDirectory ||
-    !isAbsolute(viewDirectory)
+    !isAbsolute(viewDirectory) ||
+    (diagnosticPath !== undefined &&
+      (!diagnosticPath || !isAbsolute(diagnosticPath)))
   )
-    throw unavailable();
+    throw new PilotBootstrapError("input-invalid");
 
   const [pgModule, ownership, files, qr] = await Promise.all([
     import("pg"),
@@ -419,7 +449,8 @@ async function liveBootstrap(input: {
     import("../adapters/zalo/qr-bootstrap.js"),
   ]);
   const Pool = (pgModule as any).default?.Pool ?? (pgModule as any).Pool;
-  if (typeof Pool !== "function") throw unavailable();
+  if (typeof Pool !== "function")
+    throw new PilotBootstrapError("internal");
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
   let owner: Awaited<
     ReturnType<typeof ownership.acquireConnectorOwnership>
@@ -428,10 +459,27 @@ async function liveBootstrap(input: {
   const onSignal = () => controller.abort();
   process.once("SIGINT", onSignal);
   process.once("SIGTERM", onSignal);
+  const diagnostics = diagnosticPath
+    ? new files.PrivateDiagnosticFile({ path: diagnosticPath })
+    : undefined;
+  // A diagnostic write is best effort: it must never abort or extend a login.
+  const stage = (name: string, reason?: string) => {
+    void diagnostics?.append(name, reason).catch(() => {});
+  };
   try {
+    if (diagnostics)
+      await diagnostics.ready().catch(() => {
+        throw new PilotBootstrapError("input-invalid");
+      });
+    stage("start");
     // Private-file validation must precede ownership: a typo in a key or
     // session path must not bump the epoch or quarantine provider state.
-    const key = await files.readPrivateKeyFile(keyPath);
+    let key: Uint8Array;
+    try {
+      key = await files.readPrivateKeyFile(keyPath);
+    } catch {
+      throw new PilotBootstrapError("input-invalid");
+    }
     const sessionStore = new files.PrivateSessionFile({
       path: sessionPath,
       key,
@@ -440,12 +488,21 @@ async function liveBootstrap(input: {
     const view = new files.PrivateQrFileView({ directory: viewDirectory });
     // Validate the private destinations before ownership: a wrong session
     // directory or QR view mode must not bump the epoch or quarantine state.
-    await files.ensurePrivateDirectory(dirname(sessionPath));
-    await files.ensurePrivateDirectory(viewDirectory);
-    owner = await ownership.acquireConnectorOwnership(pool, {
-      ownerLabel: "pilot-enrollment",
-      onRevoked: () => controller.abort(),
-    });
+    try {
+      await files.ensurePrivateDirectory(dirname(sessionPath));
+      await files.ensurePrivateDirectory(viewDirectory);
+    } catch {
+      throw new PilotBootstrapError("input-invalid");
+    }
+    try {
+      owner = await ownership.acquireConnectorOwnership(pool, {
+        ownerLabel: "pilot-enrollment",
+        onRevoked: () => controller.abort(),
+      });
+    } catch {
+      throw new PilotBootstrapError("ownership-denied");
+    }
+    stage("ownership-acquired");
     await qr.bootstrapPilotSession({
       grant: manifest.grant,
       owner,
@@ -453,7 +510,14 @@ async function liveBootstrap(input: {
       sessionStore,
       loader: () => import("zca-js"),
       signal: controller.signal,
+      onStage: (name) => stage(name),
     });
+    stage("completed");
+  } catch (error) {
+    const reason =
+      error instanceof PilotBootstrapError ? error.code : "internal";
+    await diagnostics?.append("failed", reason).catch(() => {});
+    throw error;
   } finally {
     process.removeListener("SIGINT", onSignal);
     process.removeListener("SIGTERM", onSignal);

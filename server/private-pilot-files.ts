@@ -21,6 +21,10 @@ import {
   sep,
 } from "node:path";
 import { createInterface } from "node:readline/promises";
+import {
+  BOOTSTRAP_STAGE_SET,
+  PILOT_REASON_SET,
+} from "./pilot-reasons.js";
 
 export interface PrivateSessionStore {
   read(): Promise<unknown>;
@@ -391,14 +395,21 @@ function isPng(bytes: Uint8Array) {
   );
 }
 
-async function defaultConfirm(value: {
-  uid: string;
-  displayLabel: string | null;
-}): Promise<boolean> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) throw unavailable();
+/**
+ * The only interactive confirmation. A non-interactive stdin or stdout fails
+ * closed rather than silently accepting, and only the literal word is consent.
+ */
+export async function promptConfirmation(
+  value: { uid: string; displayLabel: string | null },
+  streams: {
+    input: typeof process.stdin;
+    output: typeof process.stdout;
+  } = { input: process.stdin, output: process.stdout },
+): Promise<boolean> {
+  if (!streams.input.isTTY || !streams.output.isTTY) throw unavailable();
   const terminal = createInterface({
-    input: process.stdin,
-    output: process.stdout,
+    input: streams.input,
+    output: streams.output,
     terminal: true,
   });
   try {
@@ -414,6 +425,13 @@ async function defaultConfirm(value: {
   } finally {
     terminal.close();
   }
+}
+
+async function defaultConfirm(value: {
+  uid: string;
+  displayLabel: string | null;
+}): Promise<boolean> {
+  return promptConfirmation(value);
 }
 
 /** Owned 0700 directory and 0600 file, never a web view and never a console QR. */
@@ -503,5 +521,70 @@ export class PrivateQrFileView implements PrivateQrView {
       throw unavailable();
     const displayLabel = label(value.displayLabel);
     return (await this.confirm({ uid: value.uid, displayLabel })) === true;
+  }
+}
+
+const MAX_DIAGNOSTIC_BYTES = 1024 * 1024;
+
+export interface PrivateDiagnosticSink {
+  append(stage: string, reason?: string): Promise<void>;
+}
+
+/**
+ * Append-only, owner-only forensic log of stage names and closed-set reason
+ * codes. It has no field that can carry a UID, QR, cookie, imei or user agent,
+ * so a private diagnostic can never become a credential store.
+ */
+export class PrivateDiagnosticFile implements PrivateDiagnosticSink {
+  private readonly path: string;
+
+  constructor(options: { path: string }) {
+    this.path = cleanPath(options?.path);
+  }
+
+  async ready(): Promise<void> {
+    await requireTrustedParent(this.path);
+    const existing = await lstat(this.path).catch(() => undefined);
+    if (!existing) return;
+    if (existing.isSymbolicLink() || !existing.isFile()) throw unavailable();
+    if (POSIX && (existing.mode & 0o077) !== 0) throw unavailable();
+  }
+
+  async append(stage: string, reason?: string): Promise<void> {
+    // Only the reviewed vocabularies may be written, so no caller can smuggle
+    // an identifier into the diagnostic by passing it as a stage.
+    if (
+      !BOOTSTRAP_STAGE_SET.has(stage) ||
+      (reason !== undefined && !PILOT_REASON_SET.has(reason))
+    )
+      throw unavailable();
+    const line = `${JSON.stringify({
+      at: new Date().toISOString(),
+      stage,
+      ...(reason ? { reason } : {}),
+    })}\n`;
+    if (Buffer.byteLength(line) > 256) throw unavailable();
+    await this.ready();
+    let handle: FileHandle | undefined;
+    try {
+      handle = await open(
+        this.path,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | noFollow,
+        0o600,
+      );
+      const stat = await handle.stat();
+      if (
+        !stat.isFile() ||
+        stat.size + Buffer.byteLength(line) > MAX_DIAGNOSTIC_BYTES
+      )
+        throw unavailable();
+      if (POSIX) await handle.chmod(0o600);
+      await handle.write(line);
+      await handle.sync();
+    } catch {
+      throw unavailable();
+    } finally {
+      await handle?.close().catch(() => {});
+    }
   }
 }

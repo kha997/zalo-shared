@@ -1,6 +1,6 @@
 # G5 live pilot procedure — activation pending
 
-**Status:** `G5A_BOOTSTRAP_FAIL` — the 2026-11-04 bootstrap emitted a QR, made no second provider contact and wrote no session; a new G5-A authorization is required before activation. The authoritative state is [PILOT-GATE-STATUS.md](../../PILOT-GATE-STATUS.md) and the live-attempt evidence is [G5A-BOOTSTRAP-REPORT.md](../evidence/G5A-BOOTSTRAP-REPORT.md) §9.
+**Status:** `G5A_AWAITING_OWNER_RECONCILIATION` — the 2026-11-04 bootstrap emitted a QR, made no second provider contact and wrote no session; the abort is narrowed but UNPROVEN and the control state is fenced. A new G5-A authorization is required before activation. The authoritative state is [PILOT-GATE-STATUS.md](../../PILOT-GATE-STATUS.md) and the live-attempt evidence is [G5A-BOOTSTRAP-REPORT.md](../evidence/G5A-BOOTSTRAP-REPORT.md) §9–§10.
 **Decision record:** [G5-SCOPE-APPROVAL.md](../evidence/G5-SCOPE-APPROVAL.md)
 **Readiness report:** [G5A-ACTIVATION-READINESS.md](../evidence/G5A-ACTIVATION-READINESS.md)
 
@@ -35,10 +35,11 @@ A new Owner authorization is still required; the deployment readiness above is n
 
 1. Generate the enrollment manifest from [pilot-manifest.enroll.template.json](pilot-manifest.enroll.template.json) on the private host. Use a null `expectedAccountId`, zero peers, purpose `enroll-session`, `maxPartsPerDay: 10`, `minIntervalMs: 2000` and an expiry ≤1 hour.
 2. Run `preflight` for `bootstrap`; confirm admitted and the summary shows `accountBound:false`, `peerCount:0`, `maxPartsPerDay:10`, `minIntervalMs:2000`, `lifetimeMs` ≤3600000.
-3. Start `bootstrap --acknowledge-pilot-risk` once.
-4. The connector writes `qr.png` 0600 in a 0700 local view directory. The Owner opens it locally, scans with the official phone, confirms the displayed account UID/name in the terminal prompt, and the connector clears the QR.
+3. Start `bootstrap --acknowledge-pilot-risk` once. Set `PILOT_DIAGNOSTIC_FILE` to an absolute path inside the connector's private `0700` directory (for example `.../pilot/diagnostics.log`) and also redirect the container console to a `0600` private file outside the repository. The diagnostic sink records only reviewed stages and reason codes; the console can contain the UID prompt, so neither file is ever committed, pasted or uploaded.
+4. The connector writes `qr.png` 0600 in a 0700 local view directory. The Owner opens it locally, scans with the official phone, then types the literal word `confirm` at the terminal prompt for the displayed account UID/name, and the connector clears the QR. The phone confirmation and the terminal answer are two separate steps; any answer other than `confirm` cancels.
 5. Confirm the encrypted session file exists 0600 and no token, cookie or session value appears in output or logs.
-6. Stop after enrollment. Do not start observe in the same authorization.
+6. Read the diagnostic file: the last stage plus the CLI `reason` field (for example `login-failed`) attributes a failure to a reviewed gate. A failure keeps `connector_ownership` in `uncertain` and raises reconciliation; do not reset it and do not retry.
+7. Stop after enrollment. Do not start observe in the same authorization.
 
 **Evidence to record:** enrollment grant expiry, UTC start/end, preflight output, QR file mode/ownership and clear time, UID confirmation outcome (yes/no), session file mode, phone coexistence observation, errors and the stage token.
 
@@ -76,9 +77,18 @@ A new Owner authorization is still required; the deployment readiness above is n
 
 1. Send `SIGTERM` to the connector container/process once; wait for exit. Do not restart, reconnect or start a replacement connector.
 2. Verify ownership is released/quarantined and the process is gone. A database lock cannot cancel an in-flight provider call; treat unverified termination as unknown.
-3. Revoke the provider session from the official phone (log out the pilot device/session). The connector performs one stored-credential login per process; there is no QR/password re-enrollment, retry loop or automatic replacement login.
+3. Revoke the provider session from the official phone (log out the pilot device/session). The connector performs one stored-credential login per process; there is no QR/password re-enrollment, retry loop or automatic replacement login. The connector itself has no logout capability: a shutdown fences the local ownership/provider rows only and never ends a provider session.
 4. Stop the application worker if it could claim pilot work. Preserve the database and sanitized logs.
 5. If the pilot is ending, follow [PILOT-TEARDOWN.md](PILOT-TEARDOWN.md) for D7 deletion, inventory and backup disclosure.
+
+## Reconciliation after a fenced bootstrap
+
+A bootstrap that fails after acquisition leaves `connector_ownership.phase='uncertain'` and `provider_state.reconciliation_required=true`. Neither is reset automatically, and no reviewed command clears them:
+
+- re-acquisition reserves only from `phase='idle'`, so the next preflight refuses;
+- the reviewed gap acknowledgement requires `phase IN ('idle','active')` and a matching owner id/epoch, so it correctly refuses an `uncertain` row.
+
+Reopening the connector therefore requires an Owner-approved, reviewed reconciliation operation (shape in [G5A-BOOTSTRAP-REPORT.md](../evidence/G5A-BOOTSTRAP-REPORT.md) §10.4), followed by a **new** G5-A authorization. Until then the state stays fenced; do not edit the rows by hand.
 
 ## Report requirements
 
@@ -99,4 +109,4 @@ The final summary must state that technical PASS at any stage did not itself aut
 
 ## Current stop point
 
-**STOP — `G5A_BOOTSTRAP_FAIL`.** The 2026-11-04 authorization is consumed. No retry, login, QR generation, session write, observation or send may occur until the Owner issues a new G5-A start authorization; reconciliation of the fenced ownership/provider state and camera-free verification of the phone must be decided first.
+**STOP — `G5A_AWAITING_OWNER_RECONCILIATION`.** The 2026-11-04 authorization is consumed and the report stops at the Owner Reconciliation Gate. The abort is narrowed to the SDK's post-confirmation handshake but remains UNPROVEN; reason codes, the private diagnostic sink and the offline regression are in the tree and take effect only in a rebuilt image during the next authorized attempt. No retry, login, QR generation, session write, observation or send may occur until the Owner decides the reconciliation of the fenced ownership/provider state and issues a new G5-A start authorization. Do not reset `uncertain` by hand.

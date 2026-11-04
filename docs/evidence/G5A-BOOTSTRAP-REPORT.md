@@ -199,8 +199,11 @@ scope: one private Zalo A QR enrollment, Owner physically present.
 **Verdict:** `G5A_BOOTSTRAP_FAIL` — the single authorized bootstrap ran and
 produced a QR, the Owner scanned and confirmed it on the official phone, but the
 connector did not complete: no session was written and no UID binding was
-established. **Abort cause: local post-login gate, not the provider; the specific
-gate is UNPROVEN** because the one container's console output was not retained.
+established. **Abort cause: the SDK's post-confirmation handshake was refused
+locally, not by the provider; the exact handshake step is UNPROVEN** because the
+one container's console output was not retained. §10 narrows the candidate to the
+`checkSession` redirect after the phone confirmation and records the Owner's
+device-history evidence.
 **Attempts started:** two launcher invocations, of which only the second reached
 the connector or the provider. The first exited in ~3 s on a command-path error
 inside the reviewed image and made no provider contact (no gateway event, no
@@ -256,7 +259,7 @@ still in the private directory and is inert after `01:14:00Z`; it was used once.
 | 00:53:05 | offline compose `preflight` through the same console path admitted the grant; its `tty` line is not usable because the diagnostic redirected its own stdout |
 | 00:54:29 | corrected launcher start (`bootstrap --acknowledge-pilot-risk`, one instance) |
 | 00:54:31.547 | ownership `reserved`, epoch 1, label `pilot-enrollment`; audit `connector.reserved` |
-| 00:54:32.247 | gateway `sni_allow id.zalo.me:443` (49.213.95.230) from the connector address — the only gateway event of the attempt |
+| 00:54:32.247 | gateway `sni_allow id.zalo.me:443` from the connector — the only gateway event of the attempt (no network address is recorded in this repository) |
 | 00:54:33 | `qr.png` written `0600` in the `0700` view directory and copied to the Owner's Windows-visible private path; never transmitted, screenshot or uploaded |
 | ~00:55 | local QR copy present; the Owner scanned it with the official phone and completed the confirmation on the phone (Owner attestation; exact time not recorded) |
 | 00:56:01.670 | ownership invalidated to `uncertain` (fault `shutdown`); audit `connector.uncertain` |
@@ -295,13 +298,17 @@ to the connector's own steps after the provider login resolves.
   window, which was not captured to a file. The specific abort reason therefore
   remains **UNPROVEN**, but the candidate set is now small.
 - Because the Owner scanned and confirmed, the provider-side login resolved.
-  After that point the reviewed adapter can fail only at one of these
-  fail-closed gates, in order: the UID read and shape check (the grant expects a
-  null account, so a mismatch is impossible), capture of `imei`/`userAgent`
-  (populated only by provider event type 4), `PrivateQrFileView.confirmIdentity`,
-  the cookie-jar snapshot, grant freshness/ownership re-assert, or the encrypted
-  session write. Each throws to the same generic `unavailable`, exits 1 and
-  writes no credential.
+  After that point the reviewed SDK can still reject inside its own
+  post-confirmation handshake (`checkSession`, `getUserInfo`, the
+  stored-credential login) before `loginQR` resolves; in that case event type 4
+  never fires and the adapter exits before its UID prompt. Once `loginQR`
+  resolves, the adapter can fail only at one of these fail-closed gates, in
+  order: the UID read and shape check (the grant expects a null account, so a
+  mismatch is impossible), capture of `imei`/`userAgent` (populated only by
+  event type 4), `PrivateQrFileView.confirmIdentity`, the cookie-jar snapshot,
+  grant freshness/ownership re-assert, or the encrypted session write. Each
+  throws to the same generic `unavailable`, exits 1 and writes no credential.
+  §10 separates the two groups.
 - `defaultConfirm` (server/private-pilot-files.ts:394-417) requires **both**
   `process.stdin.isTTY` and `process.stdout.isTTY`, then an answer whose trimmed
   text is exactly `confirm`. It is the only gate that depends on the launch
@@ -309,9 +316,10 @@ to the connector's own steps after the provider login resolves.
 - **An unanswered prompt is excluded.** The process exited at `00:56:01.670Z`,
   twenty-seven seconds before the 120 s deadline (`00:56:29Z`). A displayed
   prompt waiting for input would have blocked until the deadline. The failure
-  was therefore a gate that threw or returned `false` immediately after login:
-  the pre-prompt `imei`/`userAgent` capture, an answer other than `confirm`, a
-  post-confirm cookie validation, or the session write.
+  was therefore a gate that threw or returned `false` immediately after the
+  phone confirmation: a rejection inside the SDK's own handshake before event
+  type 4, the `imei`/`userAgent` capture, a post-confirm cookie validation, or
+  the session write.
 - **The earlier TTY reading is withdrawn.** `tty stdin=yes stdout=no` was
   measured inside a `{ ... } >log 2>&1` block, so it measured that diagnostic's
   own redirection. A fresh offline check on the same console launch path
@@ -345,8 +353,9 @@ to the connector's own steps after the provider login resolves.
   directory is empty `0700` UID 65532. No cookie or session material was read or
   written: the adapter reads the cookie jar only after identity confirmation.
 - The phone confirmation completed a provider-side login, so a provider session
-  or device entry may exist even though nothing was persisted locally. It must
-  be revoked from the official phone before another enrollment attempt.
+  or device entry may exist even though nothing was persisted locally. The
+  Owner's device history (§10.1) reports that entry already logged out; §10.4
+  records the reconciliation that is still required before another attempt.
 - `pilot_send_budget` and `pilot_part_ledger` are empty; no message was sent,
   observed or queued. No observe/send-test workflow ran.
 - The gateway, `pilot-postgres` and the reviewed topology remain running and
@@ -358,21 +367,21 @@ to the connector's own steps after the provider login resolves.
 
 ### Residual risks and safe recovery path
 
-1. **Revoke the provider session (Owner, first).** On the official phone, open
-   the logged-in sessions/devices list and log out the session created around
-   the attempt, then confirm the phone still behaves normally. No local session
-   will be reused regardless.
-2. **Attribute the abort.** Capture the connector's console output to a `0600`
-   private log (never committed; it can contain the UID prompt) and add reviewed,
-   non-secret abort reason codes for the post-login gates, because the CLI
-   currently collapses every failure into `"gate":"unavailable"`. Together these
-   make the next failure attributable instead of inferred.
-3. **Prove the confirmation path offline before another live run.** The real
-   `defaultConfirm` TTY gate is not covered by `tests/transport/qr-bootstrap.test.ts`,
-   which injects a fake view. Add a unit test for the non-TTY refusal and run the
-   synthetic QR fixture end to end in a disposable topology, covering both a
-   `confirm` answer that writes the session and a refused answer that writes
-   nothing.
+1. **Confirm the provider session is gone (Owner).** On the official phone,
+   confirm in the sessions/devices list that the entry created around the
+   attempt is logged out, and use the provider's own logout control if any entry
+   remains. The Owner's device history (§10.1) already reports login and logout
+   in the same minute. No local session will be reused regardless.
+2. **Attribute the abort.** Implemented in §10.3: reviewed, non-secret abort
+   reason codes and a `0600` private diagnostic sink. The next attempt must also
+   capture the connector's console output to a `0600` private log (never
+   committed; the confirmation prompt prints the UID).
+3. **Prove the confirmation path offline before another live run.** Implemented
+   in §10.3: the real `promptConfirmation` is now covered by unit tests (non-TTY
+   refusal, literal `confirm` only) and the adapter is covered end to end with
+   the real private view and encrypted store, for both a confirmed and a
+   refused answer. The in-image fixture replay belongs to the next authorized
+   build.
 4. **Rehearse the terminal confirmation.** The phone confirmation and the
    console prompt are two separate steps; the prompt accepts only the literal
    word `confirm` and any other answer cancels. Print that instruction before the
@@ -400,3 +409,234 @@ behaviour or production readiness. G5-B and G5-C remain **not authorized**.
 **STOP — `G5A_BOOTSTRAP_FAIL`. The authorization is consumed and must not be
 reused or extended. No retry, observe, send-test, media, production deployment
 or PR merge is authorized; a new G5-A authorization is required.**
+
+## 10. Owner follow-up — post-acceptance analysis and reconciliation gate
+
+**Status of this section:** offline analysis plus code and test work done after
+the window closed at `2026-11-04T01:16:00Z`. **No provider contact, no QR, no
+observe, no send, no image build, no deployment and no state reset occurred
+while §10 was written.** The authorization in §9 remains consumed. The report
+stops at the Owner Reconciliation Gate (§10.5).
+
+### 10.1 Owner device-history evidence
+
+The Owner inspected the login-device list on the official Zalo A account and
+reported exactly one entry that coincides with the attempt:
+
+| Field | Owner-reported value |
+| --- | --- |
+| Device | `Firefox - Windows` |
+| Login | `2026-11-04 07:56` Vietnam time |
+| Method | QR |
+| Last activity | `2026-11-04 07:56` |
+| Logout | `2026-11-04 07:56` |
+| Phone | still logged in and operating normally |
+
+No IP address, device identifier, account UID, phone number or other personal
+data is reproduced here or anywhere else in this repository. The provider
+account's device label is quoted only because it is the identifier the Owner
+used to locate the entry.
+
+What this proves and what it does not:
+
+- **Proves:** the provider accepted the QR confirmation and created a login
+  session for this connector; that session ended within the same minute it was
+  created and never showed later activity; the phone session was unaffected.
+- **Does not prove:** that the SDK ever received a usable session, that
+  `checkSession` succeeded, or that the connector wrote or attempted to write a
+  credential. A provider session that is created and closed in the same minute
+  is also exactly what a client-side handshake that never completes looks like.
+- It confirms the local forensic record rather than changing it: the connector
+  exited 1 at `00:56:02Z`, i.e. `07:56:02` Vietnam time, matching the reported
+  logout minute.
+- It makes the "QR was never accepted" explanation impossible and leaves a
+  narrow local window: everything after the phone confirmation and before the
+  encrypted session write. That is the window §10.2 analyses.
+
+### 10.2 What happened after the provider accepted the QR
+
+The reviewed adapter's post-confirmation path, in order, is: SDK `loginQR`
+resolves → SDK emits event type 4 (`GotLoginInfo`) carrying `imei`/`userAgent` →
+facade reads the UID and checks its shape against the grant → `confirmIdentity`
+(terminal `confirm`) → cookie-jar snapshot → session-write. Any failure in that
+sequence throws the single generic `unavailable`, exits 1, writes no credential,
+and leaves the ownership row fenced as `uncertain`.
+
+The strongest code-grounded candidate, unchanged since §9 and now cross-checked
+against the Owner's device history:
+
+1. The provider accepted the confirmation, so `loginQR` is the call that decides
+   the outcome. Before it can resolve, zca-js 2.2.0 calls `checkSession`
+   (`dist/apis/loginQR.js:194-210`), which requests
+   `https://id.zalo.me/account/checksession?continue=https%3A%2F%2Fchat.zalo.me%2Findex.html`
+   with `redirect: "manual"`.
+2. A response with a `Location` header is followed by zca-js's own request
+   helper (`dist/utils.js:289-298`), which recurses on any `Location` value
+   without consulting the reviewed allowlist.
+3. `chat.zalo.me` — the `continue` target in that URL, and the most likely
+   redirect destination — is **excluded** from
+   `ops/pilot-egress-allowlist.json` and classified as an unadmitted
+   `redirect-target`. `docs/evidence/G5A-PROVIDER-ENDPOINT-POLICY.md:102,138`
+   states the reviewed intent: an unexpected redirect aborts the bootstrap.
+4. The local guard (`ops/pilot-egress-guard.cjs`) throws at
+   `net.Socket.prototype.connect` for any target it cannot classify. The
+   connection never forms, so the gateway never sees it and logs no denial —
+   which is consistent with the attempt's **single** `sni_allow id.zalo.me:443`
+   gateway event and **zero** denials.
+5. `checkSession` swallows its own failure (`.catch(logger(...).error)`), returns
+   `undefined`, and `loginQR` rejects with "Cannot get session, login failed".
+   Event type 4 never fires, so `loginCookie` (`wpa.chat.zalo.me`) and
+   `getUserInfo` (`jr.chat.zalo.me`) are never reached. That is also why the
+   gateway never saw those two hosts, even though the allowlist admits them.
+6. The facade maps the rejection to `login-failed` (new, §10.3), the process
+   exits 1, and the provider closes the login it had just created — inside the
+   same minute, as the device history now shows.
+
+This is a hypothesis, not a proof. The redirect was never observed, the console
+output was not retained, and an alternative SDK-internal rejection between
+`loginQR` and event type 4 would produce the same external symptoms. What the
+evidence does rule out is the provider refusing the login, an expired QR, an
+unanswered terminal prompt (exit was 27 s before the 120 s deadline), an
+ownership conflict (the reservation and fence are clean) and a session write
+(no `session.enc`, no quarantine file).
+
+The next authorized attempt can settle it: the diagnostic sink in §10.3 records
+stages, so the log would show whether `login-resolved` was reached and, if it
+was not, that the abort happened inside `loginQR` — with the reason code
+`login-failed` and the absence of any `wpa`/`jr` tunnel confirming the position.
+
+### 10.3 Shutdown did not end the provider session; attribution is now possible
+
+**Owner question — did the connector's shutdown terminate the provider session?
+No. It could not have.**
+
+- zca-js 2.2.0 exposes no logout API at all: there is no `logout` occurrence
+  anywhere in the installed SDK's `dist`.
+- The facade holds the SDK instance in `resolvedApi`, which is assigned only
+  after `loginQR` resolves. On this run `loginQR` rejected, so `resolvedApi` was
+  never set and `disposeApi` never ran.
+- `disposeApi` in any case only stops a listener that was never started on this
+  run; the adapter's `cleanUp()` only aborts a local abort controller and clears
+  a local timeout.
+- The facade then calls the ownership store's `close`, which fences
+  `connector_ownership` and `provider_state` **locally**. That is a database
+  transition, not a provider API call.
+
+So the provider session ended because the client's handshake never completed,
+not because the connector signed it out. Corroborating: the reported logout is in
+the same minute as the login and there is no later activity — a deliberately
+signed-out session would normally show the same, so the distinguishing evidence
+is the code path, which has no way to sign out.
+
+**Attribution work completed offline (no live run):**
+
+| Change | Where | Purpose |
+| --- | --- | --- |
+| Closed reason vocabulary (26 codes, 15 stages) | `server/pilot-reasons.ts` | one shared list so adapter, CLI and diagnostic sink cannot drift or emit free text |
+| `PilotBootstrapError` with a closed `code` | `adapters/zalo/qr-bootstrap.ts:30` | every fail-closed gate now fails with a specific non-secret code instead of one generic error |
+| Per-gate codes | `adapters/zalo/qr-bootstrap.ts` | input, grant, scope, SDK load, SDK shape, `login-failed`, `qr-missing`, `view-failed`, `uid-invalid`, `uid-mismatch`, `login-info-invalid`, `identity-declined`, `cookie-invalid`, `session-write-failed`, `grant-expired`, quarantine |
+| Stage context on the error | `qr-bootstrap.ts` (`onStage`) | tells the operator which reviewed stage was reached without revealing identity |
+| CLI `reason` field | `tools/pilot-connector.ts:93,393-397` | `gate` stays coarse for compatibility; `reason` is emitted only when it is in the closed set |
+| Private diagnostic sink | `server/private-pilot-files.ts:538` | opt-in `PILOT_DIAGNOSTIC_FILE`; absolute path inside a trusted `0700` parent; `0600`, `O_NOFOLLOW`, append, fsync, 1 MiB cap; validates stage and reason against the closed sets; writes one JSON line `{at,stage,reason?}` and nothing else |
+| Real prompt coverage | `server/private-pilot-files.ts:402` (`promptConfirmation`) | the production gate is now directly testable; still requires both stdio streams to be TTY and the trimmed answer to be exactly `confirm` |
+
+Why the vocabulary is closed: a free-text abort reason is a channel for provider
+or account data to reach a log. Both the sink and the CLI reject anything
+outside the reviewed list, so a future bug cannot leak a UID, phone number,
+cookie or URL through a "reason" field.
+
+**Regression coverage added (synthetic, offline — never proof of a live
+outcome):** every gate reports a closed, non-secret reason code (17 cases); a
+provider rejection never reaches the error text; a grant that expires between
+confirmation and the write is refused before any write; stage reports carry no
+identity; the **real** private view and encrypted store persist only a confirmed
+session and write nothing on a decline; the diagnostic log records stages only;
+the interactive confirmation fails closed and accepts only the literal word
+`confirm`; the production view refuses when stdio is not interactive; and the
+CLI surfaces `reason` without provider detail.
+
+**Verification at this commit:** typecheck clean; connector build clean; both
+changed suites pass in full; the full backend suite passes except one
+intermittently failing test in `tests/backend/pilot-egress-guard.test.ts`, which
+passes in isolation on this tree **and** on unmodified `HEAD` in a scratch
+worktree, so it is an environmental flake and not a regression introduced here.
+
+**Still missing, and deliberately not done:** the diagnostic sink is only useful
+once the connector image is rebuilt, and rebuilding or re-running the connector
+is a live action that needs a new authorization. The in-image replay of a
+synthetic QR through the real container also belongs to that next authorized
+build, not to this section.
+
+### 10.4 Reconciliation plan (prepared, not executed)
+
+Two independent states have to be reconciled, and they have different owners.
+
+**Provider side (Owner).** The device history already reports the entry as
+logged out in the same minute it was created, so there may be nothing left to
+revoke. The Owner step is therefore confirmation, not cleanup: verify in the
+phone's sessions/devices list that no entry for the attempt remains active, and
+if one does, use the provider's own logout control on the phone. This must be
+done from the official phone, not from the connector. No local session exists or
+will be reused either way.
+
+**Local control state (requires a reviewed change).** The attempt left:
+
+- `connector_ownership`: phase `uncertain`, epoch 1, fault `shutdown`;
+- `provider_state`: `disconnected`, `reconciliation_required=true`, `gap_version`
+  bumped.
+
+Neither reviewed path can move this state:
+
+- Re-acquisition (`acquireConnectorOwnership`) reserves only from
+  `phase='idle'`, so a second bootstrap is refused by design;
+- The gap-acknowledgement operation (`server/connector-operations.ts:320-381`)
+  requires `phase IN ('idle','active')` **and** the matching owner id/epoch, so
+  it correctly refuses an `uncertain` row.
+
+So reopening the connector needs a new, reviewed operation. Proposed shape, for
+Owner approval — **not implemented and not run**:
+
+1. Explicit Owner approval recorded before execution, with an evidence reference
+   and a statement of what is being reconciled (the §9 attempt, provider side
+   confirmed by the Owner).
+2. Preconditions checked by the operation, not by the operator: no
+   `session.enc` and no quarantine artifact; no unknown/processing outbox rows;
+   provider entry confirmed inactive; ownership row is `uncertain` with the
+   expected epoch and fault.
+3. Transition `uncertain → idle` with a **new** epoch, and clear
+   `reconciliation_required` in the same transaction, so any stale holder or
+   stale token is fenced out by the epoch change.
+4. Mandatory audit rows in both directions (`connector.reconciled` and the
+   resulting reservation), and no automatic expiry — a missed approval means the
+   row stays `uncertain`.
+5. A test that proves the operation refuses on wrong epoch, on a dirty outbox,
+   on a present session file and without approval.
+
+I am **not** implementing this now. It is authorization logic, which the Owner
+reserves, and executing it is a separate decision from investigating the
+failure. Until it exists and is approved, any bootstrap preflight will correctly
+refuse.
+
+**Then, in order:** reviewed reconciliation operation → rebuilt image containing
+the reason codes and diagnostic sink → a **new** G5-A authorization with fresh
+UTC bounds (the §9 window is consumed and must not be reused) → one bootstrap
+with the console captured to a `0600` private log and `PILOT_DIAGNOSTIC_FILE`
+set, which will attribute this specific abort instead of leaving it inferred.
+
+### 10.5 Evidence boundary and stop
+
+§10 is **offline analysis plus code and test work**. It contains no provider
+contact, no QR, no session, no account or device identifier beyond the Owner's
+device label, and **no network address**. It does not prove a live outcome, does
+not establish Zalo account behaviour, and does not improve the production
+readiness status, which stays **UNPROVEN**.
+
+The control state has **not** been reset: `connector_ownership` remains
+`uncertain` and `provider_state` still requires reconciliation.
+
+**STOP — `G5A_AWAITING_OWNER_RECONCILIATION`.** No further live action is
+authorized: no QR retry, no `run-observe`, no `run-send-test`, no media, no
+contact discovery, no image rebuild for a live run, no provider contact, no
+production deployment, no PR merge, and no reset of `uncertain`. The next step
+is an Owner decision on the reconciliation operation in §10.4 and, separately, a
+new G5-A authorization.
