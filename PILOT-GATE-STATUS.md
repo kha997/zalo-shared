@@ -14,11 +14,17 @@ the authorization is **consumed** (`G5A_BOOTSTRAP_FAIL`). The earlier
 **Owner reconciliation gate:** `G5A_AWAITING_OWNER_RECONCILIATION` — the
 authorization is consumed, the abort is narrowed but UNPROVEN, and the fenced
 control state needs an Owner-approved, reviewed reconciliation before any
-further preflight can pass
+further preflight can pass. The reviewed operation now exists, but its execution
+preflight is blocked by the missing pilot admin identity (below)
 **Reconciliation implementation (2026-11-04):** `G5A_RECONCILIATION_IMPLEMENTED_AWAITING_OWNER_EXECUTION`
 — a reviewed, single-use operation is implemented and offline-verified; it has
 **not** been executed, the pilot rows are unchanged, and the live allowlist is
 unchanged
+**Reconciliation preflight (2026-11-04):** `G5A_RECONCILIATION_BLOCKED` — the
+`G5A_RECONCILIATION_ONLY` authorization was preflighted read-only; nine of ten
+preconditions passed, but the pilot database has no admin identity (`users=0`,
+`sessions=0`), so admin authentication, CSRF and single-use request identity
+cannot be verified. No mutation, no execution; the pilot rows are unchanged
 **Deployment remediation:** `G5A_DEPLOYMENT_READY_AWAITING_OWNER_START` was met
 before the 2026-11-04 attempt; the deployment remained healthy, the enrollment
 itself did not complete
@@ -34,8 +40,9 @@ itself did not complete
 | `G5_SCOPE_APPROVED_ACTIVATION_PENDING` | **APPROVED IN SCOPE** | [G5-SCOPE-APPROVAL.md](docs/evidence/G5-SCOPE-APPROVAL.md) |
 | `G5A_AWAITING_OWNER_START` | **SUPERSEDED** | Old authorization window invalidated by `G5A_BLOCKED` |
 | `G5A_BOOTSTRAP_VERIFIED` | **FAIL (2026-11-04 attempt)** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §9–§10; the single authorized bootstrap emitted a QR and contacted only `id.zalo.me`, then exited 1 without a session or UID binding. Post-window analysis narrows the abort to the SDK's `checkSession` handshake (redirect to the excluded `chat.zalo.me` refused locally) but does not prove it; the exact gate remains UNPROVEN. The 02:00Z and 14:56Z attempts were `G5A_BLOCKED` before live action |
-| `G5A_AWAITING_OWNER_RECONCILIATION` | **PENDING (Owner gate)** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §10.4; `connector_ownership` is `uncertain` and `provider_state` requires reconciliation. No reviewed path clears `uncertain`; a new reviewed, Owner-approved reconciliation operation is required. Not reset, not executed |
-| `G5A_RECONCILIATION_IMPLEMENTED_AWAITING_OWNER_EXECUTION` | **PENDING (Owner execution gate)** | [G5A-RECONCILIATION-IMPLEMENTATION.md](docs/evidence/G5A-RECONCILIATION-IMPLEMENTATION.md); [test evidence](docs/evidence/G5A-RECONCILIATION-TEST-EVIDENCE.md); [redirect analysis](docs/evidence/G5A-SDK-REDIRECT-ANALYSIS.md); [diagnostics](docs/evidence/G5A-PRIVATE-DIAGNOSTICS-ACCEPTANCE.md); [independent review](docs/evidence/G5A-INDEPENDENT-RECOVERY-REVIEW.md). The operation and diagnostics are implemented and offline-verified; **not executed**, no flag cleared, `chat.zalo.me` not admitted |
+| `G5A_AWAITING_OWNER_RECONCILIATION` | **PENDING (Owner gate)** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §10.4; `connector_ownership` is `uncertain` and `provider_state` requires reconciliation. A reviewed operation now exists, but its execution preflight is blocked by the missing pilot admin identity. Not reset, not executed |
+| `G5A_RECONCILIATION_IMPLEMENTED_AWAITING_OWNER_EXECUTION` | **SUPERSEDED — BLOCKED AT PREFLIGHT** | Implementation and offline verification remain valid; the execution gate was preflighted and blocked by the missing admin identity. See the row below |
+| `G5A_RECONCILIATION_BLOCKED` | **BLOCKED (precondition 8)** | [G5A-RECONCILIATION-PREFLIGHT-BLOCKED.md](docs/evidence/G5A-RECONCILIATION-PREFLIGHT-BLOCKED.md); read-only preflight, 9/10 PASS; `users=0`, `sessions=0`, so admin authentication/CSRF/single-use request identity cannot be verified; **not executed**, pilot rows unchanged |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
 | `R2_EGRESS_ENFORCEMENT_PASS` | **PASS (bootstrap)** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); kernel boundary plus SNI gateway verified; observe/send-test remain functionally blocked until their runtime-only hosts are admitted |
 | `R3_LAN_ISOLATION_PASS` | **PASS (pilot resources)** | [G5A-R3-LAN-ISOLATION.md](docs/evidence/G5A-R3-LAN-ISOLATION.md); host-wide isolation remains UNPROVEN (no independent LAN device, firewall defaults not an explicit deny) |
@@ -239,6 +246,36 @@ The Owner approved implementation and offline verification only.
   live allowlist change, no provider contact, no QR/session, no observe/send,
   no deployment and no merge. The pilot containers remained stopped.
 
+## Controlled reconciliation preflight — 2026-11-04 (read-only, BLOCKED)
+
+The Owner authorized one audited reconciliation (`G5A_RECONCILIATION_ONLY`).
+The ten mandatory preconditions were checked read-only against the dedicated
+pilot database:
+
+- **PASS (nine):** reviewed code and migration identity; dedicated host and
+  database; no connector/SDK/worker; expected `uncertain`/epoch 1/gap 1/provider
+  state; no `session.enc` or quarantine artifact; zero unresolved
+  delivery/provider work; provider session logged out per the Owner device
+  history with no newer local evidence; zero advisory locks; non-mutating
+  rehearsal on a disposable schema.
+- **BLOCKED — precondition 8:** the pilot database has no users and no sessions.
+  The reviewed path requires an authenticated active admin and a CSRF token, so
+  admin authentication and single-use request identity cannot be verified.
+  Creating an admin identity is a control-state mutation and a new credential,
+  outside this authorization. The reviewed operation was therefore **not
+  invoked**.
+- **Rehearsal:** on the disposable database with the exact pilot rows, the
+  operation returns 403 and writes nothing without an admin; with a disposable
+  admin it performs `uncertain → idle`, epoch 1→2, gap 1→2, one audit row, and
+  an identical replay returns `alreadyApplied`. This is synthetic evidence, not
+  live execution.
+
+No write transaction reached the pilot database; every query ran read-only. The
+database container was started only for inspection and returned to `Exited (0)`;
+the egress gateway stayed stopped. No session, QR, connector, provider contact,
+delivery change or SQL override occurred. Details:
+[G5A-RECONCILIATION-PREFLIGHT-BLOCKED.md](docs/evidence/G5A-RECONCILIATION-PREFLIGHT-BLOCKED.md).
+
 ## Incident disclosure
 
 An unauthorised diagnostic probe during this directive contacted `id.zalo.me`
@@ -255,17 +292,19 @@ Exactly one connector account, exactly one allowlisted direct peer, 1–10 outbo
 
 ## Next action
 
-The 2026-11-04 authorization is consumed, not extended, and the report now stops
-at the **Owner Reconciliation Gate**. The remaining blockers are the fenced
-control state and the fact that the abort is narrowed but still UNPROVEN — not
-deployment.
+The 2026-11-04 bootstrap authorization is consumed, not extended. The
+`G5A_RECONCILIATION_ONLY` authorization was preflighted but could not be
+exercised; the remaining blockers are the missing pilot admin identity and the
+fact that the abort is narrowed but still UNPROVEN — not deployment.
 
-1. **Owner execution decision (blocking).** The reviewed reconciliation
-   operation is implemented and offline-verified
-   ([G5A-RECONCILIATION-IMPLEMENTATION.md](docs/evidence/G5A-RECONCILIATION-IMPLEMENTATION.md)).
-   It has **not** been executed: this record does not reset either row. An
-   Owner execution authorization must name the incident (owner, epoch, gap) and
-   the execution environment (which app instance points at the pilot database).
+1. **Provision a pilot admin identity (blocking).** The reviewed reconciliation
+   cannot be authenticated because the pilot database has no users or sessions.
+   The Owner must authorize a dedicated pilot admin identity (credential
+   delivered out of band) or supply an existing authenticated admin session for
+   the pilot environment, then issue a fresh preflight/execution instruction.
+   Name the app instance that will point at the pilot database; the running G2
+   app is isolated from it. Do not reset either row manually and do not place
+   the credential in the repository or evidence.
 2. **Allowlist decision (blocking for a future bootstrap).** The redirect
    hypothesis is supported synthetically but UNPROVEN live. Deciding between
    admitting `chat.zalo.me:443` under the documented redirect policy and the
@@ -300,4 +339,4 @@ G5-B is not authorized. No retry, login, QR generation, observe, send or media
 action is permitted until a new authorization exists, and no control state is
 reset in the meantime.
 
-**STOP — `G5A_RECONCILIATION_IMPLEMENTED_AWAITING_OWNER_EXECUTION`. The reconciliation operation and diagnostics are implemented and offline-verified but not executed; the pilot rows are unchanged; the live allowlist is unchanged; a G5-A execution authorization and a new bootstrap authorization are Owner decisions, and G5-B is not authorized.**
+**STOP — `G5A_RECONCILIATION_BLOCKED`. Nine of ten preconditions pass, but the pilot database has no admin identity, so the reviewed reconciliation cannot be authenticated and was not executed. The pilot rows are unchanged; no session, QR, connector, provider contact, delivery change or SQL override occurred. Provisioning an admin identity and any execution are Owner decisions; the live allowlist is unchanged and G5-B is not authorized.**
