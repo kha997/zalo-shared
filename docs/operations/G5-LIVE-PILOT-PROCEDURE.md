@@ -1,6 +1,6 @@
 # G5 live pilot procedure — activation pending
 
-**Status:** `G5A_NETWORK_BOUNDARY_VERIFIED`; a new G5-A authorization is required before activation. The authoritative state is [PILOT-GATE-STATUS.md](../../PILOT-GATE-STATUS.md).
+**Status:** `G5A_BOOTSTRAP_FAIL` — the 2026-11-04 bootstrap emitted a QR, made no second provider contact and wrote no session; a new G5-A authorization is required before activation. The authoritative state is [PILOT-GATE-STATUS.md](../../PILOT-GATE-STATUS.md) and the live-attempt evidence is [G5A-BOOTSTRAP-REPORT.md](../evidence/G5A-BOOTSTRAP-REPORT.md) §9.
 **Decision record:** [G5-SCOPE-APPROVAL.md](../evidence/G5-SCOPE-APPROVAL.md)
 **Readiness report:** [G5A-ACTIVATION-READINESS.md](../evidence/G5A-ACTIVATION-READINESS.md)
 
@@ -99,4 +99,4 @@ The final summary must state that technical PASS at any stage did not itself aut
 
 ## Current stop point
 
-**STOP — `G5A_NETWORK_BOUNDARY_VERIFIED`.** No live login, QR scan, session write, observation or send may occur until the Owner issues a new G5-A start authorization.
+**STOP — `G5A_BOOTSTRAP_FAIL`.** The 2026-11-04 authorization is consumed. No retry, login, QR generation, session write, observation or send may occur until the Owner issues a new G5-A start authorization; reconciliation of the fenced ownership/provider state and camera-free verification of the phone must be decided first.

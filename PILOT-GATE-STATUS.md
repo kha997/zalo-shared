@@ -1,15 +1,19 @@
 # Pilot gate status
 
-**Date:** 2026-11-03
-**Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; harness fix `b52bc33`; deployment remediation `9d94a26`
+**Date:** 2026-11-04
+**Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; connector source unchanged at the live attempt (`3ceac2b`, `ops/` and evidence only after `2dff06e`); deployment remediation `9d94a26`
 **PR #3:** OPEN, **Draft** (not merged, not deployed)
 **Owner decision:** `G5_SCOPE_APPROVED_ACTIVATION_PENDING` — D1–D7 approved in scope; live activation withheld
-**G5-A authorization:** none current. The `G5A_LIVE_BOOTSTRAP_ONLY` window
-`2026-11-03T14:56:00Z`–`15:26:00Z` was entered and blocked before any live action;
-see §Bootstrap attempt. The earlier `2026-11-03T02:00Z`–`02:30Z` window is invalid
-and was not reused.
-**Live pilot:** **NOT ACTIVATED** — no Zalo login, QR scan, session, real account or external send performed
-**Deployment remediation:** `G5A_DEPLOYMENT_READY_AWAITING_OWNER_START` — D1–D5 PASS with evidence from the actual host; readiness is not authorization
+**G5-A authorization:** the `G5A_LIVE_BOOTSTRAP_ONLY` window
+`2026-11-04T00:46:00Z`–`01:16:00Z` was entered, one bootstrap was started, and
+the authorization is **consumed** (`G5A_BOOTSTRAP_FAIL`). The earlier
+`2026-11-03T14:56Z`–`15:26Z` window was blocked before live action and the
+`2026-11-03T02:00Z`–`02:30Z` window is invalid; neither is reusable.
+**Live pilot:** **NOT ACTIVATED** — one provider contact and one QR emission on
+2026-11-04, no completed login, no session, no real account operation, no send
+**Deployment remediation:** `G5A_DEPLOYMENT_READY_AWAITING_OWNER_START` was met
+before the 2026-11-04 attempt; the deployment remained healthy, the enrollment
+itself did not complete
 
 ## Gates
 
@@ -21,7 +25,7 @@ and was not reused.
 | `G4_PILOT_ACTIVATION_PACKAGE` | **SUPERSEDED IN SCOPE** | [G4-PILOT-ACTIVATION-PACKAGE.md](docs/evidence/G4-PILOT-ACTIVATION-PACKAGE.md); D1–D7 accepted in scope by the G5 decision |
 | `G5_SCOPE_APPROVED_ACTIVATION_PENDING` | **APPROVED IN SCOPE** | [G5-SCOPE-APPROVAL.md](docs/evidence/G5-SCOPE-APPROVAL.md) |
 | `G5A_AWAITING_OWNER_START` | **SUPERSEDED** | Old authorization window invalidated by `G5A_BLOCKED` |
-| `G5A_BOOTSTRAP_VERIFIED` | **BLOCKED** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md); the 02:00Z attempt failed preflight, and the 14:56–15:26Z attempt was blocked on database TLS, undeployed topology and a template-only grant; no live action in either |
+| `G5A_BOOTSTRAP_VERIFIED` | **FAIL (2026-11-04 attempt)** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §9; the single authorized bootstrap emitted a QR and contacted only `id.zalo.me`, then exited 1 without a session or UID binding; abort cause UNPROVEN. The 02:00Z and 14:56Z attempts were `G5A_BLOCKED` before live action |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
 | `R2_EGRESS_ENFORCEMENT_PASS` | **PASS (bootstrap)** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); kernel boundary plus SNI gateway verified; observe/send-test remain functionally blocked until their runtime-only hosts are admitted |
 | `R3_LAN_ISOLATION_PASS` | **PASS (pilot resources)** | [G5A-R3-LAN-ISOLATION.md](docs/evidence/G5A-R3-LAN-ISOLATION.md); host-wide isolation remains UNPROVEN (no independent LAN device, firewall defaults not an explicit deny) |
@@ -112,6 +116,43 @@ Residual and UNPROVEN items are listed in the review: local unsigned images,
 Docker daemon trust, host-wide LAN isolation, runtime-only provider hosts, and
 the fact that no real grant, QR scan or session exchange has been exercised.
 
+## Live bootstrap attempt — 2026-11-04 00:46–01:16Z
+
+The Owner authorized `G5A_LIVE_BOOTSTRAP_ONLY` for that window. This was the
+first attempt with a valid live grant and a deployed boundary.
+
+- **Preflight:** `00:46:58Z`–`00:47:18Z`, **22/22 PASS** — window, three network
+  `Internal` flags, gateway runtime/ports/forwarding/attachment/sole-uplink,
+  exact three-host allowlist, no connector process or container, ownership
+  `idle`, no reconciliation required, private modes, no pre-existing session,
+  enrollment-only consent scope. One checker query was corrected before the
+  final pass; no host control failed.
+- **Grant:** issued `00:48:43Z`, expires `01:14:00Z`, consent `notAfter`
+  `01:16:00Z`, `enroll-session` only, null account, zero peers, 10 parts/day,
+  2 s interval; admitted by the in-image preflight with no network namespace.
+- **One bootstrap:** started `00:54:29Z`. Ownership `reserved` `00:54:31Z`; one
+  gateway `sni_allow` for `id.zalo.me:443` at `00:54:32Z`; `qr.png` written in
+  the `0700` view directory at `00:54:33Z` and copied to the Owner's
+  Windows-visible private path. The connector exited **1** at `00:56:02Z`,
+  fencing ownership to `uncertain` (fault `shutdown`) and clearing the QR.
+  **No session was written and no UID binding was established.** No retry was
+  run, as the authorization forbids automatic QR retries.
+- **Containment:** no residual container or connector process; the only provider
+  destination was the reviewed `id.zalo.me`; no denials; the local QR copy and
+  all temporary QR helpers were deleted; `pilot_send_budget` and
+  `pilot_part_ledger` are empty.
+- **Unproven:** the abort cause (the console stdout was not retained and the
+  container ran with `--rm`), whether the Owner opened or scanned the QR, and
+  whether the official phone is still logged in and operational. The Owner must
+  confirm phone state; there is no session to revoke.
+- **Control state:** `connector_ownership` is `uncertain` and `provider_state`
+  has `reconciliation_required=true`. Both are the fail-closed result of the
+  close path and were not reset; a further G5-A preflight will refuse until the
+  Owner authorizes a reviewed reconciliation.
+
+Details and the required changes are in
+[G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §9.
+
 ## Incident disclosure
 
 An unauthorised diagnostic probe during this directive contacted `id.zalo.me`
@@ -128,25 +169,29 @@ Exactly one connector account, exactly one allowlisted direct peer, 1–10 outbo
 
 ## Next action
 
-The deployment blockers from the failed bootstrap are closed. What remains is the
-Owner's decision, not engineering work:
+The 2026-11-04 authorization is consumed, not extended. The immediate blockers
+are now the un-attributable abort and the fenced control state, not deployment:
 
-1. **New G5-A authorization.** Provide an explicit UTC start and expiry (and the
-   stage: bootstrap only). The deployment now supports the reviewed topology, so
-   the previous failure reasons no longer apply. No activation time has been
-   chosen by this mission.
-2. **Observe/send-test inventory:** authorize a time-bounded observation window,
-   or defer those stages. Their runtime-only service-map and WebSocket hosts
-   cannot be proven offline and currently fail closed.
-3. **LAN evidence (optional):** run one probe from a second physical device, or
-   accept bind-scope evidence with the host firewall recorded as
-   `NotConfigured`.
-4. **Image supply chain (optional):** publish to a trusted registry so a
-   deployed digest can be verified externally.
-5. **Native Linux (not applicable here):** decide whether host-side
-   `DOCKER-USER` rules are required before deploying on a native Linux host.
+1. **Persist connector output.** Any future run must write the connector's
+   stdout/stderr to a `0600` private log so a failure is attributable rather than
+   inferred. The adapter already avoids printing secrets.
+2. **Owner decision on control state.** Authorize and review the reconciliation
+   of `connector_ownership` (`uncertain`) and `provider_state`
+   (`reconciliation_required=true`), or decide that a fresh enrollment does not
+   need it. This report does not reset either.
+3. **Phone state.** The Owner confirms the official phone is still logged in and
+   operational. No session exists to revoke.
+4. **QR handoff rehearsal.** Pre-open the local viewer and rehearse reaching the
+   terminal `confirm` prompt; the QR was copied to the Owner's path with well
+   under the full QR lifetime remaining.
+5. **New G5-A authorization.** Provide a fresh explicit UTC start and expiry for
+   bootstrap only. The previous window cannot be reused.
+6. **Unchanged Owner decisions.** Observe/send-test window (their runtime-only
+   hosts still fail closed), an optional second-device LAN probe, optional
+   registry publication for the unsigned local images, and optional
+   `DOCKER-USER` rules on native Linux.
 
-G5-B is not authorized. No live provider contact, login, QR generation or grant
-is permitted until a new authorization exists.
+G5-B is not authorized. No retry, login, QR generation, observe, send or media
+action is permitted until a new authorization exists.
 
-**STOP — `G5A_DEPLOYMENT_READY_AWAITING_OWNER_START`. A new G5-A authorization is required; G5-B is not authorized.**
+**STOP — `G5A_BOOTSTRAP_FAIL`. The 2026-11-04 authorization is consumed; a new G5-A authorization is required and G5-B is not authorized.**

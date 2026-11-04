@@ -1,13 +1,16 @@
-# G5-A bootstrap report — blocked before live authentication
+# G5-A bootstrap report
 
-**Verdict:** `G5A_BLOCKED`
-**Report date:** 2026-11-03
+**Current verdict:** `G5A_BOOTSTRAP_FAIL` — the 2026-11-04 live enrollment did not
+complete; no session was persisted and no UID binding was established (§9).
+**Attempt history:** 2026-11-03 02:00Z `G5A_BLOCKED` (§1–§7) · 2026-11-03
+14:56Z `G5A_BLOCKED` (§8) · 2026-11-04 00:46Z `G5A_BOOTSTRAP_FAIL` (§9).
+**Report date:** 2026-11-03, extended 2026-11-04
 **Owner authorization:** G5-A only, `2026-11-03T02:00:00.000Z` – `2026-11-03T02:30:00.000Z` (09:00–09:30 Vietnam time)
 **Verified baseline:** `f726a780283a3108cbde6b196c32b3fee423bbc1`
 **Connector artifact source:** `6d199162e8b00d7b4968b6b1fd82450b4387f4df`
 **Connector image:** `zalo-shared-connector:g5-6d199162`, local digest `sha256:6b1f0100017d067f24d18eee53ffbfcffe7562ac3f79fd98283097ef1938d781`
 
-## 1. Outcome
+## 1. Outcome (first attempt, 2026-11-03 02:00Z window)
 
 No live action occurred. The connector was not started, no SDK was imported for
 authentication, no QR was generated or displayed, no session was written, and no
@@ -187,3 +190,159 @@ added on top of it.
 
 **STOP — `G5A_BLOCKED` for this window as well. No live authentication,
 observation, sending, media, production deployment or PR merge is authorized.**
+
+## 9. Third authorization attempt — live bootstrap, 2026-11-04 00:46–01:16Z
+
+**Authorization:** `G5A_LIVE_BOOTSTRAP_ONLY`, window
+`2026-11-04T00:46:00Z`–`2026-11-04T01:16:00Z` (07:46–08:16 Vietnam time),
+scope: one private Zalo A QR enrollment, Owner physically present.
+**Verdict:** `G5A_BOOTSTRAP_FAIL` — the single authorized bootstrap ran and
+produced a QR, but the enrollment did not complete: no session was written and
+no UID binding was established. **Specific abort cause: UNPROVEN** (the console
+stdout of the one container was not retained).
+**Attempts started:** two launcher invocations, of which only the second reached
+the connector or the provider. The first exited in ~3 s on a command-path error
+inside the reviewed image and made no provider contact (no gateway event, no
+ownership change, no QR). It is a launcher defect record, not a QR retry.
+
+### Verified identity at the attempt
+
+| Item | Value |
+| --- | --- |
+| Repository HEAD at attempt | `3ceac2b8203ac63a082fd7ded0d9cfaadcf7a705` |
+| Connector sources | unchanged since reviewed `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; between `2dff06e` and HEAD only `ops/` tooling and evidence documents differ |
+| Connector image | `zalo-shared-connector:g5-local`, image id `sha256:9bced3eba32ae900d427542a03c06275a39acd91e8caa284e433d0ebc8427998` |
+| Embedded build identity | sourceCommit `2dff06e…`, lock `17dcd254…030c9b`, SDK integrity `sha512-pBU0T0/…Ox4pgA==`; `sourceCommitMatches`, `lockMatches`, `sdkMatches` all true |
+| Runtime user | UID 65532 |
+
+### Preflight (mandatory, before grant creation)
+
+Run `00:46:58Z`–`00:47:18Z`. The first pass reported one failing check from a
+UUID/text type error in the checker's ownership query; the query was corrected
+and the preflight re-run before any grant existed. Final result rc=0, **22/22
+PASS**:
+
+- UTC time inside the authorized window;
+- `zalo-shared-pilot-db` `Internal=true`, `zalo-shared-pilot_pilot-egress`
+  `Internal=true`, `zalo-shared-pilot_pilot-uplink` `Internal=false`;
+- `egress-gateway` running, healthy, UID 65532, no published port,
+  `ip_forward=0`, attached only to egress+uplink and the sole uplink member;
+- gateway allowlist exactly `id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me`;
+- no connector container and no host `pilot-connector`/SDK process;
+- ownership `idle` with no owner; no provider state requiring reconciliation;
+- private modes: base `0700` UID 1000, `pilot` `0700` UID 65532, `session.key`
+  `0600` UID 65532, `state` `0700` UID 65532, CA `0644` UID 0;
+- no pre-existing `session.enc`; consent scope `enroll-session` only, null
+  account, zero peers; reviewed allowlist file admits exactly the three hosts.
+
+### Grant
+
+`issuedAt` `2026-11-04T00:48:43Z`, `expiresAt` `2026-11-04T01:14:00Z`,
+consent `notAfter` `2026-11-04T01:16:00Z`, purpose `enroll-session`,
+`expectedAccountId` null, `allowedPeerIds` empty, `maxPartsPerDay` 10,
+`minIntervalMs` 2000. The in-image `preflight`, run with no network namespace,
+returned `"gate":"admitted"` with `"purpose":"enroll-session"`. The grant is
+still in the private directory and is inert after `01:14:00Z`; it was used once.
+
+### Timeline (UTC, 2026-11-04)
+
+| Time | Event |
+| --- | --- |
+| 00:47:18 | mandatory preflight complete, 22/22 PASS |
+| 00:48:43 | enrollment grant issued |
+| 00:48:46 | offline in-image preflight admitted the live grant (no network namespace) |
+| 00:49:33 | first launcher invocation — command-path error in the reviewed image, exit after ~3 s, no provider contact |
+| 00:53:05 | offline compose `preflight` through the same console/TTY path reported `tty stdin=yes stdout=no`, confirming the confirmation prompt would have a TTY; no provider contact |
+| 00:54:29 | corrected launcher start (`bootstrap --acknowledge-pilot-risk`, one instance) |
+| 00:54:31.547 | ownership `reserved`, epoch 1, label `pilot-enrollment`; audit `connector.reserved` |
+| 00:54:32.247 | gateway `sni_allow id.zalo.me:443` (49.213.95.230) from the connector address — the only gateway event of the attempt |
+| 00:54:33 | `qr.png` written `0600` in the `0700` view directory and copied to the Owner's Windows-visible private path; never transmitted, screenshot or uploaded |
+| ~00:55 | local QR copy present; whether the Owner opened or scanned it is **UNPROVEN** |
+| 00:56:01.670 | ownership invalidated to `uncertain` (fault `shutdown`); audit `connector.uncertain` |
+| 00:56:02 | connector process ended, exit code 1 (launcher status file) |
+| 00:56:0x | view directory cleared by the connector; no `session.enc`, no quarantine record |
+| 00:57–01:00 | post-exit verification: no connector container or process, gateway healthy, no further egress |
+
+### Required G5-A outcomes
+
+| Required outcome | Result |
+| --- | --- |
+| Correct QR enrollment for Zalo A | **FAIL** — QR emitted `00:54:33Z`, enrollment not completed |
+| Exact account UID binding | **NOT ESTABLISHED** — no UID was read or confirmed; no UID appears in this report |
+| Encrypted session persistence | **NONE** — no `session.enc` and no `*.quarantine-*`; `session.key` unchanged |
+| Official phone remains usable | **UNPROVEN** — not confirmed by the Owner; no session exists to revoke |
+| Safe connector shutdown | **PASS (containment)** — single process, exit 1, ownership fenced `uncertain`, no residual container/process, QR cleared |
+| Provider contact confined to the reviewed allowlist | **PASS** — one `sni_allow` for `id.zalo.me`; zero denials, zero other destinations |
+| Observe, send-test, media, contact discovery | **NOT STARTED** — not authorized and not invoked |
+| Sanitized evidence and definitive verdict | **COMPLETE** — this section, `G5A_BOOTSTRAP_FAIL` |
+
+### Failure analysis
+
+- `connector_ownership.fault_code='shutdown'` is the generic label the reviewed
+  ownership store writes when any process closes; it does not identify the abort
+  cause.
+- The container ran with `--rm` and its stdout/stderr went only to the console
+  window, which was not captured to a file. The exact abort reason is therefore
+  **UNPROVEN**; no claim is made that Zalo rejected the scan, that the QR
+  expired, or that the Owner's confirmation failed.
+- In the reviewed adapter, a non-zero exit before a session install can follow
+  the QR-expiry event, a decline, an invalid callback, ownership loss, the 120 s
+  deadline, a view failure, a refused or mismatched identity confirmation, or an
+  SDK/API failure. The observed elapsed time (93 s from launcher start) is inside
+  the 120 s deadline, but that alone does not distinguish the other paths.
+- No session record and no quarantine artifact exist, so either the session
+  write never started or it failed before install. No credential was written.
+- The QR was emitted at `00:54:33Z` and the Windows-visible copy existed by
+  ~`00:55Z`, leaving less than the full QR lifetime for the scan and the terminal
+  `confirm` prompt. This is an observation, not an established cause.
+
+### State left behind
+
+- `connector_ownership`: phase `uncertain`, epoch 1, fault `shutdown`, last
+  reservation `00:54:31Z`. `provider_state`: `disconnected` with
+  `reconciliation_required=true`, fault `shutdown`. Both are the fail-closed
+  result of the close path and were **not** reset: the next G5-A preflight will
+  refuse until the Owner decides how to reconcile them.
+- No `session.enc`, no quarantine file, no QR image. `/home/zen/qr-live.png` was
+  deleted, and every temporary QR helper script was removed; the private view
+  directory is empty `0700` UID 65532.
+- `pilot_send_budget` and `pilot_part_ledger` are empty; no message was sent,
+  observed or queued. No observe/send-test workflow ran.
+- The gateway, `pilot-postgres` and the reviewed topology remain running and
+  healthy. No host firewall, routing or Docker daemon setting was changed and the
+  provider allowlist was not expanded.
+- The launcher status file records `start=00:54:29Z end=00:56:02Z exit=1`.
+  The preflight and launcher scripts remain on the private host for
+  reproducibility (SHA-256 `ba6ea247…24c0b` and `0f5b7c7b…7d00e`).
+
+### Residual risks and required changes before a new G5-A authorization
+
+1. **Unattributable abort.** Persist the connector's stdout/stderr to a `0600`
+   private log on any future run, with secrets still excluded by the adapter, so
+   the abort reason can be recorded rather than inferred. This is the single
+   most important change; without it a second failure would again be
+   un-attributable.
+2. **QR handoff timing.** Pre-open the local viewer before starting and rehearse
+   reaching the terminal `confirm` prompt; the QR lifetime did not fit the
+   observed handoff copy latency.
+3. **Owner decision on control state.** `connector_ownership` is `uncertain` and
+   `provider_state` requires reconciliation. Reusing the connector requires an
+   Owner-approved, reviewed reset; this report does not do it.
+4. **Phone state.** The Owner must confirm the official phone is still logged in
+   and operational. No session was created, so there is nothing to revoke.
+5. **Unsigned images and runtime-only hosts** remain as previously recorded
+   residuals. Phone coexistence, QR interoperability and live provider behaviour
+   remain **UNPROVEN**.
+
+### Evidence boundary
+
+§9 is live evidence for one provider contact, one QR emission and one fenced
+shutdown on the Owner's machine. It contains no account UID, peer UID, phone
+number, QR image or data, cookie, token, key or message body, and no console
+transcript of the connector. It does not establish Zalo account behaviour,
+phone coexistence or production readiness. G5-B and G5-C remain **not
+authorized**.
+
+**STOP — `G5A_BOOTSTRAP_FAIL`. The authorization is consumed and must not be
+reused or extended. No retry, observe, send-test, media, production deployment
+or PR merge is authorized; a new G5-A authorization is required.**
