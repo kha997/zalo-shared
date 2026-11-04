@@ -505,3 +505,105 @@ test(
     }
   },
 );
+test("the reconciliation route requires admin, CSRF and the exact fenced epoch", async () => {
+  const database = await isolatedDatabase();
+  const { pool } = database;
+  let app: Awaited<ReturnType<typeof buildApp>> | undefined;
+  try {
+    const email = randomUUID() + "@example.test",
+      password = randomUUID();
+    await seed(pool, { adminEmail: email, adminPassword: password });
+    app = await buildApp({ pool, config: configFromEnv({}) });
+    const login = async (email: string, password: string) => {
+      const r = await app!.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: { email, password },
+      });
+      assert.equal(r.statusCode, 200);
+      return {
+        cookie: String(r.headers["set-cookie"]).split(";")[0],
+        origin: "http://127.0.0.1:3100",
+        "x-csrf-token": r.json().csrfToken,
+      };
+    };
+    const admin = await login(email, password);
+    const ownerId = randomUUID();
+    await pool.query(
+      `UPDATE connector_ownership SET phase='uncertain',owner_id=$1,owner_label='pilot-enrollment',
+         epoch=1,reserved_at=now(),heartbeat_at=now(),uncertain_at=now(),fault_code='shutdown'
+       WHERE account_id=$2`,
+      [ownerId, ACCOUNT],
+    );
+    await pool.query(
+      "UPDATE provider_state SET status='disconnected',reconciliation_required=true,fault_code='shutdown',gap_version=1 WHERE account_id=$1",
+      [ACCOUNT],
+    );
+    const payload = {
+      requestId: randomUUID(),
+      expectedOwnerId: ownerId,
+      expectedOwnerEpoch: "1",
+      expectedGapVersion: "1",
+      evidenceRef: "g5a-owner-decision-2026-11-04",
+      confirmOwnerApproved: true,
+      localState: { sessionFile: "absent", quarantine: "absent" },
+    };
+    assert.equal(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/provider/operations/reconcile",
+          headers: { cookie: admin.cookie, origin: admin.origin },
+          payload,
+        })
+      ).statusCode,
+      403,
+    );
+    const body = { ...payload, requestId: randomUUID() };
+    assert.equal(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/provider/operations/reconcile",
+          headers: admin,
+          payload: { ...body, confirmOwnerApproved: false },
+        })
+      ).statusCode,
+      400,
+    );
+    assert.equal(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/provider/operations/reconcile",
+          headers: admin,
+          payload: { ...body, expectedOwnerEpoch: "2" },
+        })
+      ).statusCode,
+      409,
+    );
+    const applied = await app.inject({
+      method: "POST",
+      url: "/api/provider/operations/reconcile",
+      headers: admin,
+      payload: body,
+    });
+    assert.equal(applied.statusCode, 200);
+    assert.deepEqual(applied.json(), {
+      ok: true,
+      epoch: "2",
+      gapVersion: "2",
+      alreadyApplied: false,
+    });
+    const summary: any = (
+      await app.inject({ url: "/api/provider/operations", headers: admin })
+    ).json();
+    assert.equal(summary.reconciliationRequired, false);
+    assert.equal(summary.gapVersion, "2");
+    assert.equal(summary.owner.phase, "idle");
+    assert.equal(summary.owner.ownerId, null);
+  } finally {
+    await app?.close();
+    await database.close();
+  }
+});

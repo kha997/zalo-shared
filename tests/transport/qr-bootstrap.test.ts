@@ -1,13 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, sep } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { PassThrough } from "node:stream";
+import { pathToFileURL } from "node:url";
 import {
   BOOTSTRAP_STAGES,
   bootstrapPilotSession,
   type BootstrapStage,
+  type PilotReason,
   type TrustedSdkLoader,
 } from "../../adapters/zalo/qr-bootstrap.js";
 import type { OwnershipHandle } from "../../server/connector-ownership.js";
@@ -1466,4 +1469,329 @@ test("the production view refuses when stdio is not interactive", async (t) => {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+const SDK_LOGIN_MESSAGES: Array<[string, PilotReason]> = [
+  ["Cannot get API login version", "login-version-failed"],
+  ["Unable to generate QRCode\nResponse: {\"error\": -1}", "login-qr-generate-failed"],
+  ["Cannot get session, login failed", "login-session-unconfirmed"],
+  ["Can't get account info", "login-userinfo-failed"],
+  ["Can't login", "login-userinfo-failed"],
+  ["An error has occurred.\nResponse: {\"error_code\": 1}", "login-failed"],
+  ["provider detail must not leak", "login-failed"],
+];
+
+test("SDK login rejections map to the exact failing call and never echo provider text", async () => {
+  for (const [message, expected] of SDK_LOGIN_MESSAGES) {
+    const stages: BootstrapStage[] = [];
+    const pending = bootstrapPilotSession({
+      grant: grant(),
+      owner: fakeOwner().handle,
+      view: fakeView().view,
+      sessionStore: fakeStore().store,
+      loader: async () => ({
+        Zalo: class {
+          async loginQR() {
+            throw new Error(message);
+          }
+        },
+      }),
+      signal: new AbortController().signal,
+      onStage: (stage) => stages.push(stage),
+    });
+    pending.catch(() => {});
+    assert.equal(await rejectionCode(pending), expected, message);
+    assert.deepEqual(stages.at(-1), "login-requested", message);
+    assert.equal(stages.includes("login-resolved"), false, message);
+    await assert.rejects(pending, (error: unknown) => {
+      assert.equal((error as Error).message, "SDK facade unavailable");
+      assert.equal((error as Error).message.includes(message.split("\n")[0]), false);
+      return true;
+    });
+  }
+});
+
+test("each supported offline failure stops at a named stage with a closed reason", async () => {
+  type Case = {
+    name: string;
+    code: PilotReason;
+    lastStage: BootstrapStage;
+    absent: BootstrapStage[];
+    run: (onStage: (stage: BootstrapStage) => void) => Promise<unknown>;
+  };
+  const scannedLoader = (
+    state: Counters,
+    build: (state: Counters) => unknown = (state) => fakeApi(state),
+  ) =>
+    fakeLoader(async (callback) => {
+      callback(qrEvent(state));
+      callback(scannedEvent("Synthetic", state));
+      callback(infoEvent());
+      return build(state);
+    }, state);
+  const cases: Case[] = [
+    {
+      name: "redirect rejection",
+      code: "login-session-unconfirmed",
+      lastStage: "login-requested",
+      absent: ["login-resolved", "uid-verified", "identity-confirmed", "cookie-captured", "session-written"],
+      run: (onStage) =>
+        bootstrapPilotSession({
+          grant: grant(),
+          owner: fakeOwner().handle,
+          view: fakeView().view,
+          sessionStore: fakeStore().store,
+          loader: async () => ({
+            Zalo: class {
+              async loginQR() {
+                throw new Error("Cannot get session, login failed");
+              }
+            },
+          }),
+          signal: new AbortController().signal,
+          onStage,
+        }),
+    },
+    {
+      name: "missing device identity",
+      code: "login-info-invalid",
+      lastStage: "uid-verified",
+      absent: ["identity-confirmed", "cookie-captured", "session-written"],
+      run: (onStage) => {
+        const state = counters();
+        return bootstrapPilotSession({
+          grant: grant(),
+          owner: fakeOwner().handle,
+          view: fakeView().view,
+          sessionStore: fakeStore().store,
+          loader: fakeLoader(async (callback) => {
+            callback(qrEvent(state));
+            callback(scannedEvent("Synthetic", state));
+            return fakeApi(state);
+          }, state),
+          signal: new AbortController().signal,
+          onStage,
+        });
+      },
+    },
+    {
+      name: "missing terminal confirmation",
+      code: "identity-declined",
+      lastStage: "uid-verified",
+      absent: ["identity-confirmed", "cookie-captured", "session-written"],
+      run: (onStage) => {
+        const state = counters();
+        return bootstrapPilotSession({
+          grant: grant(),
+          owner: fakeOwner().handle,
+          view: fakeView({ confirm: async () => undefined as any }).view,
+          sessionStore: fakeStore().store,
+          loader: scannedLoader(state),
+          signal: new AbortController().signal,
+          onStage,
+        });
+      },
+    },
+    {
+      name: "invalid terminal confirmation",
+      code: "identity-declined",
+      lastStage: "uid-verified",
+      absent: ["identity-confirmed", "cookie-captured", "session-written"],
+      run: (onStage) => {
+        const state = counters();
+        return bootstrapPilotSession({
+          grant: grant(),
+          owner: fakeOwner().handle,
+          view: fakeView({
+            confirm: async () => {
+              throw new Error("terminal gone");
+            },
+          }).view,
+          sessionStore: fakeStore().store,
+          loader: scannedLoader(state),
+          signal: new AbortController().signal,
+          onStage,
+        });
+      },
+    },
+    {
+      name: "cookie validation failure",
+      code: "cookie-invalid",
+      lastStage: "identity-confirmed",
+      absent: ["cookie-captured", "session-written", "qr-cleared"],
+      run: (onStage) => {
+        const state = counters();
+        return bootstrapPilotSession({
+          grant: grant(),
+          owner: fakeOwner().handle,
+          view: fakeView().view,
+          sessionStore: fakeStore().store,
+          loader: scannedLoader(state, (s) => fakeApi(s, { serialized: {} })),
+          signal: new AbortController().signal,
+          onStage,
+        });
+      },
+    },
+    {
+      name: "encrypted session persistence failure",
+      code: "session-write-failed",
+      lastStage: "cookie-captured",
+      absent: ["session-written", "qr-cleared"],
+      run: (onStage) => {
+        const state = counters();
+        return bootstrapPilotSession({
+          grant: grant(),
+          owner: fakeOwner().handle,
+          view: fakeView().view,
+          sessionStore: fakeStore({
+            write: async () => {
+              throw new Error("disk full");
+            },
+          }).store,
+          loader: scannedLoader(state),
+          signal: new AbortController().signal,
+          onStage,
+        });
+      },
+    },
+    {
+      name: "connector termination during login",
+      code: "aborted",
+      lastStage: "login-requested",
+      absent: ["login-resolved", "identity-confirmed", "cookie-captured", "session-written"],
+      run: (onStage) => {
+        const state = counters();
+        const controller = new AbortController();
+        return bootstrapPilotSession({
+          grant: grant(),
+          owner: fakeOwner().handle,
+          view: fakeView().view,
+          sessionStore: fakeStore().store,
+          loader: fakeLoader((callback) => {
+            callback(qrEvent(state));
+            controller.abort();
+            return new Promise(() => {});
+          }, state),
+          signal: controller.signal,
+          onStage,
+        });
+      },
+    },
+    {
+      name: "connector deadline during login",
+      code: "deadline",
+      lastStage: "qr-shown",
+      absent: ["login-resolved", "identity-confirmed", "cookie-captured", "session-written"],
+      run: (onStage) => {
+        const state = counters();
+        return bootstrapPilotSession({
+          grant: grant(),
+          owner: fakeOwner().handle,
+          view: fakeView().view,
+          sessionStore: fakeStore().store,
+          loader: fakeLoader((callback) => {
+            callback(qrEvent(state));
+            return new Promise(() => {});
+          }, state),
+          signal: new AbortController().signal,
+          deadlineMs: 25,
+          onStage,
+        });
+      },
+    },
+  ];
+  for (const item of cases) {
+    const stages: BootstrapStage[] = [];
+    const pending = item.run((stage) => stages.push(stage));
+    pending.catch(() => {});
+    assert.equal(await rejectionCode(pending), item.code, item.name);
+    assert.equal(stages.at(-1), item.lastStage, item.name);
+    for (const stage of item.absent)
+      assert.equal(stages.includes(stage), false, `${item.name}:${stage}`);
+  }
+});
+
+test("the private diagnostic survives process exit with stages only and no secrets", async () => {
+  const root = await mkdtemp(join(tmpdir(), "zalo-pilot-exit-"));
+  try {
+    const directory = join(root, "state");
+    await ensurePrivateDirectory(directory);
+    const diagnostic = join(directory, "diagnostic.log");
+    const script = join(root, "run.mts");
+    const bootstrapUrl = pathToFileURL(resolve("adapters/zalo/qr-bootstrap.ts")).href;
+    const filesUrl = pathToFileURL(resolve("server/private-pilot-files.ts")).href;
+    const source = [
+      `const { bootstrapPilotSession } = await import(${JSON.stringify(bootstrapUrl)});`,
+      `const { PrivateDiagnosticFile } = await import(${JSON.stringify(filesUrl)});`,
+      `const diagnostic = new PrivateDiagnosticFile({ path: ${JSON.stringify(diagnostic)} });`,
+      `await diagnostic.ready();`,
+      `const stages = [];`,
+      `const owner = { admitted: true, async assertCurrent() {} };`,
+      `const view = { async showPng() {}, async clear() {}, async confirmIdentity() { return true; } };`,
+      `const sessionStore = { async read() { return null; }, async write() {}, async quarantine() {} };`,
+      `const result = await bootstrapPilotSession({`,
+      `  grant: ${JSON.stringify(grant())},`,
+      `  owner, view, sessionStore,`,
+      `  loader: async () => ({ Zalo: class { async loginQR() { throw new Error("Cannot get session, login failed"); } } }),`,
+      `  signal: new AbortController().signal,`,
+      `  onStage: (stage) => { stages.push(stage); },`,
+      `}).then(() => null, (error) => error);`,
+      `for (const stage of stages) await diagnostic.append(stage);`,
+      `await diagnostic.append("failed", result === null ? "internal" : result.code);`,
+      `process.stdout.write(JSON.stringify({ stages, code: result === null ? "none" : result.code }));`,
+    ].join("\n");
+    await writeFile(script, source, { mode: 0o600 });
+    const child = spawnSync(process.execPath, ["--import", "tsx", script], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      timeout: 30_000,
+      // The child must not inherit a database or proxy contract from the runner.
+      env: { ...process.env, NODE_OPTIONS: "" },
+    });
+    assert.equal(child.error, undefined);
+    assert.equal(child.status, 0, child.stderr);
+    const report = JSON.parse(child.stdout);
+    assert.equal(report.code, "login-session-unconfirmed");
+    assert.deepEqual(report.stages, ["owner-checked", "sdk-loaded", "login-requested"]);
+
+    // Read after the child has exited: the diagnostic outlives the process.
+    const text = await readFile(diagnostic, "utf8");
+    assert.match(text, /"stage":"owner-checked"/);
+    assert.match(text, /"stage":"login-requested"/);
+    assert.match(text, /"stage":"failed","reason":"login-session-unconfirmed"/);
+    for (const secret of [sentinelUid, sentinelCookie, eventCookie, "Cannot get session", "synthetic-imei", "synthetic-user-agent"])
+      assert.equal(text.includes(secret), false, secret);
+    if (POSIX) assert.equal((await stat(diagnostic)).mode & 0o777, 0o600);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});test("an abort during an in-flight QR display never reports it as shown", async () => {
+  const state = counters();
+  const stages: BootstrapStage[] = [];
+  const controller = new AbortController();
+  let release: () => void = () => {};
+  const pending = bootstrapPilotSession({
+    grant: grant(),
+    owner: fakeOwner().handle,
+    view: fakeView({
+      show: () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    }).view,
+    sessionStore: fakeStore().store,
+    loader: fakeLoader((callback) => {
+      callback(qrEvent(state));
+      setTimeout(() => {
+        controller.abort();
+        release();
+      }, 10);
+      return new Promise(() => {});
+    }, state),
+    signal: controller.signal,
+    onStage: (stage) => stages.push(stage),
+  });
+  pending.catch(() => {});
+  assert.equal(await rejectionCode(pending), "aborted");
+  assert.equal(stages.includes("qr-shown"), false);
+  assert.equal(stages.includes("scanned"), false);
 });

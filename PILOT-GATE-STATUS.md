@@ -15,6 +15,10 @@ the authorization is **consumed** (`G5A_BOOTSTRAP_FAIL`). The earlier
 authorization is consumed, the abort is narrowed but UNPROVEN, and the fenced
 control state needs an Owner-approved, reviewed reconciliation before any
 further preflight can pass
+**Reconciliation implementation (2026-11-04):** `G5A_RECONCILIATION_IMPLEMENTED_AWAITING_OWNER_EXECUTION`
+— a reviewed, single-use operation is implemented and offline-verified; it has
+**not** been executed, the pilot rows are unchanged, and the live allowlist is
+unchanged
 **Deployment remediation:** `G5A_DEPLOYMENT_READY_AWAITING_OWNER_START` was met
 before the 2026-11-04 attempt; the deployment remained healthy, the enrollment
 itself did not complete
@@ -31,6 +35,7 @@ itself did not complete
 | `G5A_AWAITING_OWNER_START` | **SUPERSEDED** | Old authorization window invalidated by `G5A_BLOCKED` |
 | `G5A_BOOTSTRAP_VERIFIED` | **FAIL (2026-11-04 attempt)** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §9–§10; the single authorized bootstrap emitted a QR and contacted only `id.zalo.me`, then exited 1 without a session or UID binding. Post-window analysis narrows the abort to the SDK's `checkSession` handshake (redirect to the excluded `chat.zalo.me` refused locally) but does not prove it; the exact gate remains UNPROVEN. The 02:00Z and 14:56Z attempts were `G5A_BLOCKED` before live action |
 | `G5A_AWAITING_OWNER_RECONCILIATION` | **PENDING (Owner gate)** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §10.4; `connector_ownership` is `uncertain` and `provider_state` requires reconciliation. No reviewed path clears `uncertain`; a new reviewed, Owner-approved reconciliation operation is required. Not reset, not executed |
+| `G5A_RECONCILIATION_IMPLEMENTED_AWAITING_OWNER_EXECUTION` | **PENDING (Owner execution gate)** | [G5A-RECONCILIATION-IMPLEMENTATION.md](docs/evidence/G5A-RECONCILIATION-IMPLEMENTATION.md); [test evidence](docs/evidence/G5A-RECONCILIATION-TEST-EVIDENCE.md); [redirect analysis](docs/evidence/G5A-SDK-REDIRECT-ANALYSIS.md); [diagnostics](docs/evidence/G5A-PRIVATE-DIAGNOSTICS-ACCEPTANCE.md); [independent review](docs/evidence/G5A-INDEPENDENT-RECOVERY-REVIEW.md). The operation and diagnostics are implemented and offline-verified; **not executed**, no flag cleared, `chat.zalo.me` not admitted |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
 | `R2_EGRESS_ENFORCEMENT_PASS` | **PASS (bootstrap)** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); kernel boundary plus SNI gateway verified; observe/send-test remain functionally blocked until their runtime-only hosts are admitted |
 | `R3_LAN_ISOLATION_PASS` | **PASS (pilot resources)** | [G5A-R3-LAN-ISOLATION.md](docs/evidence/G5A-R3-LAN-ISOLATION.md); host-wide isolation remains UNPROVEN (no independent LAN device, firewall defaults not an explicit deny) |
@@ -196,6 +201,44 @@ first attempt with a valid live grant and a deployed boundary.
 Details and the required changes are in
 [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §9–§10.
 
+## Reconciliation implementation — 2026-11-04 (offline, not executed)
+
+The Owner approved implementation and offline verification only.
+
+- **Operation.** `reconcileUncertainOwnership`
+  (`server/connector-operations.ts`) and
+  `POST /api/provider/operations/reconcile` perform one transactional
+  `uncertain → idle` transition, gated on the exact owner, epoch, gap, provider
+  status, an active admin + CSRF session, absence of a live connector
+  (`73002`) or worker (`73001`), absence of unresolved provider/media work and
+  absence of pending/unknown outbound or part state. Both control rows move
+  together, the gap increments, the previous owner is retained in
+  `last_fenced_*`, one secret-free audit row is written, and a duplicate
+  `requestId` returns the original result without a second write.
+- **Delivery state is never written.** No message, outbox, part, event or media
+  row is touched; nothing is reset, replayed or resent.
+- **Redirect investigation.** Static inspection of the pinned `zca-js@2.2.0`
+  plus synthetic fixtures show the SDK follows any `Location`, the local guard
+  refuses `chat.zalo.me` synchronously before the gateway, and the SDK then
+  reports exactly `Cannot get session, login failed`. This supports the
+  hypothesis but the provider redirect itself remains **UNPROVEN**. A
+  conditional `chat.zalo.me:443` proposal and a no-new-host alternative are
+  documented; **the allowlist is unchanged**.
+- **Diagnostics.** The reason vocabulary grew to 30 codes with four precise
+  login-failure codes; nine failure modes are asserted to stop at a named stage
+  with a closed reason; the private diagnostic is shown to survive process exit
+  without secrets.
+- **Verification.** Typecheck and connector build PASS; the main full run was
+  **353/353 PASS** on Node 24.19.0 with a disposable database. The final tree
+  (354 tests) reports one failure: the known pre-existing load-sensitive
+  loopback test in `pilot-egress-guard`, which passes **23/23** in isolation and
+  passed in the main run; reconciliation 8/8, HTTP 4/4, redirect 5/5, bootstrap
+  31/31. Independent review (**PASS WITH FINDINGS**) is recorded in
+  [G5A-INDEPENDENT-RECOVERY-REVIEW.md](docs/evidence/G5A-INDEPENDENT-RECOVERY-REVIEW.md).
+- **Not done:** no execution against the pilot database, no flag cleared, no
+  live allowlist change, no provider contact, no QR/session, no observe/send,
+  no deployment and no merge. The pilot containers remained stopped.
+
 ## Incident disclosure
 
 An unauthorised diagnostic probe during this directive contacted `id.zalo.me`
@@ -217,31 +260,38 @@ at the **Owner Reconciliation Gate**. The remaining blockers are the fenced
 control state and the fact that the abort is narrowed but still UNPROVEN — not
 deployment.
 
-1. **Owner decision on control state (blocking).** Authorize and review a new
-   reconciliation operation for `connector_ownership` (`uncertain`) and
-   `provider_state` (`reconciliation_required=true`). No reviewed path clears
-   `uncertain` today: re-acquisition requires `idle` and gap acknowledgement
-   requires `idle`/`active`. The proposed shape is in
-   [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §10.4. This
-   record does not reset either row and the operation is not implemented.
-2. **Confirm the provider session (Owner).** The device history already reports
+1. **Owner execution decision (blocking).** The reviewed reconciliation
+   operation is implemented and offline-verified
+   ([G5A-RECONCILIATION-IMPLEMENTATION.md](docs/evidence/G5A-RECONCILIATION-IMPLEMENTATION.md)).
+   It has **not** been executed: this record does not reset either row. An
+   Owner execution authorization must name the incident (owner, epoch, gap) and
+   the execution environment (which app instance points at the pilot database).
+2. **Allowlist decision (blocking for a future bootstrap).** The redirect
+   hypothesis is supported synthetically but UNPROVEN live. Deciding between
+   admitting `chat.zalo.me:443` under the documented redirect policy and the
+   no-new-host polyfill alternative is an Owner decision; neither is deployed
+   and the allowlist is unchanged.
+3. **Confirm the provider session (Owner).** The device history already reports
    the entry logged out in the same minute it was created, so this is a
    confirmation, not a cleanup: verify no active entry remains on the official
    phone. No local session exists to reuse.
-3. **Attribution is implemented, not yet exercised.** Closed reason codes
-   (`server/pilot-reasons.ts`), the CLI `reason` field and the opt-in
-   `PILOT_DIAGNOSTIC_FILE` sink are in the tree with tests. They become useful
-   only in a rebuilt image during the next authorized attempt, with the console
-   also captured to a `0600` private log (never committed).
-4. **Offline regression is in place.** The real `promptConfirmation` (non-TTY
+4. **Attribution is implemented, not yet exercised.** Closed 30-code/15-stage
+   vocabulary (`server/pilot-reasons.ts`), precise login-failure mapping, the
+   CLI `reason` field and the opt-in `PILOT_DIAGNOSTIC_FILE` sink are in the
+   tree with tests. They become useful only in a rebuilt image during the next
+   authorized attempt, with the console also captured to a `0600` private log
+   (never committed).
+5. **Offline regression is in place.** The real `promptConfirmation` (non-TTY
    refusal, literal `confirm` only) and the real private view plus encrypted
    store (confirmed writes, declined writes nothing) are covered. The in-image
    fixture replay belongs to the next authorized build.
-5. **QR handoff rehearsal.** Pre-open the local viewer and rehearse reaching the
-   terminal `confirm` prompt (and typing `confirm`) within the QR lifetime.
-6. **New G5-A authorization.** Provide a fresh explicit UTC start and expiry for
+6. **QR handoff rehearsal.** Pre-open the local viewer and rehearse reaching the
+   terminal `confirm` prompt (and typing `confirm`) within the QR lifetime. The
+   synthetic end-to-end path (QR → scan → prompt → `confirm` → encrypted write →
+   clear) is already covered offline.
+7. **New G5-A authorization.** Provide a fresh explicit UTC start and expiry for
    bootstrap only. The previous window cannot be reused.
-7. **Unchanged Owner decisions.** Observe/send-test window (their runtime-only
+8. **Unchanged Owner decisions.** Observe/send-test window (their runtime-only
    hosts still fail closed), an optional second-device LAN probe, optional
    registry publication for the unsigned local images, and optional
    `DOCKER-USER` rules on native Linux.
@@ -250,4 +300,4 @@ G5-B is not authorized. No retry, login, QR generation, observe, send or media
 action is permitted until a new authorization exists, and no control state is
 reset in the meantime.
 
-**STOP — `G5A_AWAITING_OWNER_RECONCILIATION`. The 2026-11-04 authorization is consumed; reconciliation and a new G5-A authorization are Owner decisions, and G5-B is not authorized.**
+**STOP — `G5A_RECONCILIATION_IMPLEMENTED_AWAITING_OWNER_EXECUTION`. The reconciliation operation and diagnostics are implemented and offline-verified but not executed; the pilot rows are unchanged; the live allowlist is unchanged; a G5-A execution authorization and a new bootstrap authorization are Owner decisions, and G5-B is not authorized.**

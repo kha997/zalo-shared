@@ -1,6 +1,6 @@
 import type pg from "pg";
 import { ACCOUNT, audit } from "./db.js";
-import { MAX_GAP_VERSION } from "./provider-faults.js";
+import { MAX_GAP_VERSION, nextGapVersionSql } from "./provider-faults.js";
 import { recordPartAccepted, reconcileSelfEvents } from "./provider-store.js";
 
 export type OperationActor = { id: string };
@@ -30,6 +30,11 @@ const evidence = (x: unknown): x is string =>
   typeof x === "string" &&
   x.length <= 256 &&
   /^[A-Za-z0-9][A-Za-z0-9_. /#-]*$/.test(x);
+/** Counter that must stay strictly below the terminal version, so it can be bumped. */
+const counter = (x: unknown): x is string =>
+  typeof x === "string" &&
+  /^(0|[1-9][0-9]{0,18})$/.test(x) &&
+  BigInt(x) < BigInt(MAX_GAP_VERSION);
 function shape(value: unknown, keys: string[]) {
   if (
     !value ||
@@ -378,5 +383,206 @@ export async function acknowledgeProviderGap(
       ownerEpoch: input.expectedOwnerEpoch,
       evidenceRef: input.evidenceRef,
     });
+  });
+}
+
+/**
+ * Owner-authorized recovery of a bootstrap fenced as `uncertain`.
+ *
+ * The connector's close path writes `uncertain` + `reconciliation_required`
+ * and only the bootstrap can clear them, but the bootstrap reserves solely from
+ * `idle`. This operation is the reviewed transition between the two. It is
+ * deliberately narrow: the caller must name the exact fenced epoch, owner and
+ * gap version, and it refuses to run while a connector holds the ownership
+ * lock, while any local session or quarantine may exist, or while any provider
+ * or dispatch state is unresolved. It never touches messages, outbox rows or
+ * delivery parts; it only fences the old owner out and re-arms the gate.
+ */
+export async function reconcileUncertainOwnership(
+  db: pg.PoolClient,
+  actor: OperationActor,
+  input: {
+    requestId: string;
+    expectedOwnerId: string;
+    expectedOwnerEpoch: string;
+    expectedGapVersion: string;
+    evidenceRef: string;
+    confirmOwnerApproved: true;
+    localState: { sessionFile: "absent"; quarantine: "absent" };
+  },
+): Promise<{ epoch: string; gapVersion: string; alreadyApplied: boolean }> {
+  return protect(async () => {
+    shape(input, [
+      "requestId",
+      "expectedOwnerId",
+      "expectedOwnerEpoch",
+      "expectedGapVersion",
+      "evidenceRef",
+      "confirmOwnerApproved",
+      "localState",
+    ]);
+    shape(input.localState, ["sessionFile", "quarantine"]);
+    if (
+      !uuid(actor?.id) ||
+      !uuid(input.requestId) ||
+      !uuid(input.expectedOwnerId) ||
+      !counter(input.expectedOwnerEpoch) ||
+      !counter(input.expectedGapVersion) ||
+      !evidence(input.evidenceRef) ||
+      input.confirmOwnerApproved !== true ||
+      input.localState.sessionFile !== "absent" ||
+      input.localState.quarantine !== "absent"
+    )
+      fail(400);
+    const staff = await authorize(db, actor);
+    await workerLock(db);
+    // The bootstrap holds this session lock for its whole lifetime. A
+    // transaction-scoped try-lock therefore proves no connector is live,
+    // including one that has not written its reserved row yet. The two-key
+    // form (73002,1) must match connector-ownership.ts exactly: advisory locks
+    // taken as (int,int) and as a single bigint do not conflict.
+    if (
+      !(await db.query("SELECT pg_try_advisory_xact_lock(73002,1) AS locked"))
+        .rows[0]?.locked
+    )
+      fail(409);
+
+    const state = (
+      await db.query(
+        `SELECT o.phase,o.owner_id,o.epoch::text,o.fault_code,
+           s.reconciliation_required,s.status,s.gap_version::text,s.fault_code provider_fault
+         FROM connector_ownership o JOIN provider_state s ON s.account_id=o.account_id
+         WHERE o.account_id=$1 FOR UPDATE OF o,s`,
+        [ACCOUNT],
+      )
+    ).rows[0];
+    if (!state) fail(409);
+    const nextEpoch = (BigInt(input.expectedOwnerEpoch) + 1n).toString();
+    const nextGap = (BigInt(input.expectedGapVersion) + 1n).toString();
+
+    // A retried request must be the same request and must observe the state its
+    // first application produced. Nothing is written twice.
+    const prior = (
+      await db.query(
+        "SELECT metadata FROM audit WHERE action='connector.reconciled' AND metadata->>'requestId'=$1 ORDER BY id DESC LIMIT 1",
+        [input.requestId],
+      )
+    ).rows[0];
+    if (prior) {
+      const meta = prior.metadata;
+      if (
+        !meta ||
+        meta.ownerId !== input.expectedOwnerId ||
+        meta.epochBefore !== input.expectedOwnerEpoch ||
+        meta.gapVersionBefore !== input.expectedGapVersion ||
+        meta.evidenceRef !== input.evidenceRef ||
+        state.phase !== "idle" ||
+        state.owner_id !== null ||
+        state.epoch !== nextEpoch ||
+        state.reconciliation_required !== false ||
+        state.status !== "disconnected" ||
+        state.gap_version !== nextGap
+      )
+        fail(409);
+      return {
+        epoch: nextEpoch,
+        gapVersion: nextGap,
+        alreadyApplied: true,
+      };
+    }
+
+    if (
+      state.phase !== "uncertain" ||
+      state.owner_id !== input.expectedOwnerId ||
+      state.epoch !== input.expectedOwnerEpoch ||
+      state.reconciliation_required !== true ||
+      state.status !== "disconnected" ||
+      state.gap_version !== input.expectedGapVersion
+    )
+      fail(409);
+
+    const unresolved = await db.query(
+      `SELECT 1 FROM provider_events WHERE account_id=$1 AND (state='held' OR variant_overflow OR variant_evidence_missing OR (conflict AND resolved_at IS NULL)) LIMIT 1`,
+      [ACCOUNT],
+    );
+    const media = await db.query(
+      "SELECT 1 FROM provider_media_jobs WHERE account_id=$1 AND status IN ('held','pending','processing') LIMIT 1",
+      [ACCOUNT],
+    );
+    const dispatchable = await db.query(
+      `SELECT 1 FROM outbox o JOIN messages m ON m.id=o.message_id JOIN conversations c ON c.id=m.conversation_id
+       WHERE c.account_id=$1 AND (o.status IN ('pending','processing','unknown') OR m.status IN ('pending','processing','unknown')) LIMIT 1`,
+      [ACCOUNT],
+    );
+    const parts = await db.query(
+      `SELECT 1 FROM delivery_parts p JOIN messages m ON m.id=p.message_id JOIN conversations c ON c.id=m.conversation_id
+       WHERE c.account_id=$1 AND p.status IN ('pending','processing','unknown') LIMIT 1`,
+      [ACCOUNT],
+    );
+    if (
+      unresolved.rowCount ||
+      media.rowCount ||
+      dispatchable.rowCount ||
+      parts.rowCount
+    )
+      fail(409);
+
+    const owner = await db.query(
+      `UPDATE connector_ownership
+         SET phase='idle',owner_id=NULL,owner_label=NULL,epoch=epoch+1,
+           uncertain_at=NULL,fault_code=NULL,
+           last_fenced_owner_id=$2,last_fenced_epoch=$3,last_fenced_at=now()
+       WHERE account_id=$1 AND phase='uncertain' AND owner_id=$2 AND epoch=$3
+       RETURNING epoch::text`,
+      [ACCOUNT, input.expectedOwnerId, input.expectedOwnerEpoch],
+    );
+    if (owner.rowCount !== 1) fail(409);
+    const provider = await db.query(
+      `UPDATE provider_state
+         SET reconciliation_required=false,fault_code=NULL,status='disconnected',
+           gap_version=${nextGapVersionSql}
+       WHERE account_id=$1 AND gap_version=$2 AND reconciliation_required AND status='disconnected'
+       RETURNING gap_version::text`,
+      [ACCOUNT, input.expectedGapVersion],
+    );
+    if (provider.rowCount !== 1) fail(409);
+
+    const after = (
+      await db.query(
+        `SELECT o.phase,o.owner_id,o.epoch::text,s.reconciliation_required,s.status,s.gap_version::text
+         FROM connector_ownership o JOIN provider_state s ON s.account_id=o.account_id
+         WHERE o.account_id=$1`,
+        [ACCOUNT],
+      )
+    ).rows[0];
+    if (
+      !after ||
+      after.phase !== "idle" ||
+      after.owner_id !== null ||
+      after.epoch !== owner.rows[0].epoch ||
+      after.reconciliation_required !== false ||
+      after.status !== "disconnected" ||
+      after.gap_version !== provider.rows[0].gap_version
+    )
+      fail(409);
+
+    await audit(db, staff, "connector.reconciled", input.expectedOwnerId, {
+      requestId: input.requestId,
+      evidenceRef: input.evidenceRef,
+      ownerId: input.expectedOwnerId,
+      epochBefore: input.expectedOwnerEpoch,
+      epochAfter: owner.rows[0].epoch,
+      gapVersionBefore: input.expectedGapVersion,
+      gapVersionAfter: provider.rows[0].gap_version,
+      faultCode: state.fault_code,
+      providerFault: state.provider_fault,
+      localSessionFile: input.localState.sessionFile,
+      localQuarantine: input.localState.quarantine,
+    });
+    return {
+      epoch: owner.rows[0].epoch,
+      gapVersion: provider.rows[0].gap_version,
+      alreadyApplied: false,
+    };
   });
 }

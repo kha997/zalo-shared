@@ -46,6 +46,26 @@ const ABORT_REASONS: Record<string, PilotReason> = {
   "owner-lost": "owner-lost",
   "view-failed": "view-failed",
 };
+/**
+ * Fixed messages raised by the pinned SDK's loginQR. They are matched exactly
+ * (or as a stable prefix) so the stage can be named without echoing provider
+ * text, which may carry response bodies.
+ */
+const LOGIN_FAILURES: ReadonlyArray<readonly [string, PilotReason]> = [
+  ["Cannot get API login version", "login-version-failed"],
+  ["Unable to generate QRCode", "login-qr-generate-failed"],
+  ["Cannot get session, login failed", "login-session-unconfirmed"],
+  ["Can't get account info", "login-userinfo-failed"],
+  ["Can't login", "login-userinfo-failed"],
+];
+function loginFailureCode(error: unknown): PilotReason {
+  if (!(error instanceof Error)) return "login-failed";
+  for (const [message, code] of LOGIN_FAILURES) {
+    if (error.message === message || error.message.startsWith(message + "\n"))
+      return code;
+  }
+  return "login-failed";
+}
 
 export const QUARANTINE_UNCONFIRMED = "quarantine-unconfirmed";
 export class PilotSessionQuarantineError extends Error {
@@ -315,8 +335,12 @@ export async function bootstrapPilotSession(options: {
           const png = decodePng(data.image);
           qrSeen = true;
           viewTail = viewTail
-            .then(() => (finished || aborted ? undefined : view.showPng(png)))
-            .then(() => stage("qr-shown"))
+            .then(async () => {
+              if (finished || aborted) return;
+              await view.showPng(png);
+              if (finished || aborted) return;
+              stage("qr-shown");
+            })
             .catch(() => {
               viewFailure = true;
               abort("view-failed");
@@ -411,7 +435,7 @@ export async function bootstrapPilotSession(options: {
         // This is the provider-facing failure: loginQR never resolved, so no
         // API exists to dispose and no listener was ever started.
         if (error instanceof PilotBootstrapError) throw error;
-        throw fail("login-failed");
+        throw fail(loginFailureCode(error));
       }
       resolvedApi = api;
       if (aborted || finished) {

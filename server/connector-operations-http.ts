@@ -8,6 +8,7 @@ import {
   confirmUnknownPart,
   resolveKnownConflict,
   acknowledgeProviderGap,
+  reconcileUncertainOwnership,
 } from "./connector-operations.js";
 const uuid = z.string().uuid();
 const version = z
@@ -284,6 +285,22 @@ export function registerConnectorOperations(
       acknowledgeExternalFence: z.literal(true),
     })
     .strict();
+  const reconcile = z
+    .object({
+      requestId: uuid,
+      expectedOwnerId: uuid,
+      expectedOwnerEpoch: version,
+      expectedGapVersion: version,
+      evidenceRef: evidence,
+      confirmOwnerApproved: z.literal(true),
+      localState: z
+        .object({
+          sessionFile: z.literal("absent"),
+          quarantine: z.literal("absent"),
+        })
+        .strict(),
+    })
+    .strict();
   app.post("/api/provider/operations/confirm-part", async (req: any) =>
     secured(req, (db) =>
       confirmUnknownPart(db, req.staff, confirm.parse(req.body)),
@@ -310,6 +327,13 @@ export function registerConnectorOperations(
         fail(409, "Connector fencing state changed or is blocked");
       }
       return { ok: true };
+    }),
+  );
+  app.post("/api/provider/operations/reconcile", async (req: any) =>
+    secured(req, async (db) => {
+      const body = reconcile.parse(req.body);
+      const result = await reconcileUncertainOwnership(db, req.staff, body);
+      return { ok: true, ...result };
     }),
   );
 }
