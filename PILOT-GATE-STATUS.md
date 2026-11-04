@@ -133,7 +133,8 @@ first attempt with a valid live grant and a deployed boundary.
 - **One bootstrap:** started `00:54:29Z`. Ownership `reserved` `00:54:31Z`; one
   gateway `sni_allow` for `id.zalo.me:443` at `00:54:32Z`; `qr.png` written in
   the `0700` view directory at `00:54:33Z` and copied to the Owner's
-  Windows-visible private path. The connector exited **1** at `00:56:02Z`,
+  Windows-visible private path. The Owner scanned the QR and completed the
+  confirmation on the official phone. The connector exited **1** at `00:56:02Z`,
   fencing ownership to `uncertain` (fault `shutdown`) and clearing the QR.
   **No session was written and no UID binding was established.** No retry was
   run, as the authorization forbids automatic QR retries.
@@ -141,10 +142,20 @@ first attempt with a valid live grant and a deployed boundary.
   destination was the reviewed `id.zalo.me`; no denials; the local QR copy and
   all temporary QR helpers were deleted; `pilot_send_budget` and
   `pilot_part_ledger` are empty.
-- **Unproven:** the abort cause (the console stdout was not retained and the
-  container ran with `--rm`), whether the Owner opened or scanned the QR, and
-  whether the official phone is still logged in and operational. The Owner must
-  confirm phone state; there is no session to revoke.
+- **Unproven:** the exact local gate that aborted. Because the phone scan and
+  confirmation succeeded, the provider login resolved; the failure is confined
+  to the post-login local gates (type-4 `imei`/`userAgent` capture, the console
+  `confirm` answer, cookie snapshot, freshness/ownership, session write), all of
+  which fail closed to exit 1. The exit at `00:56:01.670Z` is 27 s before the
+  120 s deadline, so a prompt left waiting for input is excluded. The console
+  output was not retained. The earlier `stdout=no` reading is withdrawn — it
+  measured that diagnostic's own redirection — and a fresh offline check on the
+  same launch path (`05:35:04Z`: host and container stdin/stdout/stderr all TTY,
+  zero provider traffic) removes TTY as a leading candidate.
+- **Confirmed by the Owner:** the QR was scanned and confirmed on the official
+  phone; the phone remains logged in and operational. A provider-side session
+  may therefore exist and must be revoked from the phone; no local credential
+  was read or written.
 - **Control state:** `connector_ownership` is `uncertain` and `provider_state`
   has `reconciliation_required=true`. Both are the fail-closed result of the
   close path and were not reset; a further G5-A preflight will refuse until the
@@ -172,21 +183,26 @@ Exactly one connector account, exactly one allowlisted direct peer, 1–10 outbo
 The 2026-11-04 authorization is consumed, not extended. The immediate blockers
 are now the un-attributable abort and the fenced control state, not deployment:
 
-1. **Persist connector output.** Any future run must write the connector's
-   stdout/stderr to a `0600` private log so a failure is attributable rather than
-   inferred. The adapter already avoids printing secrets.
-2. **Owner decision on control state.** Authorize and review the reconciliation
+1. **Attribute the abort.** Capture the connector console to a `0600` private
+   log (never committed) and add reviewed, non-secret abort reason codes for the
+   post-login gates: the CLI currently collapses every bootstrap failure into
+   `"gate":"unavailable"` (`tools/pilot-connector.ts:374-383`).
+2. **Prove the confirmation path offline.** `tests/transport/qr-bootstrap.test.ts`
+   injects a fake view, so the real `defaultConfirm` TTY gate is untested. Add a
+   non-TTY refusal test and run the synthetic QR fixture end to end in a
+   disposable topology: a `confirm` answer writes the session, a refused answer
+   writes nothing.
+3. **Owner decision on control state.** Authorize and review the reconciliation
    of `connector_ownership` (`uncertain`) and `provider_state`
-   (`reconciliation_required=true`), or decide that a fresh enrollment does not
-   need it. This report does not reset either.
-3. **Phone state.** The Owner confirms the official phone is still logged in and
-   operational. No session exists to revoke.
-4. **QR handoff rehearsal.** Pre-open the local viewer and rehearse reaching the
-   terminal `confirm` prompt; the QR was copied to the Owner's path with well
-   under the full QR lifetime remaining.
-5. **New G5-A authorization.** Provide a fresh explicit UTC start and expiry for
+   (`reconciliation_required=true`). This record does not reset either.
+4. **Revoke the provider session.** The phone confirmation completed a provider
+   login; the Owner logs out that session from the phone's logged-in device list
+   and confirms the phone remains normal. No local session exists to reuse.
+5. **QR handoff rehearsal.** Pre-open the local viewer and rehearse reaching the
+   terminal `confirm` prompt (and typing `confirm`) within the QR lifetime.
+6. **New G5-A authorization.** Provide a fresh explicit UTC start and expiry for
    bootstrap only. The previous window cannot be reused.
-6. **Unchanged Owner decisions.** Observe/send-test window (their runtime-only
+7. **Unchanged Owner decisions.** Observe/send-test window (their runtime-only
    hosts still fail closed), an optional second-device LAN probe, optional
    registry publication for the unsigned local images, and optional
    `DOCKER-USER` rules on native Linux.

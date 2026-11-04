@@ -197,9 +197,10 @@ observation, sending, media, production deployment or PR merge is authorized.**
 `2026-11-04T00:46:00Z`–`2026-11-04T01:16:00Z` (07:46–08:16 Vietnam time),
 scope: one private Zalo A QR enrollment, Owner physically present.
 **Verdict:** `G5A_BOOTSTRAP_FAIL` — the single authorized bootstrap ran and
-produced a QR, but the enrollment did not complete: no session was written and
-no UID binding was established. **Specific abort cause: UNPROVEN** (the console
-stdout of the one container was not retained).
+produced a QR, the Owner scanned and confirmed it on the official phone, but the
+connector did not complete: no session was written and no UID binding was
+established. **Abort cause: local post-login gate, not the provider; the specific
+gate is UNPROVEN** because the one container's console output was not retained.
 **Attempts started:** two launcher invocations, of which only the second reached
 the connector or the provider. The first exited in ~3 s on a command-path error
 inside the reviewed image and made no provider contact (no gateway event, no
@@ -252,12 +253,12 @@ still in the private directory and is inert after `01:14:00Z`; it was used once.
 | 00:48:43 | enrollment grant issued |
 | 00:48:46 | offline in-image preflight admitted the live grant (no network namespace) |
 | 00:49:33 | first launcher invocation — command-path error in the reviewed image, exit after ~3 s, no provider contact |
-| 00:53:05 | offline compose `preflight` through the same console/TTY path reported `tty stdin=yes stdout=no`, confirming the confirmation prompt would have a TTY; no provider contact |
+| 00:53:05 | offline compose `preflight` through the same console path admitted the grant; its `tty` line is not usable because the diagnostic redirected its own stdout |
 | 00:54:29 | corrected launcher start (`bootstrap --acknowledge-pilot-risk`, one instance) |
 | 00:54:31.547 | ownership `reserved`, epoch 1, label `pilot-enrollment`; audit `connector.reserved` |
 | 00:54:32.247 | gateway `sni_allow id.zalo.me:443` (49.213.95.230) from the connector address — the only gateway event of the attempt |
 | 00:54:33 | `qr.png` written `0600` in the `0700` view directory and copied to the Owner's Windows-visible private path; never transmitted, screenshot or uploaded |
-| ~00:55 | local QR copy present; whether the Owner opened or scanned it is **UNPROVEN** |
+| ~00:55 | local QR copy present; the Owner scanned it with the official phone and completed the confirmation on the phone (Owner attestation; exact time not recorded) |
 | 00:56:01.670 | ownership invalidated to `uncertain` (fault `shutdown`); audit `connector.uncertain` |
 | 00:56:02 | connector process ended, exit code 1 (launcher status file) |
 | 00:56:0x | view directory cleared by the connector; no `session.enc`, no quarantine record |
@@ -267,14 +268,23 @@ still in the private directory and is inert after `01:14:00Z`; it was used once.
 
 | Required outcome | Result |
 | --- | --- |
-| Correct QR enrollment for Zalo A | **FAIL** — QR emitted `00:54:33Z`, enrollment not completed |
-| Exact account UID binding | **NOT ESTABLISHED** — no UID was read or confirmed; no UID appears in this report |
+| Correct QR enrollment for Zalo A | **FAIL (local)** — QR emitted `00:54:33Z` and the Owner scanned and confirmed it on the phone; the connector still exited 1 without persisting a session, so no local enrollment exists |
+| Exact account UID binding | **NOT ESTABLISHED** — the connector did not complete its UID confirmation step; no UID was recorded and none appears in this report |
 | Encrypted session persistence | **NONE** — no `session.enc` and no `*.quarantine-*`; `session.key` unchanged |
-| Official phone remains usable | **UNPROVEN** — not confirmed by the Owner; no session exists to revoke |
+| Official phone remains usable | **CONFIRMED BY OWNER** — the official phone remains logged in and operational (Owner attestation, not instrumented) |
 | Safe connector shutdown | **PASS (containment)** — single process, exit 1, ownership fenced `uncertain`, no residual container/process, QR cleared |
 | Provider contact confined to the reviewed allowlist | **PASS** — one `sni_allow` for `id.zalo.me`; zero denials, zero other destinations |
 | Observe, send-test, media, contact discovery | **NOT STARTED** — not authorized and not invoked |
 | Sanitized evidence and definitive verdict | **COMPLETE** — this section, `G5A_BOOTSTRAP_FAIL` |
+
+### Owner attestation
+
+After the window closed, the Owner confirmed two facts that this report did not
+have when §9 was first written: the QR **was scanned and the confirmation was
+completed on the official phone**, and the phone **remains logged in and
+operational**. Both are Owner attestations, not instrumented observations. They
+move phone coexistence from UNPROVEN to confirmed, and they localise the failure
+to the connector's own steps after the provider login resolves.
 
 ### Failure analysis
 
@@ -282,19 +292,46 @@ still in the private directory and is inert after `01:14:00Z`; it was used once.
   ownership store writes when any process closes; it does not identify the abort
   cause.
 - The container ran with `--rm` and its stdout/stderr went only to the console
-  window, which was not captured to a file. The exact abort reason is therefore
-  **UNPROVEN**; no claim is made that Zalo rejected the scan, that the QR
-  expired, or that the Owner's confirmation failed.
-- In the reviewed adapter, a non-zero exit before a session install can follow
-  the QR-expiry event, a decline, an invalid callback, ownership loss, the 120 s
-  deadline, a view failure, a refused or mismatched identity confirmation, or an
-  SDK/API failure. The observed elapsed time (93 s from launcher start) is inside
-  the 120 s deadline, but that alone does not distinguish the other paths.
-- No session record and no quarantine artifact exist, so either the session
-  write never started or it failed before install. No credential was written.
+  window, which was not captured to a file. The specific abort reason therefore
+  remains **UNPROVEN**, but the candidate set is now small.
+- Because the Owner scanned and confirmed, the provider-side login resolved.
+  After that point the reviewed adapter can fail only at one of these
+  fail-closed gates, in order: the UID read and shape check (the grant expects a
+  null account, so a mismatch is impossible), capture of `imei`/`userAgent`
+  (populated only by provider event type 4), `PrivateQrFileView.confirmIdentity`,
+  the cookie-jar snapshot, grant freshness/ownership re-assert, or the encrypted
+  session write. Each throws to the same generic `unavailable`, exits 1 and
+  writes no credential.
+- `defaultConfirm` (server/private-pilot-files.ts:394-417) requires **both**
+  `process.stdin.isTTY` and `process.stdout.isTTY`, then an answer whose trimmed
+  text is exactly `confirm`. It is the only gate that depends on the launch
+  environment rather than on the provider.
+- **An unanswered prompt is excluded.** The process exited at `00:56:01.670Z`,
+  twenty-seven seconds before the 120 s deadline (`00:56:29Z`). A displayed
+  prompt waiting for input would have blocked until the deadline. The failure
+  was therefore a gate that threw or returned `false` immediately after login:
+  the pre-prompt `imei`/`userAgent` capture, an answer other than `confirm`, a
+  post-confirm cookie validation, or the session write.
+- **The earlier TTY reading is withdrawn.** `tty stdin=yes stdout=no` was
+  measured inside a `{ ... } >log 2>&1` block, so it measured that diagnostic's
+  own redirection. A fresh offline check on the same console launch path
+  (`2026-11-04T05:35:04Z`, after the window, with no manifest, grant, SDK or
+  provider contact and zero gateway events) reported host `stdin=yes
+  stdout=yes` and container `stdin`, `stdout` and `stderr` all TTY, compose
+  rc=0. The confirmation gate was therefore satisfiable by this launch method,
+  and TTY is no longer a leading candidate; the failed run's exact environment
+  remains unrecoverable.
+- **A plain stdout capture would not fully attribute the next failure.**
+  `tools/pilot-connector.ts:374-383` collapses every bootstrap failure into one
+  `"gate":"unavailable"` line. A capture would show whether the UID prompt was
+  reached, but not which gate failed afterwards.
+- No session record and no quarantine artifact exist, and the cookie is read
+  only after `confirmIdentity`, so no credential was persisted or handled on
+  disk. The provider may nevertheless hold a session created by the successful
+  phone confirmation; it must be revoked from the phone.
 - The QR was emitted at `00:54:33Z` and the Windows-visible copy existed by
-  ~`00:55Z`, leaving less than the full QR lifetime for the scan and the terminal
-  `confirm` prompt. This is an observation, not an established cause.
+  ~`00:55Z`; the handoff left less than the full QR lifetime for the scan, and
+  the terminal confirmation was a second, separate step.
 
 ### State left behind
 
@@ -305,7 +342,11 @@ still in the private directory and is inert after `01:14:00Z`; it was used once.
   refuse until the Owner decides how to reconcile them.
 - No `session.enc`, no quarantine file, no QR image. `/home/zen/qr-live.png` was
   deleted, and every temporary QR helper script was removed; the private view
-  directory is empty `0700` UID 65532.
+  directory is empty `0700` UID 65532. No cookie or session material was read or
+  written: the adapter reads the cookie jar only after identity confirmation.
+- The phone confirmation completed a provider-side login, so a provider session
+  or device entry may exist even though nothing was persisted locally. It must
+  be revoked from the official phone before another enrollment attempt.
 - `pilot_send_budget` and `pilot_part_ledger` are empty; no message was sent,
   observed or queued. No observe/send-test workflow ran.
 - The gateway, `pilot-postgres` and the reviewed topology remain running and
@@ -315,33 +356,46 @@ still in the private directory and is inert after `01:14:00Z`; it was used once.
   The preflight and launcher scripts remain on the private host for
   reproducibility (SHA-256 `ba6ea247…24c0b` and `0f5b7c7b…7d00e`).
 
-### Residual risks and required changes before a new G5-A authorization
+### Residual risks and safe recovery path
 
-1. **Unattributable abort.** Persist the connector's stdout/stderr to a `0600`
-   private log on any future run, with secrets still excluded by the adapter, so
-   the abort reason can be recorded rather than inferred. This is the single
-   most important change; without it a second failure would again be
-   un-attributable.
-2. **QR handoff timing.** Pre-open the local viewer before starting and rehearse
-   reaching the terminal `confirm` prompt; the QR lifetime did not fit the
-   observed handoff copy latency.
-3. **Owner decision on control state.** `connector_ownership` is `uncertain` and
-   `provider_state` requires reconciliation. Reusing the connector requires an
+1. **Revoke the provider session (Owner, first).** On the official phone, open
+   the logged-in sessions/devices list and log out the session created around
+   the attempt, then confirm the phone still behaves normally. No local session
+   will be reused regardless.
+2. **Attribute the abort.** Capture the connector's console output to a `0600`
+   private log (never committed; it can contain the UID prompt) and add reviewed,
+   non-secret abort reason codes for the post-login gates, because the CLI
+   currently collapses every failure into `"gate":"unavailable"`. Together these
+   make the next failure attributable instead of inferred.
+3. **Prove the confirmation path offline before another live run.** The real
+   `defaultConfirm` TTY gate is not covered by `tests/transport/qr-bootstrap.test.ts`,
+   which injects a fake view. Add a unit test for the non-TTY refusal and run the
+   synthetic QR fixture end to end in a disposable topology, covering both a
+   `confirm` answer that writes the session and a refused answer that writes
+   nothing.
+4. **Rehearse the terminal confirmation.** The phone confirmation and the
+   console prompt are two separate steps; the prompt accepts only the literal
+   word `confirm` and any other answer cancels. Print that instruction before the
+   QR appears and rehearse it in the fixture run.
+5. **Owner decision on control state.** `connector_ownership` is `uncertain` and
+   `provider_state` requires reconciliation. Reusing the connector needs an
    Owner-approved, reviewed reset; this report does not do it.
-4. **Phone state.** The Owner must confirm the official phone is still logged in
-   and operational. No session was created, so there is nothing to revoke.
-5. **Unsigned images and runtime-only hosts** remain as previously recorded
-   residuals. Phone coexistence, QR interoperability and live provider behaviour
-   remain **UNPROVEN**.
+6. **QR handoff rehearsal.** Pre-open the local viewer before starting and
+   rehearse reaching the terminal `confirm` prompt within the QR lifetime; the
+   observed handoff copy latency consumed a large part of that lifetime.
+7. **New G5-A authorization.** A fresh explicit UTC start and expiry for
+   bootstrap only; this window is consumed. Unsigned images and runtime-only
+   provider hosts remain as previously recorded residuals; live account
+   behaviour and production readiness stay **UNPROVEN**.
 
 ### Evidence boundary
 
 §9 is live evidence for one provider contact, one QR emission and one fenced
-shutdown on the Owner's machine. It contains no account UID, peer UID, phone
-number, QR image or data, cookie, token, key or message body, and no console
-transcript of the connector. It does not establish Zalo account behaviour,
-phone coexistence or production readiness. G5-B and G5-C remain **not
-authorized**.
+shutdown on the Owner's machine, plus the Owner's attestation of the phone scan
+and phone state. It contains no account UID, peer UID, phone number, QR image or
+data, cookie, token, key or message body, and no console transcript of the
+connector. It does not instrument phone coexistence, establish Zalo account
+behaviour or production readiness. G5-B and G5-C remain **not authorized**.
 
 **STOP — `G5A_BOOTSTRAP_FAIL`. The authorization is consumed and must not be
 reused or extended. No retry, observe, send-test, media, production deployment
