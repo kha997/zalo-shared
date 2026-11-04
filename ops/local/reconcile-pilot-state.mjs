@@ -1,19 +1,22 @@
 // One-shot executor for the Owner-authorized reconciliation of the failed
 // G5-A bootstrap.
 //
-// It refuses to run outside the supplied UTC window, re-checks the fenced
-// incident and the unresolved-work predicates, authenticates the pilot admin
-// through the reviewed HTTP surface, invokes POST /api/provider/operations/
-// reconcile exactly once with the incident-bound body, then verifies the
-// resulting state through a separate read-only connection. It never retries a
-// POST, never replays a request id it did not create, never prints a
+// It refuses to run before or after the supplied UTC window (after expiry the
+// outcome is `expired` and the authorization is spent), holds a session-level
+// advisory single-flight lock so two drivers can never race, re-checks the
+// fenced incident and the unresolved-work predicates, authenticates the pilot
+// admin through the reviewed HTTP surface, invokes POST /api/provider/
+// operations/reconcile exactly once with the incident-bound body, then verifies
+// the resulting state through a separate read-only connection. It never retries
+// a POST, never replays a request id it did not create, never prints a
 // credential, and exits non-zero on any mismatch.
 import { readFileSync } from "node:fs";
 import { createPool } from "../../dist/server/db.js";
 
+const startedAt = new Date().toISOString();
 const say = (payload) => process.stdout.write(`${JSON.stringify(payload)}\n`);
 const result = (outcome, exitCode, extra = {}) => {
-  say({ ok: exitCode === 0, outcome, ...extra });
+  say({ ok: exitCode === 0, outcome, startedAt, finishedAt: new Date().toISOString(), ...extra });
   process.exitCode = exitCode;
   return exitCode;
 };
@@ -94,12 +97,22 @@ const readCredential = (key) => {
 };
 
 const now = Date.now();
-if (!(now >= notBefore && now < notAfter)) {
+if (now < notBefore) {
   result("outside-window", 2, {
     now: new Date(now).toISOString(),
     notBefore: new Date(notBefore).toISOString(),
     notAfter: new Date(notAfter).toISOString(),
-    message: "no session was opened and no request was sent",
+    message: "the authorized window has not opened; no session was opened and no request was sent",
+  });
+  process.exit(2);
+}
+if (now >= notAfter) {
+  result("expired", 2, {
+    now: new Date(now).toISOString(),
+    notBefore: new Date(notBefore).toISOString(),
+    notAfter: new Date(notAfter).toISOString(),
+    token: "G5A_RECONCILIATION_AUTHORIZATION_EXPIRED",
+    message: "the authorized window expired; nothing was started, sent or executed late",
   });
   process.exit(2);
 }
@@ -173,7 +186,25 @@ let cookie = null;
 let csrf = null;
 let pool;
 let separatePool;
+let lockPool;
+let lockClient;
+let lockPid;
 try {
+  lockPool = createPool(databaseUrl, { max: 1 });
+  lockClient = await lockPool.connect();
+  const lock = (
+    await lockClient.query("SELECT pg_try_advisory_lock(73003,1) AS got, pg_backend_pid() AS pid")
+  ).rows[0];
+  lockPid = lock.pid;
+  if (!lock.got) {
+    result("concurrent-invocation", 3, {
+      message: "another reconciliation driver holds the single-flight lock; nothing was sent",
+    });
+    lockClient.release();
+    await lockPool.end();
+    process.exit(3);
+  }
+
   pool = createPool(databaseUrl, { max: 1 });
   const client = await pool.connect();
   await client.query("BEGIN TRANSACTION READ ONLY");
@@ -187,8 +218,9 @@ try {
   const unresolved = (await client.query(unresolvedQuery, [control?.account_id])).rows[0];
   const concurrency = (
     await client.query(
-      `SELECT (SELECT count(*)::int FROM pg_locks WHERE locktype='advisory') AS advisory_locks,
-              (SELECT count(*)::int FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND state='active') AS other_active_sessions`,
+      `SELECT (SELECT count(*)::int FROM pg_locks WHERE locktype='advisory' AND pid<>$1) AS advisory_locks,
+              (SELECT count(*)::int FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND pid<>$1 AND state='active') AS other_active_sessions`,
+      [lockPid],
     )
   ).rows[0];
   const prior = (
@@ -303,8 +335,9 @@ try {
     ).rows;
     const afterConcurrency = (
       await verifyClient.query(
-        `SELECT (SELECT count(*)::int FROM pg_locks WHERE locktype='advisory') AS advisory_locks,
-                (SELECT count(*)::int FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND state='active') AS other_active_sessions`,
+        `SELECT (SELECT count(*)::int FROM pg_locks WHERE locktype='advisory' AND pid<>$1) AS advisory_locks,
+                (SELECT count(*)::int FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND pid<>$1 AND state='active') AS other_active_sessions`,
+        [lockPid],
       )
     ).rows[0];
     const afterPrior = (
@@ -424,4 +457,9 @@ try {
 } finally {
   await pool?.end().catch(() => {});
   await separatePool?.end().catch(() => {});
+  try {
+    await lockClient?.query("SELECT pg_advisory_unlock(73003,1)");
+  } catch {}
+  lockClient?.release();
+  await lockPool?.end().catch(() => {});
 }

@@ -122,10 +122,50 @@ say "negative: pilot-only guard"
 status=$(run "$tmp/pilot-guard.json" PILOT_RECONCILE_CONFIRM=ONE_SHOT PILOT_RECONCILE_NOT_BEFORE="$past_start" PILOT_RECONCILE_NOT_AFTER="$past_end" PILOT_RECONCILE_EXPECTED_DATABASE=zalo PILOT_RECONCILE_DISPOSABLE=0)
 check "a non-pilot database name in a non-disposable run is refused" 3 "$status"
 
+say "negative: expired authorization"
+expired_start=$(date -u -d "@$((now - 1800))" +%Y-%m-%dT%H:%M:%SZ)
+expired_end=$(date -u -d "@$((now - 1200))" +%Y-%m-%dT%H:%M:%SZ)
+status=$(run "$tmp/expired.json" PILOT_RECONCILE_CONFIRM=ONE_SHOT PILOT_RECONCILE_NOT_BEFORE="$expired_start" PILOT_RECONCILE_NOT_AFTER="$expired_end")
+check "an expired window is refused" 2 "$status"
+check "an expired window reports expiry" '"outcome":"expired"' "$(grep -o '"outcome":"expired"' "$tmp/expired.json" | head -1)"
+check "an expired window sends nothing" 0 "$(psql "$disposable" -tAc 'SELECT count(*) FROM sessions')"
+
+say "negative: concurrent invocation"
+psql "$disposable" -q -c "SELECT pg_advisory_lock(73003,1); SELECT pg_sleep(8)" >/dev/null 2>&1 &
+lock_holder=$!
+sleep 0.5
+status=$(run "$tmp/concurrent.json" PILOT_RECONCILE_CONFIRM=ONE_SHOT PILOT_RECONCILE_NOT_BEFORE="$past_start" PILOT_RECONCILE_NOT_AFTER="$past_end")
+check "a concurrent driver is refused by the single-flight lock" 3 "$status"
+check "a concurrent driver reports the lock refusal" '"outcome":"concurrent-invocation"' "$(grep -o '"outcome":"concurrent-invocation"' "$tmp/concurrent.json")"
+check "a concurrent driver sends nothing" 0 "$(psql "$disposable" -tAc 'SELECT count(*) FROM sessions')"
+wait "$lock_holder" 2>/dev/null || true
+check "no reconciliation happened while the lock was held" 0 "$(psql "$disposable" -tAc "SELECT count(*) FROM audit WHERE action='connector.reconciled'")"
+
+say "negative: host lock and duplicate attempt marker"
+mkdir -p "$tmp/host-lock" "$tmp/attempted"
+( flock -n 9; sleep 8 ) 9>"$tmp/host-lock/reconcile.lock" &
+host_lock=$!
+sleep 0.5
+status=0
+PILOT_RECONCILE_STATE_DIR="$tmp/host-lock" PILOT_RECONCILE_CONFIRM=ONE_SHOT \
+  bash "$repo/ops/local/reconcile-pilot.sh" execute >"$tmp/host-lock.json" 2>&1 || status=$?
+check "a concurrent orchestration is refused by the host lock" 3 "$status"
+check "the host lock refusal is explicit" '"outcome":"concurrent-invocation"' "$(grep -o '"outcome":"concurrent-invocation"' "$tmp/host-lock.json")"
+wait "$host_lock" 2>/dev/null || true
+
+printf '{"outcome":"started"}\n' >"$tmp/attempted/reconcile-attempt.json"
+chmod 0600 "$tmp/attempted/reconcile-attempt.json"
+status=0
+PILOT_RECONCILE_STATE_DIR="$tmp/attempted" PILOT_RECONCILE_CONFIRM=ONE_SHOT \
+  bash "$repo/ops/local/reconcile-pilot.sh" execute >"$tmp/duplicate.json" 2>&1 || status=$?
+check "a recorded attempt blocks a second orchestration" 3 "$status"
+check "the duplicate refusal is explicit" '"outcome":"already-attempted"' "$(grep -o '"outcome":"already-attempted"' "$tmp/duplicate.json")"
+
 say "positive: one applied reconciliation"
 status=$(run "$tmp/applied.json" PILOT_RECONCILE_CONFIRM=ONE_SHOT PILOT_RECONCILE_NOT_BEFORE="$past_start" PILOT_RECONCILE_NOT_AFTER="$past_end")
 check "the driver exits zero" 0 "$status"
 check "the driver reports reconciled" '"outcome":"reconciled"' "$(grep -o '"outcome":"reconciled"' "$tmp/applied.json" | head -1)"
+check "the driver records the start and finish" 2 "$(grep -o '"startedAt"\|"finishedAt"' "$tmp/applied.json" | wc -l | tr -d ' ')"
 check "the state is idle at epoch 2" 'idle|2|false' "$(psql "$disposable" -tAc "SELECT phase||'|'||epoch||'|'||reconciliation_required FROM connector_ownership o JOIN provider_state p USING(account_id)")"
 check "the gap advanced" 2 "$(psql "$disposable" -tAc 'SELECT gap_version FROM provider_state')"
 check "the owner was cleared and fenced" "|$owner|1" "$(psql "$disposable" -tAc "SELECT coalesce(owner_id::text,'')||'|'||coalesce(last_fenced_owner_id::text,'')||'|'||coalesce(last_fenced_epoch::text,'') FROM connector_ownership")"
@@ -150,6 +190,10 @@ status=0
 node "$repo/ops/local/reconcile-report.mjs" "$tmp/blocked.json" "$tmp/report-blocked.md" >"$tmp/token-blocked.json" 2>/dev/null || status=$?
 check "the blocked report exits two" 2 "$status"
 check "the blocked report returns the blocked token" '"token":"G5A_RECONCILIATION_BLOCKED"' "$(grep -o '"token":"G5A_RECONCILIATION_BLOCKED"' "$tmp/token-blocked.json")"
+status=0
+node "$repo/ops/local/reconcile-report.mjs" "$tmp/expired.json" "$tmp/report-expired.md" >"$tmp/token-expired.json" 2>/dev/null || status=$?
+check "the expired report exits two" 2 "$status"
+check "the expired report returns the expiry token" '"token":"G5A_RECONCILIATION_AUTHORIZATION_EXPIRED"' "$(grep -o '"token":"G5A_RECONCILIATION_AUTHORIZATION_EXPIRED"' "$tmp/token-expired.json")"
 
 cp "$tmp/applied.json" /tmp/reconcile-driver-test-applied.json
 cp "$tmp/report.md" /tmp/reconcile-driver-test-report.md

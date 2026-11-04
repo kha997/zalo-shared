@@ -17,12 +17,15 @@ try {
 }
 
 const pass = report.ok === true && (report.outcome === "reconciled" || report.outcome === "reconciled-after-unknown-response");
+const expired = report.outcome === "expired";
 const blocked = ["outside-window", "precondition-failed", "not-applied"].includes(report.outcome);
 const token = pass
   ? "G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION"
-  : blocked
-    ? "G5A_RECONCILIATION_BLOCKED"
-    : "G5A_RECONCILIATION_FAIL_FENCED";
+  : expired
+    ? "G5A_RECONCILIATION_AUTHORIZATION_EXPIRED"
+    : blocked
+      ? "G5A_RECONCILIATION_BLOCKED"
+      : "G5A_RECONCILIATION_FAIL_FENCED";
 
 const cell = (value) => (value === undefined || value === null ? "`null`" : String(value).replace(/\|/g, "\\|"));
 const table = (rows) =>
@@ -41,6 +44,7 @@ lines.push("");
 lines.push(`**Date:** ${new Date().toISOString()}`);
 lines.push("**Authorization:** the Owner's reconciliation execution authorization");
 lines.push("**Authorized window:** `2026-11-05T02:00:00Z`–`2026-11-05T02:20:00Z` (UTC)");
+lines.push(`**Started / finished (UTC):** \`${cell(report.startedAt)}\` / \`${cell(report.finishedAt)}\``);
 lines.push(`**Verdict:** **\`${token}\`**`);
 lines.push(`**Request id:** \`${cell(report.requestId)}\``);
 lines.push(`**Evidence reference:** \`${cell(report.evidenceRef)}\``);
@@ -75,6 +79,7 @@ lines.push("");
 lines.push(
   table([
     ["Outcome", report.outcome],
+    ["Started / finished (UTC)", `${cell(report.startedAt)} / ${cell(report.finishedAt)}`],
     ["HTTP status of the single request", report.responseStatus],
     ["Expected owner / epoch / gap", `${cell(report.expected?.ownerId)} / ${cell(report.expected?.epoch)} / ${cell(report.expected?.gapVersion)}`],
     ["Applied epoch / gap", `${cell(report.response?.epoch ?? po.epoch)} / ${cell(report.response?.gapVersion ?? po.gap_version)}`],
@@ -135,6 +140,10 @@ if (pass) {
   lines.push("The fenced incident is reconciled and the pilot is `idle` with epoch and gap advanced");
   lines.push("monotonically. Any G5-A bootstrap requires a new Owner authorization naming a fresh");
   lines.push("UTC window; the 2026-11-04 authorization remains consumed.");
+} else if (expired) {
+  lines.push("The authorized window expired without an execution. Nothing was started, sent or");
+  lines.push("executed late; the authorization is spent and the control state remains fenced.");
+  lines.push("The Owner must decide whether to issue a new authorization; a late run is forbidden.");
 } else {
   lines.push("No bootstrap, retry or manual control-row change is permitted. The Owner must decide");
   lines.push("the next step from this verdict; a new attempt needs a fresh authorization.");
@@ -145,4 +154,4 @@ writeFileSync(outFile, lines.join("\n"), { mode: 0o644 });
 process.stdout.write(
   `${JSON.stringify({ token, outcome: report.outcome, ok: pass, report: outFile })}\n`,
 );
-process.exitCode = pass ? 0 : blocked ? 2 : 1;
+process.exitCode = pass ? 0 : expired || blocked ? 2 : 1;

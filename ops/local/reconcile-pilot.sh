@@ -30,15 +30,39 @@ db_started=0
 envfile=
 appenv=
 preflight_result=
+state_dir=${PILOT_RECONCILE_STATE_DIR:-$base/pilot-admin}
+attempt_file=$state_dir/reconcile-attempt.json
+lock_file=$state_dir/reconcile.lock
+attempt_written=0
+run_started=
+request_id=
+result_outcome=
+result_token=
 
 say() { printf 'reconcile-pilot: %s\n' "$*"; }
 fail() { printf 'reconcile-pilot: FAIL %s\n' "$*" >&2; exit "${2:-1}"; }
+refuse() { printf '{"ok":false,"outcome":"%s","message":"%s"}\n' "$1" "$2"; exit "$3"; }
 
 [ "$mode" = preflight ] || [ "$mode" = execute ] || fail "mode must be preflight or execute" 3
+[ "$(id -u)" != 0 ] || fail "run as the dedicated non-root pilot user, not root" 3
+[ -d "$state_dir" ] || fail "the private state directory is missing" 3
+
+exec 9>"$lock_file"
+chmod 0600 "$lock_file"
+flock -n 9 || refuse concurrent-invocation "another reconciliation run holds the host lock; nothing was started or sent" 3
+
+finish_marker() {
+  [ "$attempt_written" = 1 ] || return 0
+  local tmp="$state_dir/.attempt-$$"
+  printf '{"startedAt":"%s","finishedAt":"%s","requestId":"%s","outcome":"%s","exitCode":%s,"token":"%s"}\n' \
+    "$run_started" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$request_id" "${result_outcome:-interrupted}" "$1" "${result_token:-}" >"$tmp" &&
+    chmod 0600 "$tmp" && mv -f "$tmp" "$attempt_file" || true
+}
 
 cleanup() {
   local code=$?
   trap - EXIT
+  finish_marker "$code"
   docker rm -f "$app_name" >/dev/null 2>&1 || true
   [ -z "$envfile" ] || rm -f "$envfile"
   [ -z "$appenv" ] || rm -f "$appenv"
@@ -52,14 +76,30 @@ trap cleanup EXIT
 
 if [ "$mode" = execute ]; then
   [ "${PILOT_RECONCILE_CONFIRM:-}" = ONE_SHOT ] || fail "PILOT_RECONCILE_CONFIRM=ONE_SHOT is required" 3
+  if [ -e "$attempt_file" ]; then
+    printf '{"ok":false,"outcome":"already-attempted","attempt":"%s","message":"a previous attempt was recorded; nothing was started or sent and no retry is permitted"}\n' "$attempt_file"
+    exit 3
+  fi
   now=$(date -u +%s)
   start=$(date -u -d "$window_start" +%s)
   end=$(date -u -d "$window_expiry" +%s)
-  if ! [ "$now" -ge "$start" ] || ! [ "$now" -lt "$end" ]; then
-    printf '{"ok":false,"outcome":"outside-window","now":"%s","notBefore":"%s","notAfter":"%s","message":"nothing was started or sent"}\n' \
+  if [ "$now" -lt "$start" ]; then
+    printf '{"ok":false,"outcome":"outside-window","now":"%s","notBefore":"%s","notAfter":"%s","message":"the authorized window has not opened; nothing was started or sent"}\n' \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$window_start" "$window_expiry"
     exit 2
   fi
+  if [ "$now" -ge "$end" ]; then
+    printf '{"ok":false,"outcome":"expired","token":"G5A_RECONCILIATION_AUTHORIZATION_EXPIRED","now":"%s","notAfter":"%s","message":"the authorized window expired; nothing was started or executed late"}\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$window_expiry"
+    exit 2
+  fi
+  request_id=$(cat /proc/sys/kernel/random/uuid)
+  run_started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  ( set -o noclobber; printf '{"startedAt":"%s","requestId":"%s","outcome":"started"}\n' "$run_started" "$request_id" >"$attempt_file" ) ||
+    fail "the single-attempt marker could not be recorded" 3
+  chmod 0600 "$attempt_file"
+  attempt_written=1
+  say "started_utc=$run_started request_id=$request_id"
 fi
 
 say "mode=$mode utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -205,7 +245,6 @@ done
 say "app=ready published_ports=none"
 
 # --- the single request ------------------------------------------------------
-request_id=$(cat /proc/sys/kernel/random/uuid)
 ts=$(date -u +%Y%m%dT%H%M%SZ)
 result="$base/pilot-admin/reconciliation-$ts.json"
 driver_status=0
@@ -234,8 +273,12 @@ stale=$(docker ps -a --format '{{.Names}}' | grep -E 'connector|bootstrap|pilot-
 say "gateway=unchanged connector=none"
 
 # --- report and gate token ---------------------------------------------------
+result_outcome=$(sed -n 's/.*"outcome":"\([^"]*\)".*/\1/p' "$result" | head -1)
+result_outcome=${result_outcome:-unknown}
 report="$repo/docs/evidence/G5A-RECONCILIATION-EXECUTION.md"
 report_status=0
-node "$repo/ops/local/reconcile-report.mjs" "$result" "$report" || report_status=$?
-say "report=$report"
+report_output=$(node "$repo/ops/local/reconcile-report.mjs" "$result" "$report") || report_status=$?
+printf '%s\n' "$report_output"
+result_token=$(printf '%s' "$report_output" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+say "report=$report token=${result_token:-none} finished_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 exit "$report_status"
