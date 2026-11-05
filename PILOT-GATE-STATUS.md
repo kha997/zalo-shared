@@ -1,6 +1,6 @@
 # Pilot gate status
 
-**Date:** 2026-11-04
+**Date:** 2026-11-05
 **Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; connector source unchanged at the live attempt (`3ceac2b`, `ops/` and evidence only after `2dff06e`); deployment remediation `9d94a26`
 **PR #3:** OPEN, **Draft** (not merged, not deployed)
 **Owner decision:** `G5_SCOPE_APPROVED_ACTIVATION_PENDING` — D1–D7 approved in scope; live activation withheld
@@ -11,11 +11,14 @@ the authorization is **consumed** (`G5A_BOOTSTRAP_FAIL`). The earlier
 `2026-11-03T02:00Z`–`02:30Z` window is invalid; neither is reusable.
 **Live pilot:** **NOT ACTIVATED** — one provider contact and one QR emission on
 2026-11-04, no completed login, no session, no real account operation, no send
-**Owner reconciliation gate:** `G5A_AWAITING_OWNER_RECONCILIATION` — the
-authorization is consumed, the abort is narrowed but UNPROVEN, and the fenced
-control state needs an Owner-approved, reviewed reconciliation before any
-further preflight can pass. The reviewed operation now exists; its missing-admin
-preflight blocker is resolved (below)
+**Owner reconciliation gate:** `G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION`
+— the Owner-authorized one-shot restoration executed at `2026-11-05T02:01Z`
+through the reviewed Admin API. `connector_ownership` is `idle`, epoch 2,
+`provider_state` is `disconnected` with `reconciliation_required=false` and gap
+2, and exactly one `connector.reconciled` audit row records the transition
+([G5A-RECONCILIATION-EXECUTION.md](docs/evidence/G5A-RECONCILIATION-EXECUTION.md)).
+The bootstrap abort is still narrowed but UNPROVEN; the next bootstrap is
+blocked only on the redirect decision and a new Owner authorization
 **Pilot admin provisioning (2026-11-04):** `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION`
 — exactly one active pilot admin was created through the reviewed identity model
 and verified through the reviewed login/CSRF/authorization path; the credential
@@ -45,9 +48,10 @@ itself did not complete
 | `G5_SCOPE_APPROVED_ACTIVATION_PENDING` | **APPROVED IN SCOPE** | [G5-SCOPE-APPROVAL.md](docs/evidence/G5-SCOPE-APPROVAL.md) |
 | `G5A_AWAITING_OWNER_START` | **SUPERSEDED** | Old authorization window invalidated by `G5A_BLOCKED` |
 | `G5A_BOOTSTRAP_VERIFIED` | **FAIL (2026-11-04 attempt)** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §9–§10; the single authorized bootstrap emitted a QR and contacted only `id.zalo.me`, then exited 1 without a session or UID binding. Post-window analysis narrows the abort to the SDK's `checkSession` handshake (redirect to the excluded `chat.zalo.me` refused locally) but does not prove it; the exact gate remains UNPROVEN. The 02:00Z and 14:56Z attempts were `G5A_BLOCKED` before live action |
-| `G5A_AWAITING_OWNER_RECONCILIATION` | **PENDING (Owner gate)** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §10.4; `connector_ownership` is `uncertain` and `provider_state` requires reconciliation. The admin prerequisite is now satisfied; the reviewed operation is still not authorized for execution. Not reset, not executed |
-| `G5A_RECONCILIATION_IMPLEMENTED_AWAITING_OWNER_EXECUTION` | **SUPERSEDED — BLOCKED AT PREFLIGHT** | Implementation and offline verification remain valid; the execution gate was preflighted and blocked by the missing admin identity. See the row below |
+| `G5A_AWAITING_OWNER_RECONCILIATION` | **CLEARED (reconciled 2026-11-05)** | Fenced `uncertain` incident reconciled through the reviewed route; see the execution row below |
+| `G5A_RECONCILIATION_IMPLEMENTED_AWAITING_OWNER_EXECUTION` | **SUPERSEDED — EXECUTED** | Implementation and offline verification remained valid; execution followed the Owner's one-shot schedule authorization. See the execution row below |
 | `G5A_RECONCILIATION_BLOCKED` | **CLEARED (admin provisioned)** | [G5A-RECONCILIATION-PREFLIGHT-BLOCKED.md](docs/evidence/G5A-RECONCILIATION-PREFLIGHT-BLOCKED.md); read-only preflight at the time, 9/10 PASS, `users=0`. The blocker was the missing admin identity, resolved by the row below; execution is still not authorized |
+| `G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION` | **PASS (reconciliation)** | [G5A-RECONCILIATION-EXECUTION.md](docs/evidence/G5A-RECONCILIATION-EXECUTION.md); one authenticated request at `2026-11-05T02:01:09.653Z`, HTTP 200, `uncertain → idle`, epoch 1→2, gap 1→2, one `connector.reconciled` audit row (id 9), 20/20 checks, post-state re-read on a separate read-only connection. No retry, replay, SQL override or provider contact |
 | `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION` | **PASS** | [G5A-PILOT-ADMIN-PROVISIONING.md](docs/evidence/G5A-PILOT-ADMIN-PROVISIONING.md); exactly one active admin (`4fd6c034d5e7`), 22/22 pilot auth/CSRF/route checks, 19/19 disposable success-path checks, ownership/provider/delivery rows unchanged. No reconciliation executed |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
 | `R2_EGRESS_ENFORCEMENT_PASS` | **PASS (bootstrap)** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); kernel boundary plus SNI gateway verified; observe/send-test remain functionally blocked until their runtime-only hosts are admitted |
@@ -314,6 +318,41 @@ the missing admin prerequisite.
   stopped. Details and the independent review disposition:
   [G5A-PILOT-ADMIN-PROVISIONING.md](docs/evidence/G5A-PILOT-ADMIN-PROVISIONING.md).
 
+## Controlled reconciliation execution — 2026-11-05 (PASS)
+
+Under the Owner's one-shot schedule authorization, exactly one reconciliation
+ran inside the authorized window `02:00:00Z`–`02:20:00Z`.
+
+- **Path.** A persistent local scheduler (Windows Task Scheduler task
+  `ZaloPilotG5AReconcile`, WSL user `zen`, no elevation) invoked the reviewed
+  driver once. The driver took its own advisory lock (`73003`), re-checked the
+  window before any action, wrote a one-shot attempt marker, authenticated as
+  the pilot admin, obtained a CSRF token and made **one** `POST
+  /api/provider/operations/reconcile` with the expected owner, epoch, gap and
+  `confirmOwnerApproved: true`, then logged out.
+- **Result.** HTTP 200, `outcome=reconciled`, `alreadyApplied=false`,
+  `transportUnknown=false`. Started `02:01:09.653Z`, finished `02:01:10.189Z`.
+  `connector_ownership` moved `uncertain → idle`, epoch 2, owner cleared, fault
+  cleared; `last_fenced_owner_id`/`epoch` retain the incident
+  (`d4729725-…`, 1). `provider_state` is `disconnected`,
+  `reconciliation_required=false`, gap 2. Exactly one `connector.reconciled`
+  audit row (id 9) carries the request id; no message, outbox, delivery, event,
+  media, budget or ledger row was touched.
+- **Verification.** The driver re-read the state on a separate read-only
+  connection; 20/20 checks PASS. An independent read-only re-verification later
+  that morning reproduced the same post-state, `users=1`, `admins=1`,
+  `sessions=0`, zero unresolved work and zero advisory locks.
+- **Containment.** The scheduler self-deleted after the run; the Qoder
+  automation that could re-arm the same operation was removed first. No retry,
+  no replay, no direct SQL, no provider contact, no QR, no connector start, no
+  allowlist change. Credential, driver JSON and logs stayed in the private
+  `pilot-admin` directory (`0600`, outside the repository).
+- **Evidence gap.** The Task Scheduler Operational log is disabled on this host,
+  so the wrapper log (UTC start/end/exit code) is the scheduling record; it is
+  private and not committed. The sanitized report is committed.
+- **Not done:** no G5-A bootstrap, no observe/send-test, no deployment, no PR
+  merge. The egress gateway and database stayed stopped.
+
 ## Incident disclosure
 
 An unauthorised diagnostic probe during this directive contacted `id.zalo.me`
@@ -330,46 +369,33 @@ Exactly one connector account, exactly one allowlisted direct peer, 1–10 outbo
 
 ## Next action
 
-The 2026-11-04 bootstrap authorization is consumed, not extended. The
-`G5A_RECONCILIATION_ONLY` authorization was preflighted and blocked by the
-missing admin identity; that prerequisite is now satisfied
-(`G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION`). The abort is narrowed
-but still UNPROVEN — not deployment.
+The 2026-11-04 bootstrap authorization is consumed, not extended. The fenced
+incident has been reconciled (`G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION`).
+The abort is narrowed but still UNPROVEN.
 
-1. **Execute the reviewed reconciliation (needs a new Owner authorization).**
-   The pilot now has exactly one verified active admin, so
-   `POST /api/provider/operations/reconcile` can be authenticated with a live
-   session and CSRF token. A new instruction must name the operation, the exact
-   expected state (`uncertain`, owner `d4729725-5302-42d6-a4ee-ff55971fbdbb`,
-   epoch 1, gap 1), and a UTC validity window. Use the reviewed route; do not
-   reset either row manually and do not copy the credential into the repository,
-   evidence or CI.
-2. **Allowlist decision (blocking for a future bootstrap).** The redirect
-   hypothesis is supported synthetically but UNPROVEN live. Deciding between
-   admitting `chat.zalo.me:443` under the documented redirect policy and the
-   no-new-host polyfill alternative is an Owner decision; neither is deployed
-   and the allowlist is unchanged.
-3. **Confirm the provider session (Owner).** The device history already reports
+1. **Redirect decision (blocking for a future bootstrap).** The redirect
+   hypothesis is supported synthetically but UNPROVEN live. Readiness work now
+   prepares the exact-host `chat.zalo.me:443` admission together with a
+   one-hop fetch policy, positive and negative regression tests and an
+   independent review; the deployed host configuration is unchanged. Whether
+   that admission ships — or the no-new-host polyfill alternative is preferred
+   — is an **Owner decision**.
+2. **Confirm the provider session (Owner).** The device history already reports
    the entry logged out in the same minute it was created, so this is a
    confirmation, not a cleanup: verify no active entry remains on the official
    phone. No local session exists to reuse.
-4. **Attribution is implemented, not yet exercised.** Closed 30-code/15-stage
+3. **Attribution is implemented, not yet exercised.** Closed 30-code/15-stage
    vocabulary (`server/pilot-reasons.ts`), precise login-failure mapping, the
    CLI `reason` field and the opt-in `PILOT_DIAGNOSTIC_FILE` sink are in the
    tree with tests. They become useful only in a rebuilt image during the next
    authorized attempt, with the console also captured to a `0600` private log
    (never committed).
-5. **Offline regression is in place.** The real `promptConfirmation` (non-TTY
+4. **Offline regression is in place.** The real `promptConfirmation` (non-TTY
    refusal, literal `confirm` only) and the real private view plus encrypted
-   store (confirmed writes, declined writes nothing) are covered. The in-image
-   fixture replay belongs to the next authorized build.
-6. **QR handoff rehearsal.** Pre-open the local viewer and rehearse reaching the
-   terminal `confirm` prompt (and typing `confirm`) within the QR lifetime. The
-   synthetic end-to-end path (QR → scan → prompt → `confirm` → encrypted write →
-   clear) is already covered offline.
-7. **New G5-A authorization.** Provide a fresh explicit UTC start and expiry for
-   bootstrap only. The previous window cannot be reused.
-8. **Unchanged Owner decisions.** Observe/send-test window (their runtime-only
+   store are covered, and the QR handoff rehearsal runs offline.
+5. **New G5-A authorization.** Provide a fresh explicit UTC start and expiry for
+   bootstrap only. The previous windows cannot be reused.
+6. **Unchanged Owner decisions.** Observe/send-test window (their runtime-only
    hosts still fail closed), an optional second-device LAN probe, optional
    registry publication for the unsigned local images, and optional
    `DOCKER-USER` rules on native Linux.
@@ -378,4 +404,9 @@ G5-B is not authorized. No retry, login, QR generation, observe, send or media
 action is permitted until a new authorization exists, and no control state is
 reset in the meantime.
 
-**STOP — `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION`. Exactly one active pilot admin exists and authenticates through the reviewed login, CSRF and admin-authorization path; the credential is private (`0600`, outside the repository). The pilot control rows are unchanged (`uncertain`, epoch 1, gap 1, `reconciliation_required=true`); no reconciliation was invoked, no provider contact, QR, session, connector, delivery change or SQL override occurred. Executing the reviewed reconciliation requires a separate Owner authorization.**
+**STOP — `G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION`. The fenced
+incident is reconciled: ownership is `idle`, epoch 2, provider state
+`disconnected` with `reconciliation_required=false` and gap 2, one audited
+transition, zero unresolved delivery work. No bootstrap is authorized; the
+redirect admission is prepared offline and undeployed, and a new Owner
+authorization is required before any QR, login or provider contact.**
