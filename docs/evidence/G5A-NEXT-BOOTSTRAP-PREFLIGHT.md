@@ -71,10 +71,12 @@ pending.
 | `lockSha256` | `17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b` |
 | `sdkIntegrity` | `sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA==` |
 
-`sourceCommit` equals `HEAD`, so the image contains this readiness change. The
-synthetic bootstrap manifest generated from the same tree carries the same build
-block and was admitted (`"ok":true,"purpose":"enroll-session"`). Without a
-manifest the same image returns `{"command":"dry-run","ok":false,"gate":"denied"}`.
+`sourceCommit` equals the code commit `6d9c0e9`, which is the parent of the
+commit that adds this document; later commits in the tree are documentation
+only. The synthetic bootstrap manifest generated from the same tree carries the
+same build block and was admitted (`"ok":true,"purpose":"enroll-session"`).
+Without a manifest the same image returns
+`{"command":"dry-run","ok":false,"gate":"denied"}`.
 
 The identity layer is now bound to the build argument: `SOURCE_COMMIT` is
 referenced in the `RUN` command, so Docker cannot reuse a `build-identity.json`

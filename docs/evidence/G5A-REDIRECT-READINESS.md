@@ -109,8 +109,9 @@ The full suite is reported in [PILOT-GATE-STATUS.md](../../PILOT-GATE-STATUS.md)
    fourth host, and re-running `check-pilot-network.sh` and
    `verify-deployed-pilot.sh` on the host. The image built from `HEAD` is
    `zalo-shared-connector:g5-ready-6d9c0e9`
-   (`sha256:97513c22ac749982bdda8dd44137bb3f99adaf0eb40e2924547e248715168c84`);
-   the offline checks and the post-reconciliation state are recorded in
+   (`sha256:97513c22ac749982bdda8dd44137bb3f99adaf0eb40e2924547e248715168c84`),
+   built from code commit `6d9c0e9`; later commits are documentation only. The
+   offline checks and the post-reconciliation state are recorded in
    [G5A-NEXT-BOOTSTRAP-PREFLIGHT.md](G5A-NEXT-BOOTSTRAP-PREFLIGHT.md).
 
 ## 6. Decision still required (Owner)
