@@ -35,7 +35,7 @@ DENY_NAME=denied-target.test
 PUBLIC_CANARY=1.1.1.1
 PUBLIC_UDP=8.8.8.8
 IPV6_CANARY=2001:db8::1
-ALLOWLIST=id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me
+ALLOWLIST=$(python3 -c 'import json; print(",".join(e["host"] for e in json.load(open("ops/pilot-egress-allowlist.json", encoding="utf-8"))["admitted"]))')
 
 logdir=$(mktemp -d)
 gateway_stopped=0
@@ -207,14 +207,15 @@ docker logs "$GATEWAY" >"$logdir/gateway-after.log" 2>&1
 python3 - \
   "$logdir" "$egress_internal" "$uplink_members" "$published" "$ip_forward" \
   "$GATEWAY" "$guard_status" "$restarted_health" "$before_lines" "$after_lines" \
-  "$GATEWAY_ADDRESS" "$HOST_BRIDGE" "$EGRESS_NET" "$UPLINK_NET" <<'PY'
+  "$GATEWAY_ADDRESS" "$HOST_BRIDGE" "$EGRESS_NET" "$UPLINK_NET" "$ALLOWLIST" <<'PY'
 import json, os, sys
 
 (logdir, egress_internal, uplink_members, published, ip_forward,
  gateway_name, guard_status, restarted_health, before_lines, after_lines,
- gateway_address, host_bridge, egress_net, uplink_net) = sys.argv[1:15]
+ gateway_address, host_bridge, egress_net, uplink_net,
+ allowlist) = sys.argv[1:16]
 ALLOW, DENY = "pilot-target.test", "denied-target.test"
-ALLOWLIST = "id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me"
+ALLOWLIST = allowlist
 DENIED = "PILOT_EGRESS_DENIED"
 
 def load(label):

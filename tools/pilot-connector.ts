@@ -510,6 +510,12 @@ async function liveBootstrap(input: {
       sessionStore,
       loader: () => import("zca-js"),
       signal: controller.signal,
+      // The same reviewed value the egress guard reads. The SDK fetch policy
+      // narrows the pinned SDK to it and refuses any other redirect.
+      egressHosts: (env.PILOT_EGRESS_HOSTS ?? "")
+        .split(",")
+        .map((host) => host.trim())
+        .filter((host) => host.length > 0),
       onStage: (name) => stage(name),
     });
     stage("completed");

@@ -356,11 +356,11 @@ test("successful bootstrap shows a bounded QR, confirms the UID and writes only 
   assert.equal(record.session.userAgent, "synthetic-user-agent");
   assert.equal(record.session.cookie[0].value, sentinelCookie);
   assert.equal(JSON.stringify(record).includes(eventCookie), false);
-  assert.deepEqual(state.constructorOptions, {
-    logging: false,
-    selfListen: true,
-    checkUpdate: false,
-  });
+  assert.deepEqual(
+    Object.keys(state.constructorOptions as object).sort(),
+    ["checkUpdate", "logging", "polyfill", "selfListen"],
+  );
+  assert.equal(typeof (state.constructorOptions as any).polyfill, "function");
   assert.deepEqual(state.loginOptions, {});
   assert.equal(state.save, 0);
   assert.equal(state.retry, 0);
@@ -368,6 +368,47 @@ test("successful bootstrap shows a bounded QR, confirms the UID and writes only 
   assert.equal(state.starts, 0);
   assert.equal(state.sends, 0);
   assert.equal(state.stops, 1);
+});
+
+test("the bootstrap installs the one-hop fetch policy on the SDK", async () => {
+  const state = counters();
+  const calls: string[] = [];
+  const base = async (url: string) => {
+    calls.push(url);
+    return new Response("ok", { status: 200 });
+  };
+  const loader = fakeLoader(async (callback) => {
+    callback(qrEvent(state));
+    callback(scannedEvent("Synthetic Label", state));
+    callback(infoEvent());
+    return fakeApi(state);
+  }, state);
+
+  await bootstrapPilotSession({
+    grant: grant(),
+    owner: fakeOwner().handle,
+    view: fakeView().view,
+    sessionStore: fakeStore().store,
+    loader,
+    signal: new AbortController().signal,
+    egressHosts: [
+      "id.zalo.me",
+      "wpa.chat.zalo.me",
+      "jr.chat.zalo.me",
+      "chat.zalo.me",
+    ],
+    fetch: base,
+  });
+
+  const options = state.constructorOptions as any;
+  assert.equal(typeof options.polyfill, "function");
+  // The admitted redirect host is never a direct target, even here.
+  await assert.rejects(
+    options.polyfill("https://chat.zalo.me/index.html"),
+    (error: any) => error?.cause?.code === "PILOT_REDIRECT_DENIED",
+  );
+  assert.equal((await options.polyfill("https://id.zalo.me/account")).status, 200);
+  assert.deepEqual(calls, ["https://id.zalo.me/account"]);
 });
 
 test("no callback or default qrPath is ever passed to the SDK", async () => {

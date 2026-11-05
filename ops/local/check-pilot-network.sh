@@ -39,7 +39,7 @@ app_cfg=$(
 )
 
 python3 - "$cfg" "$app_cfg" <<'PY'
-import json, sys
+import json, re, sys
 
 def ok(text):
     print("pilot-network:", text)
@@ -55,9 +55,19 @@ admitted = set(hosts)
 # The allowlist file must be internally consistent before it can be a source of
 # truth for anything.
 assert len(admitted) == len(hosts), "duplicate admitted host"
+redirects = [e for e in allow["admitted"] if e["classification"] == "redirect-target"]
+assert len(redirects) <= 1, redirects
 for entry in allow["admitted"]:
-    assert entry["classification"] == "confirmed-static", entry
+    assert entry["classification"] in ("confirmed-static", "redirect-target"), entry
     assert entry["evidence"], entry
+    assert entry["stages"], entry
+    if entry["classification"] == "redirect-target":
+        # A redirect target is admitted for the bootstrap hop only, never for a
+        # direct request and never on another port.
+        assert entry["stages"] == ["bootstrap"], entry
+        assert entry["port"] == gw["port"], entry
+        assert entry["redirect"]["maxHops"] == 1, entry
+        assert entry["redirect"]["from"].startswith("https://"), entry
 for section in ("pending", "excluded"):
     for entry in allow[section]:
         host = entry.get("host")
@@ -65,6 +75,18 @@ for section in ("pending", "excluded"):
             assert host not in admitted, (section, host)
 ok(f"allowlist v{allow['version']}: {len(hosts)} admitted, "
    f"{len(allow['pending'])} pending classes, {len(allow['excluded'])} excluded")
+
+# The SDK fetch policy must name the same single hop, or the reviewed policy and
+# the code that enforces it have drifted apart.
+policy = open("adapters/zalo/redirect-policy.ts", encoding="utf-8").read()
+if redirects:
+    redirect = redirects[0]
+    assert re.search(r'REDIRECT_HOST\s*=\s*"([^"]+)"', policy).group(1) == redirect["host"], redirect
+    assert re.search(r'CHECK_SESSION_URL\s*=\s*\n?\s*"([^"]+)"', policy).group(1) == redirect["redirect"]["from"], redirect
+    ok(f"redirect policy names the same single hop: {redirect['host']}:{redirect['port']}")
+else:
+    assert "REDIRECT_HOST" in policy
+    ok("no redirect target admitted; the policy still names the refused hop")
 
 # 1. Nothing publishes a port, so the stack adds no inbound exposure.
 for name, s in svc.items():

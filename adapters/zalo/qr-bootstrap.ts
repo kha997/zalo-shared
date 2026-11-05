@@ -8,6 +8,7 @@ import type {
   PrivateSessionStore,
 } from "../../server/private-pilot-files.js";
 import type { PilotGrant } from "../../server/pilot-policy.js";
+import { createBootstrapFetch, type BootstrapFetch } from "./redirect-policy.js";
 
 export type TrustedSdkLoader = () => unknown | Promise<unknown>;
 
@@ -181,6 +182,14 @@ export async function bootstrapPilotSession(options: {
   signal: AbortSignal;
   now?: Date;
   deadlineMs?: number;
+  /**
+   * The reviewed host set, from PILOT_EGRESS_HOSTS. The SDK fetch policy only
+   * reaches these hosts, and only follows a `checkSession` redirect while the
+   * redirect host is present here. An absent list admits no network at all.
+   */
+  egressHosts?: readonly string[];
+  /** Test seam: the base fetch the redirect policy wraps. */
+  fetch?: BootstrapFetch;
   /** Optional sink for the closed stage vocabulary; must never throw outward. */
   onStage?: (stage: BootstrapStage) => void;
 }): Promise<{ boundAccountId: string }> {
@@ -212,7 +221,12 @@ export async function bootstrapPilotSession(options: {
       !signal ||
       typeof signal.aborted !== "boolean" ||
       typeof signal.addEventListener !== "function" ||
-      (options.onStage !== undefined && typeof options.onStage !== "function")
+      (options.onStage !== undefined && typeof options.onStage !== "function") ||
+      (options.egressHosts !== undefined &&
+        (!Array.isArray(options.egressHosts) ||
+          options.egressHosts.length > 32 ||
+          !options.egressHosts.every((host) => typeof host === "string"))) ||
+      (options.fetch !== undefined && typeof options.fetch !== "function")
     )
       throw fail("input-invalid");
     const issuedAt = Date.parse(grant.issuedAt);
@@ -404,12 +418,25 @@ export async function bootstrapPilotSession(options: {
       }
       if (aborted) throw fail(abortCode);
       if (typeof module.Zalo !== "function") throw fail("sdk-invalid");
+      let polyfill: BootstrapFetch;
+      try {
+        polyfill = createBootstrapFetch({
+          fetch:
+            options.fetch ??
+            (globalThis.fetch as unknown as BootstrapFetch),
+          egressHosts: options.egressHosts ?? [],
+        });
+      } catch {
+        // A malformed host set is a configuration fault, not a provider one.
+        throw fail("input-invalid");
+      }
       let instance: any;
       try {
         instance = new (module.Zalo as new (options: unknown) => any)({
           logging: false,
           selfListen: true,
           checkUpdate: false,
+          polyfill,
         });
       } catch {
         throw fail("sdk-invalid");
