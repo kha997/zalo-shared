@@ -8,7 +8,7 @@ import type {
   PrivateSessionStore,
 } from "../../server/private-pilot-files.js";
 import type { PilotGrant } from "../../server/pilot-policy.js";
-import { createBootstrapFetch, type BootstrapFetch } from "./redirect-policy.js";
+import { createBootstrapFetch, type BootstrapFetch, type FetchTransport } from "./redirect-policy.js";
 
 export type TrustedSdkLoader = () => unknown | Promise<unknown>;
 
@@ -189,7 +189,7 @@ export async function bootstrapPilotSession(options: {
    */
   egressHosts?: readonly string[];
   /** Test seam: the base fetch the redirect policy wraps. */
-  fetch?: BootstrapFetch;
+  fetch?: FetchTransport;
   /** Optional sink for the closed stage vocabulary; must never throw outward. */
   onStage?: (stage: BootstrapStage) => void;
 }): Promise<{ boundAccountId: string }> {
@@ -460,9 +460,13 @@ export async function bootstrapPilotSession(options: {
         api = await race(login);
       } catch (error) {
         // This is the provider-facing failure: loginQR never resolved, so no
-        // API exists to dispose and no listener was ever started.
+        // API exists to dispose and no listener was ever started. When the
+        // fetch policy refused a destination, that is the specific cause; the
+        // SDK otherwise masks every failure here as one fixed sentence.
         if (error instanceof PilotBootstrapError) throw error;
-        throw fail(loginFailureCode(error));
+        throw fail(
+          polyfill.denied ? "redirect-denied" : loginFailureCode(error),
+        );
       }
       resolvedApi = api;
       if (aborted || finished) {

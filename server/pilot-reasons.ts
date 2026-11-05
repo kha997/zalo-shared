@@ -20,6 +20,7 @@ export const BOOTSTRAP_REASONS = [
   "login-version-failed",
   "login-qr-generate-failed",
   "login-session-unconfirmed",
+  "redirect-denied",
   "login-userinfo-failed",
   "qr-missing",
   "qr-expired",

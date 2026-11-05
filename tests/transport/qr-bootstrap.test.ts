@@ -411,6 +411,35 @@ test("the bootstrap installs the one-hop fetch policy on the SDK", async () => {
   assert.deepEqual(calls, ["https://id.zalo.me/account"]);
 });
 
+test("a destination the fetch policy refused is attributed as redirect-denied", async () => {
+  const state = counters();
+  const loader = fakeLoader(async () => {
+    await (state.constructorOptions as any)
+      .polyfill("https://chat.zalo.me/index.html")
+      .catch(() => {});
+    throw new Error("Cannot get session, login failed");
+  }, state);
+
+  const code = await rejectionCode(
+    bootstrapPilotSession({
+      grant: grant(),
+      owner: fakeOwner().handle,
+      view: fakeView().view,
+      sessionStore: fakeStore().store,
+      loader,
+      signal: new AbortController().signal,
+      egressHosts: [
+        "id.zalo.me",
+        "wpa.chat.zalo.me",
+        "jr.chat.zalo.me",
+        "chat.zalo.me",
+      ],
+      fetch: async () => new Response("ok", { status: 200 }),
+    }),
+  );
+  assert.equal(code, "redirect-denied");
+});
+
 test("no callback or default qrPath is ever passed to the SDK", async () => {
   const state = counters();
   const loader = fakeLoader(async (callback) => {
@@ -1422,6 +1451,76 @@ test("a real private view and store persist only a confirmed session", async () 
   }
 });
 
+test("the QR handoff rehearsal drives the real terminal confirmation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "zalo-pilot-handoff-"));
+  try {
+    const viewDirectory = join(root, "view");
+    await ensurePrivateDirectory(viewDirectory);
+    const tty = () => {
+      const stream = new PassThrough();
+      Object.defineProperty(stream, "isTTY", { value: true });
+      return stream;
+    };
+
+    const rehearse = async (answer: string) => {
+      const input = tty();
+      const output = tty();
+      let prompt = "";
+      output.on("data", (chunk) => {
+        prompt += chunk.toString();
+      });
+      const state = counters();
+      const loader = fakeLoader(async (callback) => {
+        callback(qrEvent(state));
+        callback(scannedEvent("Synthetic Label", state));
+        callback(infoEvent());
+        return fakeApi(state);
+      }, state);
+      const pending = bootstrapPilotSession({
+        grant: grant(),
+        owner: fakeOwner().handle,
+        view: new PrivateQrFileView({
+          directory: viewDirectory,
+          confirm: (value) =>
+            promptConfirmation(value, {
+              input: input as any,
+              output: output as any,
+            }),
+        }),
+        sessionStore: fakeStore().store,
+        loader,
+        signal: new AbortController().signal,
+      });
+      // The Owner sees the QR file and the prompt before answering.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const beforeAnswer = await readdir(viewDirectory);
+      input.write(answer);
+      const result = await pending.then(
+        (value) => ({ ok: value }),
+        (error) => ({ code: error.code }),
+      );
+      return { result, beforeAnswer, prompt };
+    };
+
+    const accepted = await rehearse("confirm\n");
+    assert.deepEqual(accepted.beforeAnswer, ["qr.png"]);
+    assert.deepEqual(accepted.result, { ok: { boundAccountId: sentinelUid } });
+    assert.match(accepted.prompt, /Confirm this dedicated pilot account\?/);
+    assert.match(accepted.prompt, /Type "confirm" to bind/);
+    assert.equal(accepted.prompt.includes(sentinelUid), true);
+    assert.equal(accepted.prompt.includes(sentinelCookie), false);
+    assert.deepEqual(await readdir(viewDirectory), []);
+
+    // Any other spelling cancels, and the QR never outlives the attempt.
+    const refused = await rehearse("Confirm\n");
+    assert.deepEqual(refused.beforeAnswer, ["qr.png"]);
+    assert.deepEqual(refused.result, { code: "identity-declined" });
+    assert.deepEqual(await readdir(viewDirectory), []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("the private diagnostic log records stages only, never secrets", async () => {
   const root = await mkdtemp(join(tmpdir(), "zalo-pilot-diag-"));
   try {
@@ -1805,7 +1904,9 @@ test("the private diagnostic survives process exit with stages only and no secre
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-});test("an abort during an in-flight QR display never reports it as shown", async () => {
+});
+
+test("an abort during an in-flight QR display never reports it as shown", async () => {
   const state = counters();
   const stages: BootstrapStage[] = [];
   const controller = new AbortController();

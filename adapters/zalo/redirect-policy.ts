@@ -11,12 +11,23 @@
  *
  *   1. a request goes out only to a reviewed provider host, over `https:`,
  *      on port 443, with no userinfo and no IP literal;
- *   2. a `Location` is followed only when it answers the exact `checkSession`
+ *   2. every request is forced to `redirect: "manual"`, so undici cannot
+ *      follow a provider redirect inside fetch where this policy would never
+ *      see it;
+ *   3. a `Location` is followed only when it answers the exact `checkSession`
  *      request, is an absolute `https:` URL for exactly `chat.zalo.me`, and is
- *      followed exactly once;
- *   3. the redirect host is never a direct target — even when the runtime
+ *      followed exactly once; any other 3xx — including a checkSession 3xx
+ *      whose Location cannot be validated — is refused;
+ *   4. the redirect host is never a direct target — even when the runtime
  *      allowlist admits it, the only way in is the validated hop;
- *   4. anything else fails closed with a non-secret code and no URL echo.
+ *   5. anything else fails closed with a non-secret code and no URL echo.
+ *
+ * The hop is bootstrap-scoped in code, not in the network layer. In the
+ * prepared compose, `PILOT_EGRESS_HOSTS` is container-wide, so once this
+ * admission is deployed the guard and gateway admit `chat.zalo.me:443` for the
+ * whole connector process, not only while `bootstrap` runs. Only the bootstrap
+ * path installs this policy; observe and send-test use the SDK facade's own
+ * transport.
  *
  * This is not the enforcement boundary. The Docker network topology and the
  * SNI gateway still decide whether a connection is possible; this only keeps
@@ -28,14 +39,17 @@ export const CHECK_SESSION_URL =
 export const REDIRECT_HOST = "chat.zalo.me";
 export const REDIRECT_DENIED = "PILOT_REDIRECT_DENIED";
 
-export type BootstrapFetch = (
+export type FetchTransport = (
   url: string,
   options?: unknown,
 ) => Promise<Response>;
+/** The transport plus how the policy last behaved, for non-secret attribution. */
+export type BootstrapFetch = FetchTransport & { readonly denied: boolean };
 
-const CHECK_SESSION_ORIGIN = "https://id.zalo.me";
-const CHECK_SESSION_PATH = "/account/checksession";
-const CHECK_SESSION_CONTINUE = "https://chat.zalo.me/index.html";
+const CHECK_SESSION = new URL(CHECK_SESSION_URL);
+const CHECK_SESSION_ORIGIN = CHECK_SESSION.origin;
+const CHECK_SESSION_PATH = CHECK_SESSION.pathname;
+const CHECK_SESSION_CONTINUE = CHECK_SESSION.searchParams.get("continue") ?? "";
 const MAX_URL_LENGTH = 2048;
 const HOST_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const IPV4 = /^\d+(?:\.\d+){3}$/;
@@ -108,7 +122,7 @@ function isCheckSession(url: URL): boolean {
  *                             this code — decides admission.
  */
 export function createBootstrapFetch(options: {
-  fetch: BootstrapFetch;
+  fetch: FetchTransport;
   egressHosts: readonly string[];
 }): BootstrapFetch {
   const base = options?.fetch;
@@ -122,11 +136,23 @@ export function createBootstrapFetch(options: {
   }
   const redirectAdmitted = hosts.includes(REDIRECT_HOST);
   let pending: string | null = null;
+  let refused = false;
+  const refuse = () => {
+    refused = true;
+    return denied();
+  };
 
-  return async function bootstrapFetch(input, init) {
-    const raw = typeof input === "string" ? input : null;
-    if (raw === null) throw denied();
-    const url = target(raw);
+  const bootstrapFetch = async function bootstrapFetch(
+    input: string,
+    init?: unknown,
+  ) {
+    let url: URL;
+    try {
+      if (typeof input !== "string") throw denied();
+      url = target(input);
+    } catch {
+      throw refuse();
+    }
     if (direct.has(url.hostname)) {
       // A direct provider request clears any hop that was not taken, so a
       // stale Location can never authorise a later request.
@@ -140,26 +166,43 @@ export function createBootstrapFetch(options: {
       pending = null;
     } else {
       pending = null;
-      throw denied();
+      throw refuse();
     }
     const checkSession = isCheckSession(url);
-    const response = await base(raw, init);
+    // Manual on every request. With the default mode undici follows a provider
+    // redirect inside fetch, before this wrapper can inspect the response, so
+    // an id.zalo.me endpoint could reach the redirect host without the
+    // validated hop. Manual makes this wrapper the only thing that can
+    // authorise a second request.
+    const requestInit =
+      init && typeof init === "object" && !Array.isArray(init)
+        ? { ...(init as Record<string, unknown>), redirect: "manual" }
+        : { redirect: "manual" };
+    const response = await base(url.href, requestInit);
     const status = (response as { status?: unknown } | null)?.status;
     const headers = (response as { headers?: { get?: unknown } } | null)?.headers;
-    if (
-      checkSession &&
-      typeof status === "number" &&
-      status >= 300 &&
-      status < 400 &&
-      typeof headers?.get === "function"
-    ) {
-      const location = (headers.get as (name: string) => string | null)(
-        "location",
-      );
-      pending = location === null ? null : followableLocation(location);
-    } else {
+    if (typeof status !== "number" || status < 300 || status >= 400) {
       pending = null;
+      return response;
     }
+    pending = null;
+    if (!checkSession || typeof headers?.get !== "function")
+      throw refuse();
+    const location = (headers.get as (name: string) => string | null)(
+      "location",
+    );
+    const hop = location === null ? null : followableLocation(location);
+    // A 3xx the policy cannot validate is a refusal, not an unattributed
+    // provider failure. The SDK follows a returned Location itself, so the
+    // hop is handed back only after it has been checked here.
+    if (hop === null) throw refuse();
+    pending = hop;
     return response;
   };
+
+  Object.defineProperty(bootstrapFetch, "denied", {
+    get: () => refused,
+    enumerable: false,
+  });
+  return bootstrapFetch as BootstrapFetch;
 }

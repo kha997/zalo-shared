@@ -142,7 +142,9 @@ follow would have to be constrained by the connector's fetch layer (the SDK's
 `polyfill` option) before the guard ever sees a socket:
 
 1. Only a `3xx` response to the exact origin and path
-   `https://id.zalo.me/account/checksession` may be followed.
+   `https://id.zalo.me/account/checksession` may be followed. Every request is
+   force-set to `redirect: "manual"` so undici cannot follow a redirect inside
+   `fetch` where the policy would not see it.
 2. The `Location` must parse as an **absolute `https:` URL** with host exactly
    `chat.zalo.me` and port empty or `443`. No userinfo, no IP literal, no
    trailing dot, no other scheme, no relative target.
@@ -150,8 +152,8 @@ follow would have to be constrained by the connector's fetch layer (the SDK's
    other host — including back to `id.zalo.me` — ends the request as a failure.
 4. The admitted set for this request is a single origin. Wildcards, suffix
    matching, `*.zalo.me` and "any host seen in a 3xx" are prohibited.
-5. Any deviation fails closed with the same non-secret `login-session-unconfirmed`
-   reason and never echoes the `Location`.
+5. Any deviation fails closed with the non-secret `redirect-denied` reason and
+   never echoes the `Location`.
 
 The network layers stay independent: even with the host admitted, the internal
 Docker topology and the SNI gateway still decide whether the connection is
@@ -236,15 +238,20 @@ unusable, the alternative fails closed at `login-session-unconfirmed` or a
 later gate and admission of `chat.zalo.me:443` becomes the evidence-based
 fallback.
 
-## 6. What was and was not changed
+## 6. What was changed, and what is deployed
 
 | Item | State |
 | --- | --- |
-| `ops/pilot-egress-allowlist.json` | **unchanged** (`chat.zalo.me` remains `excluded`; redirect class remains `pending`) |
-| `ops/pilot-compose.example.yml`, deployed gateway, `PILOT_EGRESS_HOSTS` | **unchanged** |
-| SDK pin, `adapters/zalo/sdk-facade.ts`, guard | **unchanged** for this analysis; only the bootstrap reason vocabulary and attribution changed |
+| `ops/pilot-egress-allowlist.json` | **modified in the repository, not deployed.** `chat.zalo.me` is `admitted` as `redirect-target`, port 443, stage `bootstrap`; see [G5A-REDIRECT-READINESS.md](G5A-REDIRECT-READINESS.md) |
+| `ops/pilot-compose.example.yml`, deployed gateway, `PILOT_EGRESS_HOSTS` | **modified in the repository, not deployed.** The running stack still has the three-host policy |
+| SDK pin, `adapters/zalo/sdk-facade.ts`, guard logic | unchanged; the bootstrap path gains a fetch policy in `adapters/zalo/redirect-policy.ts` |
 | Provider contact | **none** |
 | Live allowlist | **not modified** |
+
+The proposal in §5 is implemented offline; the admission becomes reachable only
+when the Owner decides and the stack is rebuilt. Until then the deployed
+behaviour is exactly the 2026-11-04 behaviour: `chat.zalo.me` is refused before
+any socket.
 
 ## 7. Verdict
 
@@ -258,9 +265,10 @@ writes no session. This is consistent with every recorded fact of the
 **Unproven (live):** the actual provider `302` was not observed. No conclusion
 about the provider's redirect target is recorded as fact.
 
-**Not authorized:** admitting `chat.zalo.me:443`, the no-follow polyfill, or
-any live retry. Each requires a separate Owner decision and, for the host, the
-negative tests and independent review above.
+**Not deployed:** admitting `chat.zalo.me:443` is prepared in the repository and
+reviewed, but the running stack and the live allowlist are unchanged. The
+no-follow polyfill and any live retry also require a separate Owner decision.
 
-**STOP — `G5A_RECONCILIATION_IMPLEMENTED_AWAITING_OWNER_EXECUTION` for the
-allowlist question; no G5-A live authorization is current.**
+**STOP — `G5A_NEXT_BOOTSTRAP_READY_AWAITING_OWNER_START` pending the Owner's
+allowlist decision and a new UTC authorization; no G5-A live authorization is
+current.**

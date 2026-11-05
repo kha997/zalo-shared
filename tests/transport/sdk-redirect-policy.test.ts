@@ -222,7 +222,7 @@ test("the redirect host is never a direct request target", async () => {
   assert.deepEqual(calls, []);
 });
 
-test("a 3xx that is not checksession authorises no hop", async () => {
+test("a 3xx that is not checksession is refused, not handed to the SDK", async () => {
   const calls: string[] = [];
   const base = async (input: unknown) => {
     calls.push(String(input));
@@ -232,7 +232,11 @@ test("a 3xx that is not checksession authorises no hop", async () => {
     fetch: base,
     egressHosts: REVIEWED_HOSTS,
   });
-  assert.equal((await policy("https://id.zalo.me/account/logininfo")).status, 302);
+  await assert.rejects(
+    policy("https://id.zalo.me/account/logininfo"),
+    (error: any) => error?.cause?.code === REDIRECT_DENIED,
+  );
+  assert.equal(policy.denied, true);
   await assert.rejects(
     policy(CHAT),
     (error: any) => error?.cause?.code === REDIRECT_DENIED,
@@ -273,7 +277,7 @@ test("the hop is single-use", async () => {
   );
 });
 
-test("an invalid Location authorises nothing", async () => {
+test("an invalid Location is refused at the checkSession call", async () => {
   for (const location of [
     "https://chat.zalo.me.evil.test/",
     "http://chat.zalo.me/",
@@ -282,18 +286,101 @@ test("an invalid Location authorises nothing", async () => {
     "https://chat.zalo.me./",
     "/index.html",
   ]) {
-    const { base } = fixture({ checksession: () => redirect(location) });
+    const { base, calls } = fixture({ checksession: () => redirect(location) });
     const policy = createBootstrapFetch({
       fetch: base,
       egressHosts: REVIEWED_HOSTS,
     });
-    await policy(CHECK_SESSION_URL);
     await assert.rejects(
-      policy(location),
+      policy(CHECK_SESSION_URL),
       (error: any) => error?.cause?.code === REDIRECT_DENIED,
       location,
     );
+    assert.equal(policy.denied, true, location);
+    assert.equal(calls.includes(CHAT), false, location);
   }
+});
+
+test("an admitted host set cannot make a 3xx without a Location followable", async () => {
+  const { base, calls } = fixture({
+    checksession: () => new Response(null, { status: 302 }),
+  });
+  const policy = createBootstrapFetch({
+    fetch: base,
+    egressHosts: REVIEWED_HOSTS,
+  });
+  await assert.rejects(
+    policy(CHECK_SESSION_URL),
+    (error: any) => error?.cause?.code === REDIRECT_DENIED,
+  );
+  assert.deepEqual(calls, [CHECK_SESSION_URL]);
+});
+
+test("every request is forced to manual so undici cannot follow a redirect unseen", async () => {
+  const modes: unknown[] = [];
+  const { base } = fixture({ checksession: () => json({ error_code: 0 }) });
+  const policy = createBootstrapFetch({
+    fetch: async (input, init) => {
+      modes.push((init as { redirect?: unknown } | undefined)?.redirect);
+      return base(input);
+    },
+    egressHosts: REVIEWED_HOSTS,
+  });
+  // The SDK omits the option on most calls and sets it only on checkSession.
+  await policy("https://id.zalo.me/account", { headers: { accept: "*/*" } });
+  await policy(CHECK_SESSION_URL, { redirect: "follow", headers: {} });
+  await policy(CHECK_SESSION_URL, undefined);
+  assert.deepEqual(modes, ["manual", "manual", "manual"]);
+
+  const caller = { redirect: "follow", headers: {} };
+  await policy(CHECK_SESSION_URL, caller);
+  assert.equal(caller.redirect, "follow");
+});
+
+test("the real SDK never leaves the fetch mode to undici", async () => {
+  const { loginQR } = await import(loginQRModule);
+  const { base, calls } = fixture({ checksession: () => redirect(CHAT) });
+  const modes: unknown[] = [];
+  const policy = createBootstrapFetch({
+    fetch: async (input, init) => {
+      modes.push((init as { redirect?: unknown } | undefined)?.redirect);
+      return base(input);
+    },
+    egressHosts: REVIEWED_HOSTS,
+  });
+  const ctx = {
+    options: {
+      logging: false,
+      selfListen: false,
+      checkUpdate: false,
+      polyfill: policy,
+    },
+    cookie: null,
+  };
+  await loginQR(ctx, { userAgent: "synthetic-agent" }, () => {}).catch(
+    () => undefined,
+  );
+  assert.equal(modes.length, calls.length);
+  assert.ok(modes.length >= 2, String(modes.length));
+  assert.deepEqual([...new Set(modes)], ["manual"]);
+});
+
+test("the policy reports a refusal without exposing the URL", async () => {
+  const { base } = fixture({
+    checksession: () => json({ error_code: 0 }),
+  });
+  const policy = createBootstrapFetch({
+    fetch: base,
+    egressHosts: REVIEWED_HOSTS,
+  });
+  assert.equal(policy.denied, false);
+  await assert.rejects(policy(CHAT));
+  assert.equal(policy.denied, true);
+  const error = await policy(CHAT).catch((value) => value);
+  assert.equal(error.message, "fetch failed");
+  assert.equal(error.message.includes("chat.zalo.me"), false);
+  assert.deepEqual(Object.keys(error.cause), ["code"]);
+  assert.equal(error.cause.code, REDIRECT_DENIED);
 });
 
 // ------------------------------------------------------------ SDK end-to-end

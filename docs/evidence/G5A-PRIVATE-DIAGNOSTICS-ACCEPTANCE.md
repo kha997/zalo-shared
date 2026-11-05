@@ -6,11 +6,12 @@
 
 ## 1. Closed vocabularies
 
-- **30 reason codes** in `server/pilot-reasons.ts` (`BOOTSTRAP_REASONS`). The
-  four added in this change are `login-version-failed`,
+- **31 reason codes** in `server/pilot-reasons.ts` (`BOOTSTRAP_REASONS`). The
+  four added in the diagnostics change were `login-version-failed`,
   `login-qr-generate-failed`, `login-session-unconfirmed` and
-  `login-userinfo-failed`. Every code is a fixed identifier; none can carry a
-  UID, QR, cookie, `imei`, user agent or provider text.
+  `login-userinfo-failed`; `redirect-denied` was added with the fetch-layer
+  redirect policy. Every code is a fixed identifier; none can carry a UID, QR,
+  cookie, `imei`, user agent or provider text.
 - **15 stages** in `BOOTSTRAP_STAGES`, from `start` through `completed`/`failed`.
   A stage names a **passed** checkpoint; the reason names the failure.
 - The diagnostic sink accepts only these two sets. `PrivateDiagnosticFile.append`
@@ -31,6 +32,12 @@ first newline, and **the message is never copied into the error or the log**.
 | `Can't get account info` | `login-userinfo-failed` | userinfo call returned no data |
 | `Can't login` | `login-userinfo-failed` | userinfo says `logged: false` |
 | any other rejection | `login-failed` | unattributed provider failure |
+
+`redirect-denied` is not derived from an SDK message. The fetch policy raises a
+`fetch failed` rejection whose `cause.code` is `PILOT_REDIRECT_DENIED` and sets a
+non-enumerable `denied` flag on the installed polyfill; the adapter prefers that
+flag over message matching, so a refused hop is never misreported as a generic
+session failure ([adapters/zalo/redirect-policy.ts:118](file:///home/zen/Projects/zalo-shared/adapters/zalo/redirect-policy.ts#L118)).
 
 `PilotBootstrapError` always carries the fixed message `SDK facade unavailable`;
 the code is exposed separately. The CLI (`tools/pilot-connector.ts`, `reasonOf`)

@@ -89,6 +89,23 @@ const QUARANTINE_GATE = "quarantine-unconfirmed";
 const PILOT_REASONS = new Set<string>(BOOTSTRAP_REASONS);
 const unavailable = () => new Error("Pilot CLI unavailable");
 
+/**
+ * Printed to stderr before the SDK is touched, so the Owner reads the two-step
+ * handoff before any QR exists. Fixed text: nothing from the manifest, the
+ * environment or the provider is interpolated.
+ */
+export const BOOTSTRAP_INSTRUCTIONS = [
+  "Pilot enrollment is starting. One QR will be written to the private view file (PILOT_VIEW_DIR/qr.png, mode 0600).",
+  "",
+  "  1. Open that file locally and scan it with the official Zalo app on the dedicated phone.",
+  "  2. Complete the confirmation on the phone.",
+  "  3. Return to this terminal and type exactly: confirm",
+  "",
+  "Anything other than confirm cancels. The QR is single-use: do not screenshot, share, upload or cloud-sync it.",
+  "Provider contact starts now. The console and the private diagnostic file record only closed stage and reason codes.",
+  "",
+].join("\n");
+
 /** Only a reviewed code may be echoed; anything else stays unattributed. */
 function reasonOf(error: unknown): PilotReason | undefined {
   const code = (error as { code?: unknown } | null)?.code;
@@ -503,6 +520,7 @@ async function liveBootstrap(input: {
       throw new PilotBootstrapError("ownership-denied");
     }
     stage("ownership-acquired");
+    process.stderr.write(BOOTSTRAP_INSTRUCTIONS);
     await qr.bootstrapPilotSession({
       grant: manifest.grant,
       owner,

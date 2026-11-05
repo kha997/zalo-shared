@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { PilotBootstrapError } from "../../adapters/zalo/qr-bootstrap.js";
 import {
+  BOOTSTRAP_INSTRUCTIONS,
   parsePilotArgs,
   parsePilotManifest,
   runPilotCli,
@@ -688,4 +689,34 @@ test("a bootstrap failure exposes its closed reason code, never provider detail"
     assert.equal("reason" in output, false);
     assert.equal(hidden.stdout!.includes(code), false);
   }
+});
+
+test("the operator sees what to do with the QR before provider contact starts", () => {
+  assert.equal(typeof BOOTSTRAP_INSTRUCTIONS, "string");
+  // The three steps the Owner must be able to follow unattended.
+  assert.match(BOOTSTRAP_INSTRUCTIONS, /PILOT_VIEW_DIR\/qr\.png/);
+  assert.match(BOOTSTRAP_INSTRUCTIONS, /official Zalo app/);
+  assert.match(BOOTSTRAP_INSTRUCTIONS, /type exactly: confirm/);
+  assert.match(BOOTSTRAP_INSTRUCTIONS, /single-use/);
+  // It names no endpoint, credential or session path, and carries no placeholder
+  // that could be filled with one at runtime.
+  for (const forbidden of [
+    "http",
+    "zalo.me",
+    "cookie",
+    "imei",
+    "userAgent",
+    "token",
+    "password",
+    "session.enc",
+    "${",
+    "\u0000",
+  ]) {
+    assert.equal(
+      BOOTSTRAP_INSTRUCTIONS.includes(forbidden),
+      false,
+      forbidden,
+    );
+  }
+  assert.ok(BOOTSTRAP_INSTRUCTIONS.endsWith("\n"));
 });

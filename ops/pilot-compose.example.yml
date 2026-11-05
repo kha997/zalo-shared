@@ -106,6 +106,10 @@ services:
       PILOT_KEY_FILE: /run/pilot/session.key
       PILOT_SESSION_FILE: /run/pilot/state/session.enc
       PILOT_VIEW_DIR: /run/pilot/state/view
+      # Closed-vocabulary stage/reason log. It lives inside the bind-mounted
+      # state directory, so the sanitized failure evidence survives container
+      # exit. It carries no provider text, QR, cookie or credential.
+      PILOT_DIAGNOSTIC_FILE: /run/pilot/state/diagnostic.jsonl
       # The image sets this too; repeating it keeps the precondition visible in
       # configuration review. A namespace with a default route is refused.
       PILOT_REQUIRE_INTERNAL_NETWORK: "1"

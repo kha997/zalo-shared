@@ -52,6 +52,7 @@ itself did not complete
 | `G5A_RECONCILIATION_IMPLEMENTED_AWAITING_OWNER_EXECUTION` | **SUPERSEDED — EXECUTED** | Implementation and offline verification remained valid; execution followed the Owner's one-shot schedule authorization. See the execution row below |
 | `G5A_RECONCILIATION_BLOCKED` | **CLEARED (admin provisioned)** | [G5A-RECONCILIATION-PREFLIGHT-BLOCKED.md](docs/evidence/G5A-RECONCILIATION-PREFLIGHT-BLOCKED.md); read-only preflight at the time, 9/10 PASS, `users=0`. The blocker was the missing admin identity, resolved by the row below; execution is still not authorized |
 | `G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION` | **PASS (reconciliation)** | [G5A-RECONCILIATION-EXECUTION.md](docs/evidence/G5A-RECONCILIATION-EXECUTION.md); one authenticated request at `2026-11-05T02:01:09.653Z`, HTTP 200, `uncertain → idle`, epoch 1→2, gap 1→2, one `connector.reconciled` audit row (id 9), 20/20 checks, post-state re-read on a separate read-only connection. No retry, replay, SQL override or provider contact |
+| `G5A_NEXT_BOOTSTRAP_READY_AWAITING_OWNER_START` | **PREPARED (not deployed)** | [G5A-REDIRECT-READINESS.md](docs/evidence/G5A-REDIRECT-READINESS.md); the exact `chat.zalo.me:443` admission and a forced-manual one-hop fetch policy are implemented in-repo with 19 policy, 34 bootstrap and 16 CLI tests PASS (full suite 377/377 on Node 24.19.0 with a disposable database) and an independent review whose H1 finding was fixed. Deployed allowlist, gateway and connector image are unchanged; the Owner must decide the admission and issue a new UTC window |
 | `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION` | **PASS** | [G5A-PILOT-ADMIN-PROVISIONING.md](docs/evidence/G5A-PILOT-ADMIN-PROVISIONING.md); exactly one active admin (`4fd6c034d5e7`), 22/22 pilot auth/CSRF/route checks, 19/19 disposable success-path checks, ownership/provider/delivery rows unchanged. No reconciliation executed |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
 | `R2_EGRESS_ENFORCEMENT_PASS` | **PASS (bootstrap)** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); kernel boundary plus SNI gateway verified; observe/send-test remain functionally blocked until their runtime-only hosts are admitted |
@@ -241,10 +242,10 @@ The Owner approved implementation and offline verification only.
   hypothesis but the provider redirect itself remains **UNPROVEN**. A
   conditional `chat.zalo.me:443` proposal and a no-new-host alternative are
   documented; **the allowlist is unchanged**.
-- **Diagnostics.** The reason vocabulary grew to 30 codes with four precise
-  login-failure codes; nine failure modes are asserted to stop at a named stage
-  with a closed reason; the private diagnostic is shown to survive process exit
-  without secrets.
+- **Diagnostics.** The reason vocabulary now holds 31 codes, including four
+  precise login-failure codes and `redirect-denied`; nine failure modes are
+  asserted to stop at a named stage with a closed reason; the private diagnostic
+  is shown to survive process exit without secrets.
 - **Verification.** Typecheck and connector build PASS; the main full run was
   **353/353 PASS** on Node 24.19.0 with a disposable database. The final tree
   (354 tests) reports one failure: the known pre-existing load-sensitive
@@ -374,22 +375,24 @@ incident has been reconciled (`G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISI
 The abort is narrowed but still UNPROVEN.
 
 1. **Redirect decision (blocking for a future bootstrap).** The redirect
-   hypothesis is supported synthetically but UNPROVEN live. Readiness work now
-   prepares the exact-host `chat.zalo.me:443` admission together with a
-   one-hop fetch policy, positive and negative regression tests and an
-   independent review; the deployed host configuration is unchanged. Whether
+   hypothesis is supported synthetically but UNPROVEN live. Readiness work
+   prepared the exact-host `chat.zalo.me:443` admission together with a
+   one-hop fetch policy that forces `redirect: "manual"` on every SDK request,
+   positive and negative regression tests and an independent review; the H1
+   finding (undici could auto-follow on non-`checkSession` calls) is fixed and
+   regression-tested. The deployed host configuration is unchanged. Whether
    that admission ships — or the no-new-host polyfill alternative is preferred
    — is an **Owner decision**.
 2. **Confirm the provider session (Owner).** The device history already reports
    the entry logged out in the same minute it was created, so this is a
    confirmation, not a cleanup: verify no active entry remains on the official
    phone. No local session exists to reuse.
-3. **Attribution is implemented, not yet exercised.** Closed 30-code/15-stage
-   vocabulary (`server/pilot-reasons.ts`), precise login-failure mapping, the
-   CLI `reason` field and the opt-in `PILOT_DIAGNOSTIC_FILE` sink are in the
-   tree with tests. They become useful only in a rebuilt image during the next
-   authorized attempt, with the console also captured to a `0600` private log
-   (never committed).
+3. **Attribution is implemented, not yet exercised.** Closed 31-code/15-stage
+   vocabulary (`server/pilot-reasons.ts`), precise login-failure mapping plus
+   `redirect-denied`, the CLI `reason` field and the opt-in
+   `PILOT_DIAGNOSTIC_FILE` sink are in the tree with tests. They become useful
+   only in a rebuilt image during the next authorized attempt, with the console
+   also captured to a `0600` private log (never committed).
 4. **Offline regression is in place.** The real `promptConfirmation` (non-TTY
    refusal, literal `confirm` only) and the real private view plus encrypted
    store are covered, and the QR handoff rehearsal runs offline.
@@ -404,9 +407,9 @@ G5-B is not authorized. No retry, login, QR generation, observe, send or media
 action is permitted until a new authorization exists, and no control state is
 reset in the meantime.
 
-**STOP — `G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION`. The fenced
-incident is reconciled: ownership is `idle`, epoch 2, provider state
-`disconnected` with `reconciliation_required=false` and gap 2, one audited
-transition, zero unresolved delivery work. No bootstrap is authorized; the
-redirect admission is prepared offline and undeployed, and a new Owner
-authorization is required before any QR, login or provider contact.**
+**STOP — `G5A_NEXT_BOOTSTRAP_READY_AWAITING_OWNER_START`. The fenced incident is
+reconciled: ownership is `idle`, epoch 2, provider state `disconnected` with
+`reconciliation_required=false` and gap 2, one audited transition, zero
+unresolved delivery work. The redirect admission is prepared offline and
+reviewed but **undeployed**; a new Owner authorization and the allowlist decision
+are required before any QR, login or provider contact.**
