@@ -22,6 +22,7 @@ not an engineering task, if the Owner accepts it.
 | `ops/pilot-compose.example.yml` | `PILOT_EGRESS_HOSTS`, `GATEWAY_ALLOW_HOSTS`, `extra_hosts` pin, `PILOT_DIAGNOSTIC_FILE` | **no** |
 | `ops/local/check-pilot-network.sh` | ties the redirect class and the policy constants to the reviewed allowlist | yes (static) |
 | `ops/local/verify-deployed-pilot.sh` | derives the expected host list from the allowlist instead of a literal | yes (static) |
+| `ops/Dockerfile.connector` | `SOURCE_COMMIT` is referenced in the identity `RUN`, so a cached layer cannot stamp another commit | with the image only |
 | `server/pilot-reasons.ts` | adds `redirect-denied` (31st code) | with the image only |
 
 Nothing was applied to the running stack: the gateway container, the connector
@@ -106,7 +107,11 @@ The full suite is reported in [PILOT-GATE-STATUS.md](../../PILOT-GATE-STATUS.md)
 5. **Deployment is not done.** Shipping the change requires rebuilding the
    connector image from the final commit, re-rendering the gateway with the
    fourth host, and re-running `check-pilot-network.sh` and
-   `verify-deployed-pilot.sh` on the host.
+   `verify-deployed-pilot.sh` on the host. The image built from `HEAD` is
+   `zalo-shared-connector:g5-ready-6d9c0e9`
+   (`sha256:97513c22ac749982bdda8dd44137bb3f99adaf0eb40e2924547e248715168c84`);
+   the offline checks and the post-reconciliation state are recorded in
+   [G5A-NEXT-BOOTSTRAP-PREFLIGHT.md](G5A-NEXT-BOOTSTRAP-PREFLIGHT.md).
 
 ## 6. Decision still required (Owner)
 
