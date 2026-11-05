@@ -22,7 +22,9 @@ COPY tools ./tools
 RUN ./node_modules/.bin/tsc -p tsconfig.connector.json
 # Build identity is emitted from the actual build inputs, never from the
 # manifest: a swapped manifest cannot rebind the grant to another artifact.
-RUN node > build-identity.json <<'EOF'
+# The commit is referenced in the command itself, not only in the heredoc, so
+# the build cache cannot reuse an identity layer from another commit.
+RUN test -n "${SOURCE_COMMIT}" && node > build-identity.json <<'EOF'
 const fs = require("node:fs");
 const crypto = require("node:crypto");
 const lock = fs.readFileSync("connector/package-lock.json");
