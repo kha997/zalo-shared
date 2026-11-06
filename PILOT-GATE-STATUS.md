@@ -52,7 +52,8 @@ itself did not complete
 | `G5A_RECONCILIATION_IMPLEMENTED_AWAITING_OWNER_EXECUTION` | **SUPERSEDED — EXECUTED** | Implementation and offline verification remained valid; execution followed the Owner's one-shot schedule authorization. See the execution row below |
 | `G5A_RECONCILIATION_BLOCKED` | **CLEARED (admin provisioned)** | [G5A-RECONCILIATION-PREFLIGHT-BLOCKED.md](docs/evidence/G5A-RECONCILIATION-PREFLIGHT-BLOCKED.md); read-only preflight at the time, 9/10 PASS, `users=0`. The blocker was the missing admin identity, resolved by the row below; execution is still not authorized |
 | `G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION` | **PASS (reconciliation)** | [G5A-RECONCILIATION-EXECUTION.md](docs/evidence/G5A-RECONCILIATION-EXECUTION.md); one authenticated request at `2026-11-05T02:01:09.653Z`, HTTP 200, `uncertain → idle`, epoch 1→2, gap 1→2, one `connector.reconciled` audit row (id 9), 20/20 checks, post-state re-read on a separate read-only connection. No retry, replay, SQL override or provider contact |
-| `G5A_NEXT_BOOTSTRAP_READY_AWAITING_OWNER_START` | **PREPARED (not deployed)** | [G5A-REDIRECT-READINESS.md](docs/evidence/G5A-REDIRECT-READINESS.md); the exact `chat.zalo.me:443` admission and a forced-manual one-hop fetch policy are implemented in-repo with 19 policy, 34 bootstrap and 16 CLI tests PASS (full suite 377/377 on Node 24.19.0 with a disposable database) and an independent review whose H1 finding was fixed. Post-reconciliation preflight PASS ([G5A-NEXT-BOOTSTRAP-PREFLIGHT.md](docs/evidence/G5A-NEXT-BOOTSTRAP-PREFLIGHT.md)): `idle`, epoch 2, gap 2, `reconciliation_required=false`, zero unresolved work, no session, TLS 1.3, image `zalo-shared-connector:g5-ready-6d9c0e9` (`sha256:97513c22ac74…`) built from code commit `6d9c0e9`. Deployed allowlist, gateway and connector image are unchanged; the Owner must decide the admission and issue a new UTC window |
+| `G5A_REDIRECT_DEPLOYED_AWAITING_OWNER_START` | **PASS (deployed, offline)** | [G5A-REDIRECT-DEPLOYMENT.md](docs/evidence/G5A-REDIRECT-DEPLOYMENT.md); the Owner's deployment authorization was executed on 2026-11-06T23:10Z: reviewed image `zalo-shared-connector:g5-ready-6d9c0e9` (`sha256:97513c22ac74…`, embedded sourceCommit `6d9c0e9`) and the exact four-host allowlist (`chat.zalo.me` as redirect-target) are deployed, the private compose copy is byte-identical to the reviewed example, and the gateway recreated healthy. 48/48 deployed-network, 21/21 allow-path, 33/33 in-image redirect, all static checker assertions and 377/377 suite PASS; control state stayed `idle`, epoch 2, gap 2, `reconciliation_required=false` with zero unresolved work; the gateway admitted no tunnel, so no provider contact occurred. Independent read-only verification returned PASS on all eight reviewed claims, with residual risks recorded. The live redirect remains UNPROVEN until an authorized bootstrap |
+| `G5A_NEXT_BOOTSTRAP_READY_AWAITING_OWNER_START` | **SUPERSEDED — DEPLOYED** | [G5A-REDIRECT-READINESS.md](docs/evidence/G5A-REDIRECT-READINESS.md); preparation and independent review completed before deployment. The admission is no longer undeployed; see the row above |
 | `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION` | **PASS** | [G5A-PILOT-ADMIN-PROVISIONING.md](docs/evidence/G5A-PILOT-ADMIN-PROVISIONING.md); exactly one active admin (`4fd6c034d5e7`), 22/22 pilot auth/CSRF/route checks, 19/19 disposable success-path checks, ownership/provider/delivery rows unchanged. No reconciliation executed |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
 | `R2_EGRESS_ENFORCEMENT_PASS` | **PASS (bootstrap)** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); kernel boundary plus SNI gateway verified; observe/send-test remain functionally blocked until their runtime-only hosts are admitted |
@@ -371,31 +372,32 @@ Exactly one connector account, exactly one allowlisted direct peer, 1–10 outbo
 ## Next action
 
 The 2026-11-04 bootstrap authorization is consumed, not extended. The fenced
-incident has been reconciled (`G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION`).
-The abort is narrowed but still UNPROVEN.
+incident has been reconciled (`G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION`),
+and the reviewed redirect deployment is complete
+(`G5A_REDIRECT_DEPLOYED_AWAITING_OWNER_START`). The abort is narrowed but still
+UNPROVEN.
 
-1. **Redirect decision (blocking for a future bootstrap).** The redirect
-   hypothesis is supported synthetically but UNPROVEN live. Readiness work
-   prepared the exact-host `chat.zalo.me:443` admission together with a
-   one-hop fetch policy that forces `redirect: "manual"` on every SDK request,
-   positive and negative regression tests and an independent review; the H1
-   finding (undici could auto-follow on non-`checkSession` calls) is fixed and
-   regression-tested. The deployed host configuration is unchanged. Whether
-   that admission ships — or the no-new-host polyfill alternative is preferred
-   — is an **Owner decision**.
+1. **Redirect admission (deployed).** The Owner's deployment authorization is
+   executed: the exact-host `chat.zalo.me:443` admission, the one-hop fetch
+   policy that forces `redirect: "manual"` on every SDK request, the four-host
+   allowlist and the reviewed connector image are live on the dedicated pilot
+   host and verified offline. The live redirect itself remains UNPROVEN until an
+   authorized bootstrap observes it.
 2. **Confirm the provider session (Owner).** The device history already reports
    the entry logged out in the same minute it was created, so this is a
    confirmation, not a cleanup: verify no active entry remains on the official
    phone. No local session exists to reuse.
-3. **Attribution is implemented, not yet exercised.** Closed 31-code/15-stage
-   vocabulary (`server/pilot-reasons.ts`), precise login-failure mapping plus
-   `redirect-denied`, the CLI `reason` field and the opt-in
-   `PILOT_DIAGNOSTIC_FILE` sink are in the tree with tests. They become useful
-   only in a rebuilt image during the next authorized attempt, with the console
-   also captured to a `0600` private log (never committed).
-4. **Offline regression is in place.** The real `promptConfirmation` (non-TTY
-   refusal, literal `confirm` only) and the real private view plus encrypted
-   store are covered, and the QR handoff rehearsal runs offline.
+3. **Attribution is deployed and exercised up to the pre-ownership gate.** The
+   closed 31-code/15-stage vocabulary (`server/pilot-reasons.ts`), precise
+   login-failure mapping plus `redirect-denied`, the CLI `reason` field and the
+   `PILOT_DIAGNOSTIC_FILE` sink are in the reviewed image. Offline acceptance
+   produced `reason=input-invalid` and a `0600` diagnostic that survived process
+   exit; the console must still be captured to a `0600` private log (never
+   committed) during a live attempt.
+4. **Offline regression is in place and re-run after deployment.** The real
+   `promptConfirmation` (non-TTY refusal, literal `confirm` only), the real
+   private view plus encrypted store, and the QR handoff rehearsal pass, as does
+   the full 377/377 suite.
 5. **New G5-A authorization.** Provide a fresh explicit UTC start and expiry for
    bootstrap only. The previous windows cannot be reused.
 6. **Unchanged Owner decisions.** Observe/send-test window (their runtime-only
@@ -407,9 +409,10 @@ G5-B is not authorized. No retry, login, QR generation, observe, send or media
 action is permitted until a new authorization exists, and no control state is
 reset in the meantime.
 
-**STOP — `G5A_NEXT_BOOTSTRAP_READY_AWAITING_OWNER_START`. The fenced incident is
-reconciled: ownership is `idle`, epoch 2, provider state `disconnected` with
-`reconciliation_required=false` and gap 2, one audited transition, zero
-unresolved delivery work. The redirect admission is prepared offline and
-reviewed but **undeployed**; a new Owner authorization and the allowlist decision
-are required before any QR, login or provider contact.**
+**STOP — `G5A_REDIRECT_DEPLOYED_AWAITING_OWNER_START`. The redirect admission
+and the reviewed connector image are deployed on the dedicated pilot host and
+pass offline acceptance, with ownership still `idle`, epoch 2, provider state
+`disconnected`, `reconciliation_required=false`, gap 2 and zero unresolved
+delivery work. No provider contact occurred and the live redirect is UNPROVEN.
+A new explicit UTC Owner authorization is required before any QR, login or
+provider contact; no control state is reset in the meantime.**
