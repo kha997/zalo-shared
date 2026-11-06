@@ -18,11 +18,18 @@ const expectedDatabase = process.env.EXPECTED_DATABASE || "zalo";
 const expected = {
   phase: "uncertain",
   ownerId: process.env.EXPECTED_OWNER_ID,
-  epoch: process.env.EXPECTED_OWNER_EPOCH || "1",
-  gapVersion: process.env.EXPECTED_GAP_VERSION || "1",
+  epoch: process.env.EXPECTED_OWNER_EPOCH || "3",
+  gapVersion: process.env.EXPECTED_GAP_VERSION || "3",
   status: "disconnected",
   sessionFault: process.env.EXPECTED_FAULT || "shutdown",
-  uncertainAtPrefix: process.env.EXPECTED_UNCERTAIN_AT || "2026-11-04T00:56:01",
+  uncertainAtPrefix: process.env.EXPECTED_UNCERTAIN_AT || "2026-11-06T23:44:34",
+  // The previously reconciled incident is retained as the fenced record, so the
+  // new incident must observe exactly that pair rather than a null marker.
+  lastFencedOwnerId: process.env.EXPECTED_LAST_FENCED_OWNER_ID || null,
+  lastFencedEpoch: process.env.EXPECTED_LAST_FENCED_EPOCH || null,
+  // One reconciliation per fenced incident: this is the second incident, so
+  // exactly one earlier `connector.reconciled` row must already exist.
+  priorReconciliations: Number(process.env.EXPECTED_PRIOR_RECONCILIATIONS ?? "1"),
 };
 if (!expected.ownerId) fail("EXPECTED_OWNER_ID is required");
 
@@ -80,7 +87,7 @@ try {
     ownerId: o.owner_id,
     epoch: o.epoch,
   });
-  record("ownership fault and fencing fields are the expected ones", o.fault_code === expected.sessionFault && o.last_fenced_owner_id === null && o.last_fenced_epoch === null && String(o.uncertain_at ?? "").startsWith(expected.uncertainAtPrefix), {
+  record("ownership fault and fencing fields are the expected ones", o.fault_code === expected.sessionFault && o.last_fenced_owner_id === expected.lastFencedOwnerId && o.last_fenced_epoch === expected.lastFencedEpoch && String(o.uncertain_at ?? "").startsWith(expected.uncertainAtPrefix), {
     faultCode: o.fault_code,
     uncertainAt: o.uncertain_at,
     lastFencedOwnerId: o.last_fenced_owner_id,
@@ -146,7 +153,7 @@ try {
     )
   ).rows[0];
   const actions = audit.actions ?? [];
-  record("no reconciliation audit record exists", audit.reconciled === 0, { reconciled: audit.reconciled, auditRows: audit.rows });
+  record("exactly one reconciliation record exists, from the earlier incident", audit.reconciled === expected.priorReconciliations, { reconciled: audit.reconciled, expected: expected.priorReconciliations, auditRows: audit.rows });
   record("the incident audit prefix is preserved", actions[0] === "connector.reserved" && actions[1] === "connector.uncertain", {
     firstActions: actions.slice(0, 4),
     lastActions: actions.slice(-4),

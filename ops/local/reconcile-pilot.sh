@@ -18,12 +18,15 @@ base=/home/zen/pilot-private/zalo-shared
 image=zalo-shared:g2-adf8ceca9bd6
 app_image_sha=sha256:9d3454015db1d8c6558c2d461fde86a2f71de0a26193d997432352115a890d65
 network=zalo-shared-pilot-db
-expected_owner=d4729725-5302-42d6-a4ee-ff55971fbdbb
-expected_epoch=1
-expected_gap=1
-window_start=2026-11-05T02:00:00Z
-window_expiry=2026-11-05T02:20:00Z
-evidence_ref='G5A-BOOTSTRAP-REPORT.md#9'
+expected_owner=9c52ed22-6df9-463f-87eb-28a83d30fdd7
+expected_epoch=3
+expected_gap=3
+window_start=2026-11-06T23:52:00Z
+window_expiry=2026-11-07T00:12:00Z
+evidence_ref='G5A-BOOTSTRAP-REPORT.md#11-second-bootstrap-attempt-2026-11-06'
+previous_fenced_owner=d4729725-5302-42d6-a4ee-ff55971fbdbb
+previous_fenced_epoch=1
+gateway_contact_ts=2026-11-06T23:44:34.618Z
 app_name=pilot-reconcile-app
 mode=${1:-preflight}
 db_started=0
@@ -31,8 +34,8 @@ envfile=
 appenv=
 preflight_result=
 state_dir=${PILOT_RECONCILE_STATE_DIR:-$base/pilot-admin}
-attempt_file=$state_dir/reconcile-attempt.json
-lock_file=$state_dir/reconcile.lock
+attempt_file=$state_dir/reconcile-attempt-20261106.json
+lock_file=$state_dir/reconcile-20261106.lock
 attempt_written=0
 run_started=
 request_id=
@@ -131,14 +134,14 @@ hostproc=$(pgrep -af 'zalo-shared/(dist|connector)|pilot-bootstrap' || true)
 [ -z "$hostproc" ] || fail "a connector or bootstrap process is running: $hostproc" 3
 say "workers=none"
 
-gateway=$(docker inspect zalo-shared-pilot-egress-gateway-1 --format '{{.State.Status}} {{.State.ExitCode}}' 2>/dev/null || echo missing)
-[ "$gateway" = "exited 255" ] || fail "the egress gateway is not in its recorded exited state ($gateway)" 3
+gateway=$(docker inspect zalo-shared-pilot-egress-gateway-1 --format '{{.State.Status}} {{.State.Health.Status}}' 2>/dev/null || echo missing)
+[ "$gateway" = "running healthy" ] || fail "the egress gateway is not running healthy ($gateway)" 3
 gateway_last=$(docker logs zalo-shared-pilot-egress-gateway-1 2>&1 | tail -1)
 case $gateway_last in
-  *'"ts":"2026-11-04T00:54:32.247Z"'*'id.zalo.me'*) ;;
-  *) fail "the gateway log does not end at the recorded 00:54:32Z contact" 3 ;;
+  *"\"ts\":\"$gateway_contact_ts\""*'"sni_allow"'*'"sni":"id.zalo.me"'*) ;;
+  *) fail "the gateway log does not end at the recorded 23:44:34Z contact" 3 ;;
 esac
-say "gateway=exited last_contact=2026-11-04T00:54:32Z"
+say "gateway=running healthy last_contact=$gateway_contact_ts"
 
 # --- private filesystem ------------------------------------------------------
 sudo -n true 2>/dev/null || fail "passwordless sudo is required to inspect the private pilot state" 3
@@ -175,6 +178,11 @@ esac
   printf 'DATABASE_URL=%s\n' "$app_url"
   printf 'NODE_EXTRA_CA_CERTS=/run/pilot/db-ca.crt\n'
   printf 'EXPECTED_OWNER_ID=%s\n' "$expected_owner"
+  printf 'EXPECTED_OWNER_EPOCH=%s\n' "$expected_epoch"
+  printf 'EXPECTED_GAP_VERSION=%s\n' "$expected_gap"
+  printf 'EXPECTED_LAST_FENCED_OWNER_ID=%s\n' "$previous_fenced_owner"
+  printf 'EXPECTED_LAST_FENCED_EPOCH=%s\n' "$previous_fenced_epoch"
+  printf 'EXPECTED_PRIOR_RECONCILIATIONS=1\n'
   printf 'EXPECTED_DATABASE=zalo\n'
 } >"$envfile"
 chmod 0600 "$envfile"
