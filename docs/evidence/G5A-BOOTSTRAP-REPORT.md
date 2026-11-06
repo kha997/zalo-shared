@@ -640,3 +640,82 @@ contact discovery, no image rebuild for a live run, no provider contact, no
 production deployment, no PR merge, and no reset of `uncertain`. The next step
 is an Owner decision on the reconciliation operation in §10.4 and, separately, a
 new G5-A authorization.
+
+## 11. Second bootstrap attempt — 2026-11-06 23:40–00:10Z
+
+**Authorization:** `G5A_LIVE_BOOTSTRAP_ONLY`, one QR attempt, window
+`2026-11-06T23:40:00Z`–`2026-11-07T00:10:00Z`. **Verdict:**
+`G5A_BOOTSTRAP_FAIL` — reason `qr-expired`. The phone-side scan is reported by
+the Owner but its provider-side outcome is UNPROVEN.
+
+### Preflight (23:38–23:42Z, all before provider contact)
+
+| Control | Observed |
+| --- | --- |
+| HEAD / image | `5cb0202`; `zalo-shared-connector:g5-ready-6d9c0e9`, digest `sha256:97513c22…168c84` |
+| Embedded identity | `sourceCommit 6d9c0e9…9609`, `lockSha256 17dcd254…030c9b`, SDK integrity equal to the lock |
+| Gateway / networks | healthy; `GATEWAY_ALLOW_HOSTS` exactly `id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me,chat.zalo.me`; db and egress networks `Internal=true` |
+| Database | `verify-full` admitted over TLS 1.3 as `zs_app`; a URL without `sslmode` refused |
+| Control state | ownership `idle`, epoch 2, no owner; provider `disconnected`, `reconciliation_required=false`, gap 2; no session, empty view |
+| Work | outbox, parts, provider events and sessions all 0; no connector container or process |
+| Offline preflight | in-image and compose paths both `"gate":"admitted"`, `purpose enroll-session`, `accountBound:false`, `peerCount:0`, lifetime 1 612 600 ms |
+
+Grant: `consentRef`/`grantId` bound to the window, `issuedAt`
+`2026-11-06T23:42:07Z`, `expiresAt` `2026-11-07T00:09:00Z`, `expectedAccountId`
+null, zero peers, `maxPartsPerDay` 10, `minIntervalMs` 2000 — inside the Owner
+window and under the 60-minute cap.
+
+### Timeline (UTC)
+
+| Time | Event |
+| --- | --- |
+| 23:42:52 | single `compose run` launcher started; console captured to a `0600` private log |
+| 23:42:53.647 | ownership reserved, epoch 3, label `pilot-enrollment` |
+| 23:42:54.325 | gateway `sni_allow id.zalo.me:443` |
+| 23:42:54.537 | `qr.png` written `0600` in the `0700` view directory; copy opened locally, never uploaded |
+| 23:44:34.560 | `stage:"failed"`, `reason:"qr-expired"` |
+| 23:44:34.618 | second and last gateway `sni_allow id.zalo.me:443`; no other host, no denial |
+| 23:44:35 | connector exited 1; view directory cleared; ownership fenced `uncertain`, epoch 3 |
+
+The console showed the fixed pre-QR instructions and then
+`{"ok":false,"gate":"unavailable","reason":"qr-expired"}`. The terminal `confirm`
+step was never reached, so no account UID was displayed, confirmed or recorded.
+
+### Required G5-A outcomes
+
+| Required outcome | Result |
+| --- | --- |
+| Successful QR login | **UNPROVEN** — the Owner reports the phone scan succeeded, but the connector's QR window closed at 23:44:34Z; whether the provider accepted the confirmation is not observable locally |
+| SDK post-login handshake | **NOT REACHED** — no `wpa`/`jr`/`chat` contact; the redirect admission was never exercised |
+| Exact UID and identity binding | **NONE** — no UID displayed, no binding |
+| Owner console confirmation | **NOT REACHED** |
+| Encrypted session persistence | **NONE** — no `session.enc`, `session.key` unchanged |
+| Official phone functional | **UNPROVEN** — Owner confirmation pending |
+| Safe connector shutdown | **PASS** — single process, exit 1, ownership fenced, no residual container, QR deleted (private view and Windows copy) |
+| Allowlist confinement | **PASS** — two `sni_allow` for `id.zalo.me` only, zero denials, zero other destinations |
+| Observe, send-test, media, discovery | **NOT STARTED** — not authorized and not invoked |
+
+### Failure analysis
+
+The QR was live for exactly 100 seconds. The scan and the terminal confirmation
+competed with that bound and the connector failed closed on it. No redirect
+failure, network denial or SDK error was observed, so this attempt says nothing
+about the redirect hypothesis either way. Because the provider side may have
+recorded a login the connector never captured, the Owner was asked to confirm
+phone state and to revoke any new pilot device session from the official phone;
+the connector has no logout capability.
+
+### Reconciliation of this incident
+
+Executed once on Owner approval in window
+`2026-11-06T23:52:00Z`–`2026-11-07T00:12:00Z` by the reviewed driver bound to
+this incident (commit `ae8a77f`). 13/13 read-only preflight checks, one
+authenticated request, HTTP 200, epoch 3→4, gap 3→4, phase `idle`, owner and
+fault null, `reconciliation_required=false`, audit id 14 `connector.reconciled`,
+all 21 post-checks PASS, no retry or replay. Details:
+[G5A-RECONCILIATION-EXECUTION-2026-11-06.md](G5A-RECONCILIATION-EXECUTION-2026-11-06.md).
+
+**STOP — `G5A_RECONCILED_AWAITING_NEW_START_AUTHORIZATION`.** The single
+authorized attempt is consumed and cannot be retried. A further bootstrap
+requires a new explicit UTC Owner window, a fresh grant, and — given the 100-second
+QR lifetime — a scan performed immediately after the QR appears.

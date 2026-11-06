@@ -1,6 +1,6 @@
 # G5 live pilot procedure — activation pending
 
-**Status:** `G5A_REDIRECT_DEPLOYED_AWAITING_OWNER_START` — the reviewed `chat.zalo.me:443` redirect admission, the four-host allowlist and the reviewed connector image were deployed on the dedicated pilot host on 2026-11-06T23:10Z and passed offline acceptance; no provider contact occurred. The live redirect remains UNPROVEN until an authorized bootstrap observes it. A new explicit UTC G5-A authorization is required before activation. The authoritative state is [PILOT-GATE-STATUS.md](../../PILOT-GATE-STATUS.md); the deployment evidence is [G5A-REDIRECT-DEPLOYMENT.md](../evidence/G5A-REDIRECT-DEPLOYMENT.md), the live-attempt evidence is [G5A-BOOTSTRAP-REPORT.md](../evidence/G5A-BOOTSTRAP-REPORT.md) §9–§10 and the redirect analysis is [G5A-REDIRECT-READINESS.md](../evidence/G5A-REDIRECT-READINESS.md).
+**Status:** `G5A_RECONCILED_AWAITING_NEW_START_AUTHORIZATION` — the 2026-11-06 single authorized bootstrap ended `FAIL (qr-expired)` after the QR's 100-second lifetime; no session was stored and the gateway allowed only `id.zalo.me`. The fenced incident was reconciled in the Owner window `23:52–00:12Z` (epoch 3→4, gap 3→4, `idle`, `reconciliation_required=false`), so the environment is ready for a new authorization only. The authoritative state is [PILOT-GATE-STATUS.md](../../PILOT-GATE-STATUS.md); the attempt and reconciliation are in [G5A-BOOTSTRAP-REPORT.md](../evidence/G5A-BOOTSTRAP-REPORT.md) §11 and [G5A-RECONCILIATION-EXECUTION-2026-11-06.md](../evidence/G5A-RECONCILIATION-EXECUTION-2026-11-06.md); the deployment evidence is [G5A-REDIRECT-DEPLOYMENT.md](../evidence/G5A-REDIRECT-DEPLOYMENT.md).
 **Decision record:** [G5-SCOPE-APPROVAL.md](../evidence/G5-SCOPE-APPROVAL.md)
 **Readiness report:** [G5A-ACTIVATION-READINESS.md](../evidence/G5A-ACTIVATION-READINESS.md)
 
@@ -109,4 +109,13 @@ The final summary must state that technical PASS at any stage did not itself aut
 
 ## Current stop point
 
-**STOP — `G5A_REDIRECT_DEPLOYED_AWAITING_OWNER_START`.** The 2026-11-04 authorization is consumed; the fenced incident was reconciled on 2026-11-05 (ownership `idle`, epoch 2, gap 2, `reconciliation_required=false`). The abort is narrowed to the SDK's post-confirmation handshake but remains UNPROVEN. The reviewed redirect admission and connector image are deployed and offline-verified ([G5A-REDIRECT-DEPLOYMENT.md](../evidence/G5A-REDIRECT-DEPLOYMENT.md)); no provider contact occurred and no tunnel was admitted. No retry, login, QR generation, session write, observation or send may occur until the Owner issues a new explicit UTC G5-A start authorization. Do not reset `uncertain` by hand.
+**STOP — `G5A_RECONCILED_AWAITING_NEW_START_AUTHORIZATION`.** The 2026-11-04 and
+2026-11-06 authorizations are consumed and neither may be extended. The second
+attempt failed closed at `qr-expired` (QR valid 100 seconds) without a UID, a
+session or a post-login handshake, and only `id.zalo.me` was contacted. Its
+fenced incident was reconciled once in the Owner window `23:52–00:12Z`
+(ownership `idle`, epoch 4, gap 4, `reconciliation_required=false`, zero
+unresolved work); the phone-side outcome and the live redirect remain UNPROVEN.
+No retry, login, QR generation, session write, observation or send may occur
+until the Owner issues a new explicit UTC G5-A start authorization. Do not reset
+control state by hand.

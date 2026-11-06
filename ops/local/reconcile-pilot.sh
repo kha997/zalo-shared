@@ -283,9 +283,9 @@ say "gateway=unchanged connector=none"
 # --- report and gate token ---------------------------------------------------
 result_outcome=$(sed -n 's/.*"outcome":"\([^"]*\)".*/\1/p' "$result" | head -1)
 result_outcome=${result_outcome:-unknown}
-report="$repo/docs/evidence/G5A-RECONCILIATION-EXECUTION.md"
+report="$repo/docs/evidence/G5A-RECONCILIATION-EXECUTION-${window_start:0:10}.md"
 report_status=0
-report_output=$(node "$repo/ops/local/reconcile-report.mjs" "$result" "$report") || report_status=$?
+report_output=$(RECONCILE_WINDOW="$window_start–$window_expiry" node "$repo/ops/local/reconcile-report.mjs" "$result" "$report") || report_status=$?
 printf '%s\n' "$report_output"
 result_token=$(printf '%s' "$report_output" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
 say "report=$report token=${result_token:-none} finished_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"

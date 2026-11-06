@@ -43,7 +43,7 @@ lines.push("# G5-A — Controlled reconciliation execution");
 lines.push("");
 lines.push(`**Date:** ${new Date().toISOString()}`);
 lines.push("**Authorization:** the Owner's reconciliation execution authorization");
-lines.push("**Authorized window:** `2026-11-05T02:00:00Z`–`2026-11-05T02:20:00Z` (UTC)");
+lines.push(`**Authorized window:** \`${process.env.RECONCILE_WINDOW || "unspecified"}\` (UTC)`);
 lines.push(`**Started / finished (UTC):** \`${cell(report.startedAt)}\` / \`${cell(report.finishedAt)}\``);
 lines.push(`**Verdict:** **\`${token}\`**`);
 lines.push(`**Request id:** \`${cell(report.requestId)}\``);
