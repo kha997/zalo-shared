@@ -6,7 +6,9 @@
 # image bytes and never keeps the QR after the window closes.
 #
 # The WSL view directory is owner-only (0700, uid 65532), so the copy is made
-# through `wsl.exe -u root`; nothing else runs as root and no password is used.
+# through `wsl.exe -u root`. That root shell is one command away for any local
+# Windows account, so this viewer is a single-operator convenience on a
+# dedicated host, not an access boundary.
 # Rehearsal:  -FixturePath <png>  stages that local file instead of waiting.
 #
 # Usage:
@@ -48,6 +50,12 @@ function Remove-Staged {
   if (Test-Path -LiteralPath $stage) {
     Remove-Item -LiteralPath $stage -Force -ErrorAction SilentlyContinue
   }
+  if (Test-Path -LiteralPath $stage) {
+    [GC]::Collect()
+    [GC]::WaitForPendingFinalizers()
+    Remove-Item -LiteralPath $stage -Force -ErrorAction SilentlyContinue
+  }
+  return -not (Test-Path -LiteralPath $stage)
 }
 
 function Test-Png([string]$path) {
@@ -107,8 +115,12 @@ if ($wslStage -notmatch '^/mnt/[a-z]/[A-Za-z0-9._/-]+$') {
   exit 4
 }
 
-# A previous run must never leave a QR behind.
-Remove-Staged
+# A previous run's QR must not survive, and a copy that cannot be removed must
+# stop this run before another one is staged.
+if (-not (Remove-Staged)) {
+  Write-Log 'viewer-refused stale-copy-remains'
+  exit 5
+}
 Write-Log "viewer-start fixture=$([bool]$FixturePath) timeout=${TimeoutSeconds}s"
 
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
@@ -145,7 +157,26 @@ Write-Log "viewer-staged sha256=$sha"
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$image = [System.Drawing.Image]::FromFile($stage)
+$image = $null
+$stream = $null
+# Decode from memory: a file lock would make the staged copy unremovable and a
+# header-valid but corrupt PNG would otherwise survive as a scannable file.
+$bytes = [System.IO.File]::ReadAllBytes($stage)
+$stream = New-Object System.IO.MemoryStream
+$stream.Write($bytes, 0, $bytes.Length)
+$stream.Position = 0
+try {
+  $image = [System.Drawing.Image]::FromStream($stream)
+} catch {
+  $stream.Dispose()
+  if (-not (Remove-Staged)) {
+    Write-Log 'viewer-refused undecodable-png cleanup=FAILED'
+    exit 5
+  }
+  Write-Log 'viewer-refused undecodable-png'
+  exit 4
+}
+
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Zalo pilot - QR'
 $form.StartPosition = 'CenterScreen'
@@ -190,9 +221,13 @@ $closeAt = if ($AutoCloseSeconds -gt 0) { (Get-Date).AddSeconds($AutoCloseSecond
 # and expiry, so the viewer only ever removes its own staged copy.
 $cleanup = {
   try { $timer.Stop() } catch {}
-  try { $picture.Image = $null; $image.Dispose() } catch {}
-  Remove-Staged
-  Write-Log 'viewer-form-closing staged-copy-removed'
+  try { if ($picture) { $picture.Image = $null } } catch {}
+  try { if ($image) { $image.Dispose() } } catch {}
+  if (Remove-Staged) {
+    Write-Log 'viewer-form-closing staged-copy-removed'
+  } else {
+    Write-Log 'viewer-form-closing staged-copy-remains'
+  }
 }
 
 $timer.Add_Tick({
@@ -221,10 +256,15 @@ $form.Add_FormClosing({
 try {
   [System.Windows.Forms.Application]::Run($form)
 } finally {
-  if (Test-Path -LiteralPath $stage) {
-    Remove-Staged
+  try { if ($picture) { $picture.Image = $null } } catch {}
+  try { if ($image) { $image.Dispose() } } catch {}
+  try { if ($stream) { $stream.Dispose() } } catch {}
+  if (Remove-Staged) {
     Write-Log 'viewer-closed cleanup=final'
+  } else {
+    # A QR left on disk must never be reported as a clean exit.
+    Write-Log 'viewer-closed cleanup=FAILED staged-copy-remains'
+    exit 5
   }
-  try { $image.Dispose() } catch {}
 }
 exit 0

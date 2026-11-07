@@ -31,8 +31,9 @@ import type { PilotGrant } from "../../server/pilot-policy.js";
 /**
  * Offline proof that a refused redirect is attributable without exposing the
  * URL, the Location value or any credential. The base fetch is synthetic, so
- * no socket, DNS query or provider contact happens. The real pinned SDK drives
- * the end-to-end cases through the same policy the connector installs.
+ * no socket, DNS query or provider contact happens. End-to-end A/B drive the
+ * real pinned SDK; C and the exit-durability case stand in a stub Zalo class to
+ * reach the same installed policy without a provider.
  */
 
 const POSIX = process.platform !== "win32";
