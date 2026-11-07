@@ -461,3 +461,22 @@ of the post-scan redirect chain; only then can the minimal policy change be
 specified, reviewed, tested and deployed. The live redirect and the phone-side
 session outcome remain UNPROVEN. No retry exists and no control state may be
 reset by hand.
+
+**DIAGNOSTIC ARTIFACT DEPLOYED — `G5A_DIAGNOSTIC_DEPLOYED_WITH_TIMEBOXED_CVE_DISPOSITION_AWAITING_OWNER_START`.**
+Under the Owner's conditional Option D the private pilot now points at
+`zalo-shared-connector:g5-diag-a2a7aa0` (index `sha256:390b87b6…`, config
+`sha256:4d6cc120…`, source commit `a2a7aa0`). The two unfixed `zlib1g` HIGH
+findings (`CVE-2026-76844`, `CVE-2026-85091`) remain visible and unpatched; they
+are accepted only for this image, only for the private G5-A diagnostic scope and
+only until `2026-11-09T00:00:00Z`, after which the evaluator refuses. The
+unfiltered scan still fails on exactly those two findings and that failure is
+retained. An independent review rejected the first evaluator because `--now`
+let a caller move the expiry; the clock is now the process clock, unknown flags
+are refused, and the re-review approved. `verify-deployed-pilot.sh` passed all
+48 deployed-network assertions; ownership is `idle` at epoch 6 with gap 6, the
+fenced pair `7cc878cf-…`/5 is preserved, the provider is `disconnected` with
+zero unresolved work, the diagnostic sink is unchanged (15 lines,
+`43fc4212…`), and no connector container exists. Live capture, QR, provider
+contact, login, `observe`, `send-test` and merge remain unauthorized and require
+a separate Owner START. The live redirect and the phone-side session outcome
+remain UNPROVEN.
