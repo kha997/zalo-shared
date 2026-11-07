@@ -91,9 +91,24 @@ if (-not (Test-Path -LiteralPath $StageDirectory)) {
   New-Item -ItemType Directory -Path $StageDirectory -Force | Out-Null
 }
 
+# wsl.exe hands its arguments to a shell inside the distribution, so a root
+# copy must never receive a path that can carry separators or shell syntax.
+if ($WslDistribution -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') {
+  Write-Log 'viewer-refused invalid-distribution'
+  exit 4
+}
+if ($SourcePath -notmatch '^/[A-Za-z0-9._/-]+$') {
+  Write-Log 'viewer-refused invalid-source'
+  exit 4
+}
+$wslStage = ConvertTo-WslPath $stage
+if ($wslStage -notmatch '^/mnt/[a-z]/[A-Za-z0-9._/-]+$') {
+  Write-Log 'viewer-refused invalid-stage'
+  exit 4
+}
+
 # A previous run must never leave a QR behind.
 Remove-Staged
-$wslStage = ConvertTo-WslPath $stage
 Write-Log "viewer-start fixture=$([bool]$FixturePath) timeout=${TimeoutSeconds}s"
 
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
