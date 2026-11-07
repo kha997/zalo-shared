@@ -122,13 +122,22 @@ if (-not (Remove-Staged)) {
   exit 5
 }
 Write-Log "viewer-start fixture=$([bool]$FixturePath) timeout=${TimeoutSeconds}s"
+# A window created in a non-interactive session (0) is invisible to the logged-on
+# Owner, so record the session and let the launcher refuse that outcome.
+$sessionId = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
+Write-Log "viewer-session id=$sessionId interactive=$([Environment]::UserInteractive)"
 
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 $found = $false
 while (-not $found -and (Get-Date) -lt $deadline) {
   if ($FixturePath) {
-    Copy-Item -LiteralPath $FixturePath -Destination $stage -Force
-    $found = $true
+    try {
+      Copy-Item -LiteralPath $FixturePath -Destination $stage -Force
+      $found = $true
+    } catch {
+      Write-Log 'viewer-refused fixture-copy-failed'
+      exit 4
+    }
   } else {
     & wsl.exe -d $WslDistribution -u root -- test -f $SourcePath 2>$null
     if ($LASTEXITCODE -eq 0) {
@@ -186,6 +195,10 @@ $form.MinimizeBox = $false
 $form.BackColor = [System.Drawing.Color]::White
 $form.ClientSize = New-Object System.Drawing.Size(560, 660)
 $form.TopMost = $true
+# An operator must not have to hunt for the window: normal state, taskbar entry
+# and an explicit foreground activation when it is shown.
+$form.WindowState = 'Normal'
+$form.ShowInTaskbar = $true
 
 $label = New-Object System.Windows.Forms.Label
 $label.Text = $instruction
@@ -246,8 +259,11 @@ $timer.Add_Tick({
 })
 
 $form.Add_Shown({
+  $form.BringToFront()
   $form.Activate()
   $timer.Start()
+  $shownSession = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
+  Write-Log "viewer-shown handle=$($form.Handle) session=$shownSession topmost=$($form.TopMost) visible=$($form.Visible) image=$($image.Width)x$($image.Height)"
 })
 $form.Add_FormClosing({
   & $cleanup

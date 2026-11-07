@@ -2,7 +2,8 @@
 # Separately scans the intentional SDK-bearing pilot connector image.
 # The application image is scanned by ops/scan-image.sh and must stay SDK-free.
 set -euo pipefail
-image=${1:?Usage: pilot-scan.sh IMAGE}
+image=${1:?Usage: pilot-scan.sh IMAGE [LABEL]}
+label=${2:-connector}
 mkdir -p docs/evidence
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -11,7 +12,7 @@ printf '%s  %s\n' c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9
 tar -xzf "$work/trivy.tar.gz" -C "$work" trivy
 docker save "$image" -o "$work/image.tar"
 "$work/trivy" --version
-"$work/trivy" image --input "$work/image.tar" --scanners vuln --severity HIGH,CRITICAL --format json --output docs/evidence/connector-container-vulnerabilities.json --exit-code 0
+"$work/trivy" image --input "$work/image.tar" --scanners vuln --severity HIGH,CRITICAL --format json --output "docs/evidence/$label-container-vulnerabilities.json" --exit-code 0
 "$work/trivy" image --input "$work/image.tar" --scanners license --format json --output "$work/licenses.json" --exit-code 0
 
 # Runtime identity of the intentional SDK surface. Nothing here reads a
@@ -44,13 +45,13 @@ console.log(JSON.stringify({
   buildIdentity: JSON.parse(fs.readFileSync("/app/build-identity.json", "utf8")),
   privateFiles
 }));
-' | tee docs/evidence/connector-image-inventory.json
+' | tee "docs/evidence/$label-image-inventory.json"
 
-python3 - "$image" "$work/licenses.json" <<'PY'
+python3 - "$image" "$work/licenses.json" "$label" <<'PY'
 import json, re, subprocess, sys
 from pathlib import Path
-image, license_path = sys.argv[1], sys.argv[2]
-report = json.loads(Path("docs/evidence/connector-container-vulnerabilities.json").read_text())
+image, license_path, label = sys.argv[1], sys.argv[2], sys.argv[3]
+report = json.loads(Path(f"docs/evidence/{label}-container-vulnerabilities.json").read_text())
 findings = []
 for result in report.get("Results", []):
     for v in result.get("Vulnerabilities", []):
@@ -72,7 +73,7 @@ for result in json.loads(Path(license_path).read_text()).get("Results", []):
             "license": item.get("Name"),
             "severity": item.get("Severity"),
         })
-inventory = json.loads(Path("docs/evidence/connector-image-inventory.json").read_text())
+inventory = json.loads(Path(f"docs/evidence/{label}-image-inventory.json").read_text())
 config = json.loads(subprocess.check_output([
     "docker", "image", "inspect", image
 ]))[0].get("Config", {})
@@ -91,7 +92,7 @@ summary = {
         "unofficial client behavior and account restrictions remain unproven until the approved live pilot",
     ],
 }
-Path("docs/evidence/connector-image-scan-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+Path(f"docs/evidence/{label}-image-scan-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 print(json.dumps(summary))
 if summary["highCriticalCount"]:
     raise SystemExit("High/critical connector image vulnerabilities remain")
