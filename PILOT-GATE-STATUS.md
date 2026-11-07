@@ -37,6 +37,19 @@ cannot be verified. No mutation, no execution; the pilot rows are unchanged
 **Deployment remediation:** `G5A_DEPLOYMENT_READY_AWAITING_OWNER_START` was met
 before the 2026-11-04 attempt; the deployment remained healthy, the enrollment
 itself did not complete
+**Redirect diagnostic remediation (2026-11-07):** `G5A_DIAGNOSTIC_DEPLOYMENT_BLOCKED`
+— the diagnostic-only change (`8a71644`) and the QR viewer (`3f8703b`,
+`1ab90bb`, `c2f6a05`) are implemented, offline-verified and independently
+reviewed (PASS WITH FINDINGS: admission unchanged, no secret reaches the sink,
+three viewer defects fixed). The candidate image
+`zalo-shared-connector:g5-diag-8a71644` was **not deployed**. The project's own
+connector scan fails on two unfixed HIGH `zlib1g` findings that equally affect
+the deployed baseline and the current distroless head; CI inherits the failure.
+The allowlist, TLS, compose copy, image pointer and ownership state are
+unchanged, no connector was started and no provider contact occurred. An Owner
+decision is required: explicitly assess the two CVEs or approve a separately
+reviewed base-image refresh; deployment then also needs the image rebuilt at the
+reviewed HEAD or the manifest pinned to `8a71644`
 
 ## Gates
 
@@ -59,6 +72,7 @@ itself did not complete
 | `G5A_BOOTSTRAP_VERIFIED_20261107` | **FAIL (`redirect-denied`)** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §12; one authorized attempt in `00:00–00:20Z`: preflight PASS, ownership epoch 5, QR shown `00:04:15.547Z`, phone scan reported successful `00:05:05.668Z`, connector refused a post-scan redirect at `00:05:07.348Z` and exited 1. No UID, no `session.enc`, no `chat.zalo.me` contact; the gateway admitted only `id.zalo.me` with zero denials. Ownership fenced `uncertain` epoch 5, `reconciliation_required=true` (gap 5), QR deleted |
 | `G5A_RECONCILED_20261107` | **PASS (reconciliation)** | [G5A-RECONCILIATION-EXECUTION-2026-11-07.md](docs/evidence/G5A-RECONCILIATION-EXECUTION-2026-11-07.md); executed once in the Owner window `00:54–01:14Z` by the incident-bound reviewed driver (commit `353bf02`): 13/13 preflight checks, one authenticated request HTTP 200 (`alreadyApplied=false`), epoch 5→6, gap 5→6, `uncertain → idle`, audit id 19 (`a646b408-…`), 21/21 post-checks, gateway unchanged, no retry or replay. Provider `disconnected`, `reconciliation_required=false`, zero unresolved work |
 | `G5A_BLOCKED_REDIRECT_POLICY_20261107` | **BLOCKED** | [G5A-REDIRECT-POLICY-BLOCKED-2026-11-07.md](docs/evidence/G5A-REDIRECT-POLICY-BLOCKED-2026-11-07.md); window `01:02–01:32Z` opened with no grant, no QR and no provider contact. The sanitized evidence fixes the failure to an in-process redirect refusal (gateway: one admitted tunnel, nothing after the scan) but not the refused host; three policy-consistent candidates imply different minimal changes, and offline fixtures cannot distinguish them. State verified unchanged: `idle`, epoch 6, gap 6, `reconciliation_required=false`, zero sessions and zero work |
+| `G5A_DIAGNOSTIC_DEPLOYMENT_BLOCKED` | **BLOCKED (image scan)** | [G5A-REDIRECT-DIAGNOSTIC-DEPLOYMENT.md](docs/evidence/G5A-REDIRECT-DIAGNOSTIC-DEPLOYMENT.md); diagnostic-only `8a71644` and viewer `3f8703b`/`1ab90bb`/`c2f6a05`; 16 new A/B/C/adversarial tests plus the unchanged 53 redirect/bootstrap tests PASS, full suite 393/393 twice, `tsc` clean and 50 redirect tests PASS after the viewer commits; independent review PASS WITH FINDINGS (admission unchanged, one tightening; no URL, `Location`, credential or identifier can reach the sink; three viewer defects found and fixed). The candidate admits a synthetic manifest bound to `8a71644` and refuses the old commit in-image; the in-image sink probe writes only the closed shape (0600, 245 bytes, one `cid`, invalid value rejected); the viewer was rehearsed in fixture, WSL-source and corrupt-PNG modes, including shell-injection refusal with no command run. The candidate `zalo-shared-connector:g5-diag-8a71644` (`sha256:ab20e296…`, UID 65532, no ports/files) was built and identity-verified but **not deployed**: the scan fails on two unfixed HIGH `zlib1g` findings (`CVE-2026-76844`, `CVE-2026-85091`) that equally affect the deployed baseline `g5-ready-6d9c0e9` and the current distroless head. Image pointer, allowlist, TLS, compose and ownership (`idle`, epoch 6, fenced `7cc878cf-…`/5) are unchanged; no connector was started and no provider contact occurred. Owner decision required: accept the two CVEs or approve a base refresh; deployment then needs a rebuild at the reviewed HEAD or a manifest pinned to `8a71644` |
 | `G5A_NEXT_BOOTSTRAP_READY_AWAITING_OWNER_START` | **SUPERSEDED — DEPLOYED** | [G5A-REDIRECT-READINESS.md](docs/evidence/G5A-REDIRECT-READINESS.md); preparation and independent review completed before deployment. The admission is no longer undeployed; see the row above |
 | `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION` | **PASS** | [G5A-PILOT-ADMIN-PROVISIONING.md](docs/evidence/G5A-PILOT-ADMIN-PROVISIONING.md); exactly one active admin (`4fd6c034d5e7`), 22/22 pilot auth/CSRF/route checks, 19/19 disposable success-path checks, ownership/provider/delivery rows unchanged. No reconciliation executed |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
