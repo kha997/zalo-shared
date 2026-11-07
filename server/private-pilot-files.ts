@@ -1,4 +1,9 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+  randomUUID,
+} from "node:crypto";
 import { constants } from "node:fs";
 import type { Stats } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
@@ -21,6 +26,11 @@ import {
   sep,
 } from "node:path";
 import { createInterface } from "node:readline/promises";
+import {
+  normalizeDiagnosticDetail,
+  validCorrelationId,
+  type DiagnosticDetail,
+} from "./pilot-diagnostic.js";
 import {
   BOOTSTRAP_STAGE_SET,
   PILOT_REASON_SET,
@@ -525,21 +535,29 @@ export class PrivateQrFileView implements PrivateQrView {
 }
 
 const MAX_DIAGNOSTIC_BYTES = 1024 * 1024;
+const MAX_DIAGNOSTIC_LINE_BYTES = 1024;
 
 export interface PrivateDiagnosticSink {
-  append(stage: string, reason?: string): Promise<void>;
+  append(stage: string, reason?: string, detail?: DiagnosticDetail): Promise<void>;
 }
 
 /**
- * Append-only, owner-only forensic log of stage names and closed-set reason
- * codes. It has no field that can carry a UID, QR, cookie, imei or user agent,
- * so a private diagnostic can never become a credential store.
+ * Append-only, owner-only forensic log of stage names, closed-set reason codes
+ * and the bounded redirect classification. It has no field that can carry a
+ * URL, path, query, `Location` value, cookie, header, UID, QR, imei or user
+ * agent, so a private diagnostic can never become a credential store.
+ *
+ * Every line carries one random correlation id, so the lines of a single
+ * bootstrap can be read together without naming the account.
  */
 export class PrivateDiagnosticFile implements PrivateDiagnosticSink {
   private readonly path: string;
+  private readonly correlationId: string;
 
-  constructor(options: { path: string }) {
+  constructor(options: { path: string; correlationId?: string }) {
     this.path = cleanPath(options?.path);
+    this.correlationId = options?.correlationId ?? randomUUID();
+    if (!validCorrelationId(this.correlationId)) throw unavailable();
   }
 
   async ready(): Promise<void> {
@@ -550,7 +568,11 @@ export class PrivateDiagnosticFile implements PrivateDiagnosticSink {
     if (POSIX && (existing.mode & 0o077) !== 0) throw unavailable();
   }
 
-  async append(stage: string, reason?: string): Promise<void> {
+  async append(
+    stage: string,
+    reason?: string,
+    detail?: DiagnosticDetail,
+  ): Promise<void> {
     // Only the reviewed vocabularies may be written, so no caller can smuggle
     // an identifier into the diagnostic by passing it as a stage.
     if (
@@ -558,12 +580,18 @@ export class PrivateDiagnosticFile implements PrivateDiagnosticSink {
       (reason !== undefined && !PILOT_REASON_SET.has(reason))
     )
       throw unavailable();
+    const normalized =
+      detail === undefined ? null : normalizeDiagnosticDetail(detail);
+    if (detail !== undefined && normalized === null) throw unavailable();
     const line = `${JSON.stringify({
       at: new Date().toISOString(),
       stage,
       ...(reason ? { reason } : {}),
+      cid: this.correlationId,
+      ...(normalized ?? {}),
     })}\n`;
-    if (Buffer.byteLength(line) > 256) throw unavailable();
+    if (Buffer.byteLength(line) > MAX_DIAGNOSTIC_LINE_BYTES)
+      throw unavailable();
     await this.ready();
     let handle: FileHandle | undefined;
     try {

@@ -7,8 +7,13 @@ import type {
   PrivateQrView,
   PrivateSessionStore,
 } from "../../server/private-pilot-files.js";
+import type { DiagnosticDetail } from "../../server/pilot-diagnostic.js";
 import type { PilotGrant } from "../../server/pilot-policy.js";
-import { createBootstrapFetch, type BootstrapFetch, type FetchTransport } from "./redirect-policy.js";
+import {
+  createBootstrapFetch,
+  type BootstrapFetch,
+  type FetchTransport,
+} from "./redirect-policy.js";
 
 export type TrustedSdkLoader = () => unknown | Promise<unknown>;
 
@@ -30,14 +35,18 @@ export {
 
 export class PilotBootstrapError extends Error {
   readonly code: PilotReason;
-  constructor(code: PilotReason) {
+  /** Closed, non-secret redirect classification when the failure was one. */
+  readonly detail?: DiagnosticDetail;
+  constructor(code: PilotReason, detail?: DiagnosticDetail) {
     super("SDK facade unavailable");
     this.name = "PilotBootstrapError";
     this.code = code;
+    if (detail !== undefined) this.detail = detail;
   }
 }
 
-const fail = (code: PilotReason) => new PilotBootstrapError(code);
+const fail = (code: PilotReason, detail?: DiagnosticDetail) =>
+  new PilotBootstrapError(code, detail);
 const ABORT_REASONS: Record<string, PilotReason> = {
   signal: "aborted",
   deadline: "deadline",
@@ -192,6 +201,8 @@ export async function bootstrapPilotSession(options: {
   fetch?: FetchTransport;
   /** Optional sink for the closed stage vocabulary; must never throw outward. */
   onStage?: (stage: BootstrapStage) => void;
+  /** Observability only: the first fetch-policy refusal, already classified. */
+  onDenial?: (denial: DiagnosticDetail) => void;
 }): Promise<{ boundAccountId: string }> {
   try {
     const grant = options?.grant;
@@ -222,6 +233,8 @@ export async function bootstrapPilotSession(options: {
       typeof signal.aborted !== "boolean" ||
       typeof signal.addEventListener !== "function" ||
       (options.onStage !== undefined && typeof options.onStage !== "function") ||
+      (options.onDenial !== undefined &&
+        typeof options.onDenial !== "function") ||
       (options.egressHosts !== undefined &&
         (!Array.isArray(options.egressHosts) ||
           options.egressHosts.length > 32 ||
@@ -278,6 +291,7 @@ export async function bootstrapPilotSession(options: {
     let imei: string | undefined;
     let userAgent: string | undefined;
     let displayLabel: string | null = null;
+    let redirectDenial: DiagnosticDetail | null = null;
     let resolvedApi: unknown;
     const disposed = new WeakSet<object>();
     let rejectAbort: (error: Error) => void = () => {};
@@ -425,6 +439,13 @@ export async function bootstrapPilotSession(options: {
             options.fetch ??
             (globalThis.fetch as unknown as BootstrapFetch),
           egressHosts: options.egressHosts ?? [],
+          onDenial: (value) => {
+            if (redirectDenial !== null) return;
+            redirectDenial = value;
+            try {
+              options.onDenial?.(value);
+            } catch {}
+          },
         });
       } catch {
         // A malformed host set is a configuration fault, not a provider one.
@@ -466,6 +487,9 @@ export async function bootstrapPilotSession(options: {
         if (error instanceof PilotBootstrapError) throw error;
         throw fail(
           polyfill.denied ? "redirect-denied" : loginFailureCode(error),
+          polyfill.denied
+            ? (redirectDenial ?? polyfill.denial ?? undefined)
+            : undefined,
         );
       }
       resolvedApi = api;

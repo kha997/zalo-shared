@@ -540,7 +540,10 @@ async function liveBootstrap(input: {
   } catch (error) {
     const reason =
       error instanceof PilotBootstrapError ? error.code : "internal";
-    await diagnostics?.append("failed", reason).catch(() => {});
+    // Awaited so the closed redirect classification survives process exit.
+    const detail =
+      error instanceof PilotBootstrapError ? error.detail : undefined;
+    await diagnostics?.append("failed", reason, detail).catch(() => {});
     throw error;
   } finally {
     process.removeListener("SIGINT", onSignal);

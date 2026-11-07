@@ -34,6 +34,15 @@
  * the SDK from asking.
  */
 
+import {
+  DIAGNOSTIC_INVALID_HOST,
+  isSafeHostname,
+  safeDestinationHost,
+  type DiagnosticDetail,
+  type DiagnosticRedirect,
+  type DiagnosticRequest,
+} from "../../server/pilot-diagnostic.js";
+
 export const CHECK_SESSION_URL =
   "https://id.zalo.me/account/checksession?continue=https%3A%2F%2Fchat.zalo.me%2Findex.html";
 export const REDIRECT_HOST = "chat.zalo.me";
@@ -43,16 +52,21 @@ export type FetchTransport = (
   url: string,
   options?: unknown,
 ) => Promise<Response>;
-/** The transport plus how the policy last behaved, for non-secret attribution. */
-export type BootstrapFetch = FetchTransport & { readonly denied: boolean };
+/**
+ * The transport plus how the policy last behaved, for non-secret attribution.
+ * `denial` is the first refusal only: later consequences of the same refusal
+ * cannot replace the root cause.
+ */
+export type BootstrapFetch = FetchTransport & {
+  readonly denied: boolean;
+  readonly denial: DiagnosticDetail | null;
+};
 
 const CHECK_SESSION = new URL(CHECK_SESSION_URL);
 const CHECK_SESSION_ORIGIN = CHECK_SESSION.origin;
 const CHECK_SESSION_PATH = CHECK_SESSION.pathname;
 const CHECK_SESSION_CONTINUE = CHECK_SESSION.searchParams.get("continue") ?? "";
 const MAX_URL_LENGTH = 2048;
-const HOST_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
-const IPV4 = /^\d+(?:\.\d+){3}$/;
 
 function denied(): TypeError {
   const error = new TypeError("fetch failed");
@@ -61,12 +75,7 @@ function denied(): TypeError {
 }
 
 function validHost(host: unknown): host is string {
-  if (typeof host !== "string") return false;
-  if (!host || host.length > 253) return false;
-  if (host !== host.toLowerCase()) return false;
-  if (host.endsWith(".")) return false;
-  if (host.includes(":") || host.includes("%") || IPV4.test(host)) return false;
-  return host.split(".").every((label) => HOST_LABEL.test(label));
+  return isSafeHostname(host);
 }
 
 /** Parse and validate one absolute target. Throws the closed denial error. */
@@ -105,6 +114,27 @@ export function followableLocation(location: string): string | null {
   return url.href;
 }
 
+/**
+ * The destination host of a well-formed absolute `https:` Location that names
+ * a different host, or null. This only names the refusal class; it never
+ * widens what may be followed.
+ */
+function unexpectedDestination(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const value = raw.trim();
+  if (!value || value.length > MAX_URL_LENGTH) return null;
+  if (/[\u0000-\u0020\u007f]/.test(value) || value.includes("\\")) return null;
+  if (!/^https:\/\//i.test(value)) return null;
+  let url: URL;
+  try {
+    url = target(value);
+  } catch {
+    return null;
+  }
+  if (url.hostname === REDIRECT_HOST) return null;
+  return url.hostname;
+}
+
 function isCheckSession(url: URL): boolean {
   return (
     url.origin === CHECK_SESSION_ORIGIN &&
@@ -124,10 +154,14 @@ function isCheckSession(url: URL): boolean {
 export function createBootstrapFetch(options: {
   fetch: FetchTransport;
   egressHosts: readonly string[];
+  /** Observability only: receives the first refusal's closed classification. */
+  onDenial?: (denial: DiagnosticDetail) => void;
 }): BootstrapFetch {
   const base = options?.fetch;
   const hosts = options?.egressHosts;
   if (typeof base !== "function") throw denied();
+  if (options?.onDenial !== undefined && typeof options.onDenial !== "function")
+    throw denied();
   if (!Array.isArray(hosts) || hosts.length > 32) throw denied();
   const direct = new Set<string>();
   for (const host of hosts) {
@@ -137,8 +171,22 @@ export function createBootstrapFetch(options: {
   const redirectAdmitted = hosts.includes(REDIRECT_HOST);
   let pending: string | null = null;
   let refused = false;
-  const refuse = () => {
-    refused = true;
+  let hops = 0;
+  let issued = false;
+  let denial: DiagnosticDetail | null = null;
+  const refuse = (
+    request: DiagnosticRequest,
+    redirect: DiagnosticRedirect,
+    source: string | null,
+    destination: string | null,
+  ) => {
+    if (!refused) {
+      refused = true;
+      denial = { request, redirect, source, destination, hops };
+      try {
+        options.onDenial?.(denial);
+      } catch {}
+    }
     return denied();
   };
 
@@ -151,22 +199,43 @@ export function createBootstrapFetch(options: {
       if (typeof input !== "string") throw denied();
       url = target(input);
     } catch {
-      throw refuse();
+      throw refuse("other", "invalid-target", null, null);
     }
+    const redirectRequest = url.hostname === REDIRECT_HOST;
+    const request: DiagnosticRequest = isCheckSession(url)
+      ? "check-session"
+      : redirectRequest
+        ? "redirect-follow"
+        : direct.has(url.hostname)
+          ? "provider-direct"
+          : "other";
+    let hop = false;
     if (direct.has(url.hostname)) {
       // A direct provider request clears any hop that was not taken, so a
       // stale Location can never authorise a later request.
       pending = null;
     } else if (
       redirectAdmitted &&
-      url.hostname === REDIRECT_HOST &&
+      redirectRequest &&
       pending !== null &&
       url.href === pending
     ) {
       pending = null;
+      hop = true;
+      hops = 1;
     } else {
+      const wasIssued = issued;
       pending = null;
-      throw refuse();
+      throw refuse(
+        request,
+        redirectRequest
+          ? wasIssued
+            ? "stale-hop"
+            : "direct-redirect-host"
+          : "not-admitted",
+        null,
+        redirectRequest ? REDIRECT_HOST : url.hostname,
+      );
     }
     const checkSession = isCheckSession(url);
     // Manual on every request. With the default mode undici follows a provider
@@ -186,22 +255,71 @@ export function createBootstrapFetch(options: {
       return response;
     }
     pending = null;
-    if (!checkSession || typeof headers?.get !== "function")
-      throw refuse();
-    const location = (headers.get as (name: string) => string | null)(
-      "location",
-    );
-    const hop = location === null ? null : followableLocation(location);
+    const readLocation = (): string | null => {
+      try {
+        const get = (headers as { get?: unknown } | null | undefined)?.get;
+        return typeof get === "function"
+          ? (get as (name: string) => string | null).call(headers, "location")
+          : null;
+      } catch {
+        return null;
+      }
+    };
+    if (hop) {
+      // Any further 3xx after the admitted hop is refused, whatever it names.
+      throw refuse(
+        request,
+        "redirect-after-hop",
+        url.hostname,
+        safeDestinationHost(readLocation()),
+      );
+    }
+    if (!checkSession) {
+      throw refuse(
+        request,
+        "unexpected-redirect",
+        url.hostname,
+        safeDestinationHost(readLocation()),
+      );
+    }
+    if (typeof headers?.get !== "function")
+      throw refuse(
+        request,
+        "malformed-redirect",
+        url.hostname,
+        DIAGNOSTIC_INVALID_HOST,
+      );
+    let location: string | null;
+    try {
+      location = (headers.get as (name: string) => string | null)("location");
+    } catch {
+      location = null;
+    }
+    const hopHref = location === null ? null : followableLocation(location);
     // A 3xx the policy cannot validate is a refusal, not an unattributed
     // provider failure. The SDK follows a returned Location itself, so the
-    // hop is handed back only after it has been checked here.
-    if (hop === null) throw refuse();
-    pending = hop;
+    // hop is handed back only after it has been checked here. The class only
+    // names what was seen; it never widens what may be followed.
+    if (hopHref === null)
+      throw refuse(
+        request,
+        unexpectedDestination(location) === null
+          ? "malformed-redirect"
+          : "unexpected-location",
+        url.hostname,
+        safeDestinationHost(location),
+      );
+    pending = hopHref;
+    issued = true;
     return response;
   };
 
   Object.defineProperty(bootstrapFetch, "denied", {
     get: () => refused,
+    enumerable: false,
+  });
+  Object.defineProperty(bootstrapFetch, "denial", {
+    get: () => denial,
     enumerable: false,
   });
   return bootstrapFetch as BootstrapFetch;
