@@ -1,24 +1,24 @@
 # Pilot gate status
 
-**Date:** 2026-11-05
+**Date:** 2026-11-07
 **Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; connector source unchanged at the live attempt (`3ceac2b`, `ops/` and evidence only after `2dff06e`); deployment remediation `9d94a26`
 **PR #3:** OPEN, **Draft** (not merged, not deployed)
 **Owner decision:** `G5_SCOPE_APPROVED_ACTIVATION_PENDING` — D1–D7 approved in scope; live activation withheld
-**G5-A authorization:** the `G5A_LIVE_BOOTSTRAP_ONLY` window
-`2026-11-04T00:46:00Z`–`01:16:00Z` was entered, one bootstrap was started, and
-the authorization is **consumed** (`G5A_BOOTSTRAP_FAIL`). The earlier
-`2026-11-03T14:56Z`–`15:26Z` window was blocked before live action and the
-`2026-11-03T02:00Z`–`02:30Z` window is invalid; neither is reusable.
-**Live pilot:** **NOT ACTIVATED** — one provider contact and one QR emission on
-2026-11-04, no completed login, no session, no real account operation, no send
-**Owner reconciliation gate:** `G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION`
-— the Owner-authorized one-shot restoration executed at `2026-11-05T02:01Z`
-through the reviewed Admin API. `connector_ownership` is `idle`, epoch 2,
-`provider_state` is `disconnected` with `reconciliation_required=false` and gap
-2, and exactly one `connector.reconciled` audit row records the transition
-([G5A-RECONCILIATION-EXECUTION.md](docs/evidence/G5A-RECONCILIATION-EXECUTION.md)).
-The bootstrap abort is still narrowed but UNPROVEN; the next bootstrap is
-blocked only on the redirect decision and a new Owner authorization
+**G5-A authorization:** three live bootstrap authorizations have been consumed —
+`2026-11-04T00:46Z–01:16Z` (failed before login), `2026-11-06T23:40Z–00:10Z`
+(`qr-expired`) and `2026-11-07T00:00Z–00:20Z` (post-scan `redirect-denied`). None
+may be extended, rescheduled or reused; the earlier `2026-11-03` windows are
+invalid.
+**Live pilot:** **NOT ACTIVATED** — three live attempts emitted a QR and
+contacted only `id.zalo.me`; no completed handshake, no UID, no session, no
+encrypted store and no real account operation. On 2026-11-07 the phone approved
+the scan and the connector refused the post-scan redirect, exiting 1.
+**Owner reconciliation gate:** the 2026-11-06 incident was reconciled once in the
+Owner window `23:52–00:12Z` (epoch 3→4, gap 3→4, `idle`,
+`reconciliation_required=false`). The 2026-11-07 attempt then fenced ownership
+`uncertain` at epoch 5 (`fault_code=shutdown`) and set
+`reconciliation_required=true`, gap 5; it has **not** been reconciled and no
+control state was reset by hand.
 **Pilot admin provisioning (2026-11-04):** `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION`
 — exactly one active pilot admin was created through the reviewed identity model
 and verified through the reviewed login/CSRF/authorization path; the credential
@@ -55,6 +55,7 @@ itself did not complete
 | `G5A_REDIRECT_DEPLOYED_AWAITING_OWNER_START` | **PASS (deployed, offline)** | [G5A-REDIRECT-DEPLOYMENT.md](docs/evidence/G5A-REDIRECT-DEPLOYMENT.md); the Owner's deployment authorization was executed on 2026-11-06T23:10Z: reviewed image `zalo-shared-connector:g5-ready-6d9c0e9` (`sha256:97513c22ac74…`, embedded sourceCommit `6d9c0e9`) and the exact four-host allowlist (`chat.zalo.me` as redirect-target) are deployed, the private compose copy is byte-identical to the reviewed example, and the gateway recreated healthy. 48/48 deployed-network, 21/21 allow-path, 33/33 in-image redirect, all static checker assertions and 377/377 suite PASS; control state stayed `idle`, epoch 2, gap 2, `reconciliation_required=false` with zero unresolved work; the gateway admitted no tunnel, so no provider contact occurred. Independent read-only verification returned PASS on all eight reviewed claims, with residual risks recorded. The live redirect remains UNPROVEN until an authorized bootstrap |
 | `G5A_BOOTSTRAP_VERIFIED_20261106` | **FAIL (`qr-expired`)** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §11; one authorized attempt in `23:40–00:10Z`: preflight fully PASS, ownership acquired at epoch 3, QR emitted at `23:42:54.537Z` and expired at `23:44:34.560Z` before the terminal confirmation, connector exited 1. No UID, no `session.enc`, no post-login handshake and no `chat.zalo.me` contact; the gateway allowed only `id.zalo.me` twice with zero denials. The Owner reports the phone scan succeeded; its provider-side outcome is UNPROVEN |
 | `G5A_RECONCILED_20261106` | **PASS (reconciliation)** | [G5A-RECONCILIATION-EXECUTION-2026-11-06.md](docs/evidence/G5A-RECONCILIATION-EXECUTION-2026-11-06.md); executed once in the Owner window `23:52–00:12Z` by the incident-bound reviewed driver (commit `ae8a77f`): 13/13 preflight checks, one authenticated request HTTP 200, epoch 3→4, gap 3→4, `uncertain → idle`, audit id 14, 21/21 post-checks, no retry or replay. Provider state `disconnected`, `reconciliation_required=false`, zero unresolved work |
+| `G5A_BOOTSTRAP_VERIFIED_20261107` | **FAIL (`redirect-denied`)** | [G5A-BOOTSTRAP-REPORT.md](docs/evidence/G5A-BOOTSTRAP-REPORT.md) §12; one authorized attempt in `00:00–00:20Z`: preflight PASS, ownership epoch 5, QR shown `00:04:15.547Z`, phone scan reported successful `00:05:05.668Z`, connector refused a post-scan redirect at `00:05:07.348Z` and exited 1. No UID, no `session.enc`, no `chat.zalo.me` contact; the gateway admitted only `id.zalo.me` with zero denials. Ownership fenced `uncertain` epoch 5, `reconciliation_required=true` (gap 5), QR deleted |
 | `G5A_NEXT_BOOTSTRAP_READY_AWAITING_OWNER_START` | **SUPERSEDED — DEPLOYED** | [G5A-REDIRECT-READINESS.md](docs/evidence/G5A-REDIRECT-READINESS.md); preparation and independent review completed before deployment. The admission is no longer undeployed; see the row above |
 | `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION` | **PASS** | [G5A-PILOT-ADMIN-PROVISIONING.md](docs/evidence/G5A-PILOT-ADMIN-PROVISIONING.md); exactly one active admin (`4fd6c034d5e7`), 22/22 pilot auth/CSRF/route checks, 19/19 disposable success-path checks, ownership/provider/delivery rows unchanged. No reconciliation executed |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
@@ -402,10 +403,13 @@ work. The live redirect remains UNPROVEN.
 G5-B is not authorized. No retry, login, QR generation, observe, send or media
 action is permitted until a new authorization exists.
 
-**STOP — `G5A_RECONCILED_AWAITING_NEW_START_AUTHORIZATION`. The single authorized
-attempt of 2026-11-06 failed closed at `qr-expired`; the fenced incident was
-reconciled in the Owner window `23:52–00:12Z` (epoch 3→4, gap 3→4, `idle`,
-`reconciliation_required=false`), with no provider contact after the attempt and
-no unresolved delivery work. No retry exists, no control state was reset by hand,
-and the live redirect and the phone-side outcome remain UNPROVEN. A new explicit
-UTC Owner authorization is required before any QR, login or provider contact.**
+**STOP — `G5A_BOOTSTRAP_FAIL_AWAITING_RECONCILIATION_AND_NEW_AUTHORIZATION`.** The
+2026-11-07 authorization is consumed: preflight passed, the QR was shown, the
+Owner's phone approved the scan, and the connector then refused an unreviewed
+post-scan redirect (`redirect-denied`) before any further egress. Ownership is
+fenced `uncertain` at epoch 5 with `reconciliation_required=true`; the fenced
+incident must be reconciled through the reviewed operation under a new explicit
+Owner approval, and any further bootstrap requires a new UTC Owner window plus an
+Owner decision on the post-scan redirect policy. No retry exists and no control
+state may be reset by hand. The live redirect and the phone-side session outcome
+remain UNPROVEN.

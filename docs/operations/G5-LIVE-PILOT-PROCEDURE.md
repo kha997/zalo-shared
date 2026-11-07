@@ -109,13 +109,14 @@ The final summary must state that technical PASS at any stage did not itself aut
 
 ## Current stop point
 
-**STOP — `G5A_RECONCILED_AWAITING_NEW_START_AUTHORIZATION`.** The 2026-11-04 and
-2026-11-06 authorizations are consumed and neither may be extended. The second
-attempt failed closed at `qr-expired` (QR valid 100 seconds) without a UID, a
-session or a post-login handshake, and only `id.zalo.me` was contacted. Its
-fenced incident was reconciled once in the Owner window `23:52–00:12Z`
-(ownership `idle`, epoch 4, gap 4, `reconciliation_required=false`, zero
-unresolved work); the phone-side outcome and the live redirect remain UNPROVEN.
-No retry, login, QR generation, session write, observation or send may occur
-until the Owner issues a new explicit UTC G5-A start authorization. Do not reset
-control state by hand.
+**STOP — `G5A_BOOTSTRAP_FAIL` (2026-11-07T00:05:07Z).** All three G5-A
+authorizations are consumed and none may be extended. The third attempt passed
+preflight, showed the QR, the Owner's phone approved the scan, and the connector
+then refused an unreviewed post-scan redirect (`redirect-denied`) and exited 1
+without a UID or session; only `id.zalo.me` was contacted and the gateway logged
+zero denials. Ownership is fenced `uncertain` at epoch 5 with
+`reconciliation_required=true`, and the QR was deleted. No retry, login, QR
+generation, session write, observation or send may occur. First reconcile the
+fenced incident through the reviewed operation under a new Owner approval, then
+obtain a new explicit UTC G5-A window and an Owner decision on the post-scan
+redirect policy. Do not reset control state by hand.

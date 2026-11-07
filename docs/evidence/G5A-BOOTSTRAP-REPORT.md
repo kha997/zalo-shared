@@ -719,3 +719,68 @@ all 21 post-checks PASS, no retry or replay. Details:
 authorized attempt is consumed and cannot be retried. A further bootstrap
 requires a new explicit UTC Owner window, a fresh grant, and — given the 100-second
 QR lifetime — a scan performed immediately after the QR appears.
+
+## 12. Third bootstrap attempt — 2026-11-07 00:00–00:20Z
+
+**Authorization and grant.** The Owner selected a new UTC window
+`2026-11-07T00:00:00Z`–`00:20:00Z` and stated the phone was ready. A fresh
+single-use `enroll-session` grant `g5a-enroll-2026-11-07T0000Z`
+(`consentRef G5A-OWNER-AUTH-2026-11-07T0000Z`, `issuedAt 00:02:20.084Z`,
+`expiresAt 00:18:00.000Z`, same reviewed build identity) was created outside the
+repository and mounted `0600` as UID 65532.
+
+**Preflight.** Reviewed image digest `sha256:97513c22…` and embedded
+`sourceCommit 6d9c0e9`, `lockSha256` and `sdkIntegrity` matched the grant; the
+gateway was `running healthy` with exactly
+`id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me,chat.zalo.me`; both Docker networks
+were `internal=true`; the connector database URL carried `sslmode=verify-full`;
+ownership was `idle`, epoch 4, owner null, gap 4; `provider_state` was
+`disconnected` with `reconciliation_required=false`; messages, outbox, delivery
+parts, media jobs and the part ledger were all zero; no `session.enc` existed and
+`sessions=0`; no connector container ran; the diagnostic sink was writable.
+In-image preflight returned `ok:true`, `gate:admitted`, `lifetimeMs 939916`.
+
+**Attempt.** Launched once under `tmux` through the reviewed private compose file
+with a PTY console logged `0600`.
+
+| Event | UTC |
+| --- | --- |
+| start | 00:04:14.707Z |
+| ownership-acquired (epoch 5) | 00:04:14.776Z |
+| sdk-loaded / login-requested | 00:04:15.243Z |
+| qr-shown (single `sni_allow id.zalo.me`) | 00:04:15.547Z |
+| scanned (Owner: phone reported success) | 00:05:05.668Z |
+| failed `redirect-denied`, exit 1 | 00:05:07.348Z |
+
+**Outcome.**
+
+| Item | Result |
+| --- | --- |
+| QR emission and local display | PASS (QR inside the private view, displayed locally, deleted after) |
+| Phone scan / approval | PASS as reported by the Owner; provider-side approval UNPROVEN |
+| Post-scan SDK handshake | **FAIL — `redirect-denied`** |
+| UID / display name | NONE (never reached) |
+| Encrypted session (`session.enc`) | NONE (`sessions=0`) |
+| Provider destinations contacted | only `id.zalo.me` (one admitted tunnel at `00:04:15.381Z`); zero gateway denials |
+| Phone coexistence | UNPROVEN |
+| Safe shutdown and fencing | PASS (`uncertain`, epoch 5, `fault_code=shutdown`) |
+| QR cleanup | PASS (private view and Windows copy removed) |
+| Reconciliation | **REQUIRED** (`reconciliation_required=true`, gap 5); not executed |
+
+**Failure analysis.** The denial came from the connector's own redirect policy,
+not from the deployed gateway: the gateway logged exactly one admitted tunnel
+(`id.zalo.me`, `00:04:15.381Z`) and no tunnel, deny, connect or other SNI after
+the scan. After the phone approved, the SDK requested a redirect that did not
+match the single reviewed `checkSession` hop, so the wrapper refused it and
+exited before any further egress. The offending target is not recorded (the
+console and diagnostic file carry only closed stage and reason codes), so the
+unreviewed destination remains UNPROVEN. This is the stop condition the
+authorization defined: the attempt ended at the redirect gate, no allowlist or
+firewall change was made, and no retry was attempted. Audit rows moved 15 → 17
+(ownership lifecycle only); all workload rows remain zero.
+
+**STOP — `G5A_BOOTSTRAP_FAIL`.** The third authorization is consumed. Ownership is
+fenced `uncertain` at epoch 5 and must be reconciled through the reviewed
+operation under a new Owner approval; a further bootstrap requires a new explicit
+UTC Owner window and an Owner decision on the post-scan redirect policy. The QR,
+console log and all private material stay outside the repository.
