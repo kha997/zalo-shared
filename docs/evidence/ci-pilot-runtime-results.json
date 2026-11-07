@@ -1,0 +1,41 @@
+{
+  "sourceCommit": "105f2d74bf0b14ac4a40a394a416466de6afe533",
+  "run": "41377272040",
+  "runUrl": "https://github.com/kha997/zalo-shared/actions/runs/41377272040",
+  "result": "success",
+  "unit": { "tests": 251, "pass": 251, "fail": 0, "skipped": 0 },
+  "guardedOfflineSdk": { "tests": 2, "pass": 2, "fail": 0 },
+  "browser": { "passed": 9, "skipped": 1, "failed": 0 },
+  "pilotDryRun": {
+    "command": "dry-run",
+    "ok": true,
+    "gate": "admitted",
+    "purpose": "observe"
+  },
+  "pilotImage": {
+    "uid": 65532,
+    "zcaJs": "2.2.0",
+    "zcaResolved": "/app/node_modules/zca-js/dist/cjs/index.cjs",
+    "cryptoJs": "4.2.0",
+    "exposedPorts": [],
+    "trivy": "0.76.1",
+    "highCriticalCount": 0,
+    "fixableHighCriticalCount": 0
+  },
+  "load": {
+    "4": { "requests": 52, "p95Ms": 62.95, "targetMet": true },
+    "10": { "requests": 130, "p95Ms": 88.84, "targetMet": true },
+    "25": { "requests": 325, "p95Ms": 204.62, "targetMet": true },
+    "50": { "requests": 650, "p95Ms": 392.68, "targetMet": true },
+    "50x50": { "requests": 10050, "p95Ms": 111.26, "targetMet": true },
+    "100": { "requests": 1300, "p95Ms": 945.74, "targetMet": true },
+    "200": { "requests": 2600, "p95Ms": 2102.12, "targetMet": false },
+    "500": { "requests": 6500, "p95Ms": 3371.99, "targetMet": false }
+  },
+  "limitations": [
+    "Synthetic offline connector dry-run only; no real login, QR scan, provider call or phone interaction.",
+    "The 200- and 500-client short API workloads exceeded the 2 s p95 target in this run.",
+    "crypto-js 4.2.0 remains a deprecated transitive dependency of zca-js 2.2.0.",
+    "The 1-4 pilot peer allowlist is a pilot safety scope, not a product seat limit."
+  ]
+}

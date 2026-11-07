@@ -1,0 +1,5 @@
+pilot-compose: no published ports
+pilot-compose: uid 65532, read-only root, cap_drop ALL, no-new-privileges
+pilot-compose: manifest and session key mounted read-only; default command dry-run
+pilot-compose: connector joins external app DB network + non-internal egress
+pilot-compose: DB network is not published; egress is host-policy controlled

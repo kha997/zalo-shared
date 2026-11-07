@@ -1,0 +1,22 @@
+G3 encrypted backup and isolated restore drill
+==============================================
+Baseline: adf8ceca9bd615004486b14ebc07da8475b71a3a
+Date: 2026-11-02
+Command: docker exec -u postgres zalo-g3-db bash /tmp/zalo-ops/ci-backup-drill.sh
+Context: g3-app and g3-worker stopped; fresh migrated zalo_test seeded once with
+synthetic provider journal fixtures; age key generated inside the drill.
+Result: PASS
+
+Key assertions from the run (full output: g3-backup-restore.log):
+- backup.age, database.dump, counts.tsv and integrity.tsv checksum/manifest checks OK
+- sessions|0 (restored sessions deleted)
+- dispatchable|1 (never-attempted pending fixture retained; interrupted work quarantined)
+- public_connect|f (runtime CONNECT denied on the restored database)
+- "Restore quarantine and runtime audit privilege assertions PASS"
+- media pending/processing re-held with locator; expired locator erased; hashes preserved
+
+Companion durability check: SIGKILL of zalo-g3-db left 17/17 integrity rows
+byte-identical (g3-durability-before.tsv vs g3-durability-after.tsv).
+
+This drill does not prove pilot locator-key escrow or recovery of a real session;
+the key was generated inside the drill and locator ciphertext is synthetic.

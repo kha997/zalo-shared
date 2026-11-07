@@ -1,0 +1,10 @@
+/tmp/tmp.poTOZrHSVj/prometheus.tar.gz: OK
+Checking /tmp/tmp.poTOZrHSVj/prometheus.yml
+  SUCCESS: 1 rule files found
+ SUCCESS: /tmp/tmp.poTOZrHSVj/prometheus.yml is valid prometheus config file syntax
+
+Checking /home/zen/Projects/zalo-shared/ops/monitoring/alerts.yml
+  SUCCESS: 3 rules found
+
+  SUCCESS
+

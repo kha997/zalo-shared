@@ -1,0 +1,14 @@
+/tmp/tmp.XO3dg7xBab/trivy.tar.gz: OK
+Version: 0.76.1
+Vulnerability DB:
+  Version: 2
+  UpdatedAt: 2026-11-02 01:14:05.640637121 +0000 UTC
+  NextUpdate: 2026-11-03 01:14:05.64063672 +0000 UTC
+  DownloadedAt: 2026-11-02 06:35:01.283227391 +0000 UTC
+2026-11-02T13:42:26+07:00	INFO	[vuln] Vulnerability scanning is enabled
+2026-11-02T13:42:27+07:00	INFO	Detected OS	family="debian" version="13.7"
+2026-11-02T13:42:27+07:00	INFO	[debian] Detecting vulnerabilities...	os_version="13" pkg_num=14
+2026-11-02T13:42:27+07:00	INFO	Number of language-specific files	num=1
+2026-11-02T13:42:27+07:00	INFO	[node-pkg] Detecting vulnerabilities...
+2026-11-02T13:42:27+07:00	WARN	Using severities from other vendors for some vulnerabilities. Read https://trivy.dev/docs/v0.76/guide/scanner/vulnerability#severity-selection for details.
+{"scanner": "Trivy0.76.1", "image": "zalo-shared:g2-adf8ceca9bd6", "highCriticalCount": 0, "fixableHighCriticalCount": 0, "findings": []}

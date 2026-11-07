@@ -1,0 +1,769 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import {
+  admitPilotInbound,
+  createOwnedConnector,
+} from "../../adapters/zalo/connector-runtime.js";
+import { ACCOUNT } from "../../server/db.js";
+import type { OwnershipHandle } from "../../server/connector-ownership.js";
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+};
+function fixture() {
+  let live = true,
+    revoked = () => {},
+    calls = 0,
+    closed = 0,
+    ownershipClosed = 0;
+  const listener = new (class extends EventEmitter {
+    start() {
+      this.emit("connected");
+    }
+    stop() {}
+  })();
+  const owner: OwnershipHandle = {
+    token: {
+      accountId: ACCOUNT,
+      ownerId: "00000000-0000-4000-8000-000000000002",
+      epoch: "1",
+    },
+    get admitted() {
+      return live;
+    },
+    async assertCurrent() {
+      if (!live) throw Error("secret");
+    },
+    async markActive() {
+      if (!live) throw Error("secret");
+    },
+    async invalidate() {
+      live = false;
+      revoked();
+      ownershipClosed++;
+    },
+    async close() {
+      live = false;
+      revoked();
+      ownershipClosed++;
+    },
+  };
+  const options = {
+    pool: {} as any,
+    ownerLabel: "offline-test",
+    acquireOwnership: async (_pool: any, o: { onRevoked: () => void }) => {
+      revoked = o.onRevoked;
+      return owner;
+    },
+    createFacade: () => {
+      calls++;
+      return {
+        async createApi() {
+          return {
+            listener,
+            async sendMessage() {
+              return { message: { msgId: "synthetic" } };
+            },
+          };
+        },
+        close() {
+          closed++;
+        },
+        async persistSession() {},
+      };
+    },
+  };
+  return {
+    options,
+    owner,
+    listener,
+    get calls() {
+      return calls;
+    },
+    get closed() {
+      return closed;
+    },
+    get ownershipClosed() {
+      return ownershipClosed;
+    },
+    revoke() {
+      live = false;
+      revoked();
+    },
+  };
+}
+test("owned runtime refuses factories after failed admission and sanitizes errors", async () => {
+  const f = fixture();
+  const runtime = createOwnedConnector({
+    ...f.options,
+    acquireOwnership: async () => {
+      throw Error("secret-cookie");
+    },
+  });
+  await assert.rejects(
+    runtime.start(),
+    (e) => e instanceof Error && e.message === "Connector runtime unavailable",
+  );
+  assert.equal(f.calls, 0);
+  assert.equal(runtime.status, "blocked");
+});
+test("owned runtime reserves before factories, start is single-flight and revoke is terminal", async () => {
+  const f = fixture(),
+    gate = deferred<OwnershipHandle>();
+  let acquired = 0;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    acquireOwnership: async (...args) => {
+      acquired++;
+      await gate.promise;
+      return f.options.acquireOwnership(...args);
+    },
+  });
+  const first = runtime.start(),
+    second = runtime.start();
+  assert.equal(f.calls, 0);
+  gate.resolve(f.owner);
+  await Promise.all([first, second]);
+  assert.equal(acquired, 1);
+  assert.equal(f.calls, 1);
+  assert.equal(runtime.status, "active");
+  f.revoke();
+  assert.equal(runtime.status, "blocked");
+  assert.equal(f.closed, 1);
+  await assert.rejects(runtime.runOnce());
+  await assert.rejects(runtime.persistSession());
+  await assert.rejects(runtime.start());
+  await runtime.stop();
+});
+test("stop during a pending facade factory disposes the late result without starting API", async () => {
+  const f = fixture(),
+    gate = deferred<any>();
+  let apiCalls = 0;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    createFacade: () => gate.promise,
+  });
+  const start = runtime.start();
+  await new Promise((r) => setImmediate(r));
+  await runtime.stop();
+  await assert.rejects(start);
+  gate.resolve({
+    async createApi() {
+      apiCalls++;
+    },
+    close() {
+      apiCalls += 100;
+    },
+  });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(apiCalls, 100);
+  assert.equal(runtime.status, "stopped");
+  await runtime.stop();
+  assert.equal(apiCalls, 100);
+});
+test("revocation before reconnect prevents another API factory and session refresh", async () => {
+  const f = fixture();
+  let apiCalls = 0,
+    refresh = 0;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    transportOptions: { reconnectDelayMs: 1 },
+    createFacade: () => ({
+      async createApi() {
+        apiCalls++;
+        return { listener: f.listener, async sendMessage() {} };
+      },
+      async persistSession() {
+        refresh++;
+      },
+      close() {},
+    }),
+  });
+  await runtime.start();
+  f.revoke();
+  f.listener.emit("closed");
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(apiCalls, 1);
+  await assert.rejects(runtime.persistSession());
+  assert.equal(refresh, 0);
+  await runtime.stop();
+});
+
+test("actual owned provider treats an SDK call completing after revoke as uncertain", async () => {
+  const { createSdkProvider } = await import("../../adapters/zalo/provider.js");
+  const { createZaloTransport } =
+    await import("../../adapters/zalo/transport.js");
+  const { ProviderNotDispatchedError } = await import("../../server/worker.js");
+  const f = fixture(),
+    result = deferred<unknown>();
+  let calls = 0;
+  const transport = createZaloTransport({
+    approvedSdk: {
+      async createApi() {
+        return {
+          listener: f.listener,
+          async sendMessage() {
+            calls++;
+            return result.promise;
+          },
+        };
+      },
+    },
+  });
+  await transport.start();
+  const db = {
+    async query(sql: string) {
+      return {
+        rows: sql.includes("provider_state")
+          ? [{ status: "connected", reconciliation_required: false }]
+          : sql.includes("delivery_parts")
+            ? [{ part: 0, attachment_id: null }]
+            : [
+                {
+                  text: "synthetic",
+                  provider_thread_id: "peer",
+                  provider_thread_type: 0,
+                  attachments: 0,
+                },
+              ],
+      };
+    },
+  } as any;
+  const provider = createSdkProvider(null as any, transport, f.owner);
+  await provider.prepareMessage!("synthetic", db);
+  const sending = provider.sendPart("synthetic", 0, db);
+  while (!calls) await new Promise((r) => setImmediate(r));
+  f.revoke();
+  transport.stop();
+  result.resolve({ message: { msgId: "accepted-before-loss" } });
+  await assert.rejects(
+    sending,
+    (e) =>
+      e instanceof Error &&
+      !(e instanceof ProviderNotDispatchedError) &&
+      e.message === "Provider execution uncertain",
+  );
+  assert.equal(calls, 1);
+  assert.equal(await provider.connected(db), false);
+  await assert.rejects(
+    provider.sendPart("synthetic", 0, db),
+    ProviderNotDispatchedError,
+  );
+  assert.equal(calls, 1);
+});
+test("runtime factory rejection and cleanup errors retain terminal state without exposing raw errors", async () => {
+  const f = fixture();
+  const runtime = createOwnedConnector({
+    ...f.options,
+    createFacade: () => {
+      throw Error("private-session");
+    },
+  });
+  await assert.rejects(
+    runtime.start(),
+    (e) => e instanceof Error && e.message === "Connector runtime unavailable",
+  );
+  assert.equal(runtime.status, "blocked");
+  assert.ok(f.ownershipClosed);
+  await assert.rejects(runtime.start());
+  await runtime.stop();
+});
+
+test("fault observation blocks dispatch locally before pool acquisition and locks owner before durable gap write", async () => {
+  const f = fixture(),
+    gate = deferred<any>();
+  let fault!: (reason: any) => void | Promise<void>,
+    dispatchOwner!: OwnershipHandle;
+  const sql: string[] = [];
+  const { createZaloTransport } =
+    await import("../../adapters/zalo/transport.js");
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool: { connect: () => gate.promise } as any,
+    createTransport(o) {
+      fault = o.onFault!;
+      return createZaloTransport(o);
+    },
+    createProvider(_pool, _transport, owner) {
+      dispatchOwner = owner;
+      return {
+        async connected() {
+          return false;
+        },
+        async sendPart() {
+          throw Error("unused");
+        },
+      };
+    },
+  });
+  await runtime.start();
+  assert.equal(dispatchOwner.admitted, true);
+  const observed = fault("connection-lost");
+  assert.equal(dispatchOwner.admitted, false);
+  await assert.rejects(dispatchOwner.assertCurrent());
+  // Teardown must not close the owner row before the fault write commits.
+  let stopped = false;
+  const stopping = runtime.stop().then(() => {
+    stopped = true;
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(stopped, false);
+  gate.resolve({
+    async query(text: string) {
+      sql.push(text);
+      return {
+        rowCount: 1,
+        rows: [
+          text.includes("current_setting")
+            ? { marker: "active" }
+            : text.includes("UPDATE provider_state")
+              ? { gap_version: "1" }
+              : {},
+        ],
+      };
+    },
+    release() {},
+  });
+  await observed;
+  assert.equal(sql[0], "BEGIN");
+  assert.match(sql[1], /statement_timeout/);
+  assert.match(sql[2], /connector_ownership.*FOR SHARE/);
+  const faultWrite = sql.findIndex((s) => s.includes("UPDATE provider_state"));
+  assert.ok(faultWrite > 2);
+  assert.match(sql[faultWrite], /gap_version/);
+  assert.match(sql[faultWrite + 1], /INSERT INTO audit/);
+  assert.equal(sql.at(-1), "COMMIT");
+  assert.equal(dispatchOwner.admitted, false);
+  await stopping;
+  assert.equal(stopped, true);
+  await runtime.stop();
+});
+test("late transport factory never starts SDK after stop, and close errors are sanitized", async () => {
+  const f = fixture(),
+    gate = deferred<void>();
+  let apiCalls = 0;
+  const { createZaloTransport } =
+    await import("../../adapters/zalo/transport.js");
+  const runtime = createOwnedConnector({
+    ...f.options,
+    createFacade: () => ({
+      async createApi() {
+        apiCalls++;
+        return { listener: f.listener, async sendMessage() {} };
+      },
+      close() {
+        throw Error("secret-close");
+      },
+    }),
+    async createTransport(o) {
+      const t = createZaloTransport(o);
+      await gate.promise;
+      return t;
+    },
+  });
+  const starting = runtime.start();
+  await new Promise((r) => setImmediate(r));
+  await runtime.stop();
+  await assert.rejects(starting);
+  gate.resolve();
+  await new Promise((r) => setImmediate(r));
+  assert.equal(apiCalls, 0);
+  assert.equal(runtime.status, "stopped");
+  await runtime.stop();
+});
+test("late API discarded during stop retains an error sink after listener cleanup", async () => {
+  const f = fixture(),
+    gate = deferred<any>();
+  const runtime = createOwnedConnector({
+    ...f.options,
+    createFacade: () => ({ createApi: () => gate.promise, close() {} }),
+  });
+  const starting = runtime.start();
+  await new Promise((r) => setImmediate(r));
+  await runtime.stop();
+  await assert.rejects(starting);
+  gate.resolve({ listener: f.listener, async sendMessage() {} });
+  await new Promise((r) => setImmediate(r));
+  assert.doesNotThrow(() =>
+    f.listener.emit("error", Error("private late sdk error")),
+  );
+});
+test("pilot publication happens only after the transport reports connected", async () => {
+  const f = fixture();
+  const events: string[] = [];
+  const transport = {
+    status: "connecting",
+    async start() {
+      setTimeout(() => {
+        transport.status = "connected";
+        events.push("connected");
+      }, 20);
+    },
+    stop() {},
+    async sendText() {
+      return { status: "sent" as const, providerId: "synthetic" };
+    },
+  };
+  let published = 0;
+  const pool = {
+    async connect() {
+      return {
+        async query(text: string) {
+          if (text.includes("connector_ownership"))
+            return { rowCount: 1, rows: [{ account_id: ACCOUNT }] };
+          if (text.includes("UPDATE provider_state")) {
+            published++;
+            events.push("publish");
+            return { rowCount: 1, rows: [{}] };
+          }
+          return { rowCount: 1, rows: [{}] };
+        },
+        release() {},
+      };
+    },
+    async query() {
+      return { rowCount: 0, rows: [] };
+    },
+  } as any;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool,
+    publishConnected: true,
+    transportOptions: { handshakeTimeoutMs: 500 },
+    createTransport: () => transport as any,
+  });
+  await runtime.start();
+  assert.deepEqual(events, ["connected", "publish"]);
+  assert.equal(published, 1);
+  assert.equal(runtime.status, "active");
+  await runtime.stop();
+});
+
+test("pilot publication refuses when provider state still requires reconciliation", async () => {
+  const f = fixture();
+  const transport = {
+    status: "connected",
+    async start() {},
+    stop() {},
+    async sendText() {
+      return { status: "sent" as const, providerId: "synthetic" };
+    },
+  };
+  let published = 0;
+  const pool = {
+    async connect() {
+      return {
+        async query(text: string) {
+          if (text.includes("connector_ownership"))
+            return { rowCount: 1, rows: [{ account_id: ACCOUNT }] };
+          if (text.includes("UPDATE provider_state")) {
+            published++;
+            return { rowCount: 0, rows: [] };
+          }
+          return { rowCount: 1, rows: [{}] };
+        },
+        release() {},
+      };
+    },
+    async query() {
+      return { rowCount: 0, rows: [] };
+    },
+  } as any;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool,
+    publishConnected: true,
+    createTransport: () => transport as any,
+  });
+  await assert.rejects(
+    runtime.start(),
+    (e) => e instanceof Error && e.message === "Connector runtime unavailable",
+  );
+  assert.equal(published, 1);
+  assert.equal(runtime.status, "blocked");
+  await runtime.stop();
+});
+
+test("pilot publication rolls back when the transport drops during the round-trip", async () => {
+  const f = fixture();
+  const transport = {
+    status: "connected",
+    async start() {},
+    stop() {},
+    async sendText() {
+      return { status: "sent" as const, providerId: "synthetic" };
+    },
+  };
+  const statements: string[] = [];
+  const pool = {
+    async connect() {
+      return {
+        async query(text: string) {
+          statements.push(text);
+          if (text.includes("connector_ownership"))
+            return { rowCount: 1, rows: [{ account_id: ACCOUNT }] };
+          if (text.includes("UPDATE provider_state"))
+            return { rowCount: 1, rows: [{}] };
+          if (text.includes("INSERT INTO audit")) transport.status = "disconnected";
+          return { rowCount: 1, rows: [{}] };
+        },
+        release() {},
+      };
+    },
+    async query() {
+      return { rowCount: 0, rows: [] };
+    },
+  } as any;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool,
+    publishConnected: true,
+    createTransport: () => transport as any,
+  });
+  await assert.rejects(
+    runtime.start(),
+    (e) => e instanceof Error && e.message === "Connector runtime unavailable",
+  );
+  assert.equal(transport.status, "disconnected");
+  assert.equal(statements.includes("COMMIT"), false);
+  assert.equal(statements.at(-1), "ROLLBACK");
+  assert.equal(runtime.status, "blocked");
+  await runtime.stop();
+});
+
+test("the pilot guard stops inbound and dispatch once it fails", async () => {
+  const f = fixture();
+  let allowed = true;
+  let connects = 0;
+  let sends = 0;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool: {
+      async connect() {
+        connects++;
+        throw new Error("must not persist");
+      },
+      async query() {
+        return { rowCount: 0, rows: [] };
+      },
+    } as any,
+    inbound: { accountId: "me", allowedPeerIds: ["peer-a"] },
+    guard: () => allowed,
+    createProvider: () => ({
+      async connected() {
+        return true;
+      },
+      async sendPart() {
+        sends++;
+        return "synthetic";
+      },
+    }),
+  });
+  await runtime.start();
+  allowed = false;
+  f.listener.emit("message", {
+    threadId: "peer-a",
+    type: 0,
+    isSelf: false,
+    data: { msgId: "m-1", uidFrom: "peer-a", msgType: "webchat" },
+  });
+  for (let i = 0; i < 20 && runtime.rejectedInbound < 1; i++)
+    await new Promise((r) => setImmediate(r));
+  assert.equal(runtime.rejectedInbound, 1);
+  assert.equal(connects, 0);
+  assert.deepEqual(await runtime.runOnce(), { processed: false });
+  assert.deepEqual(await runtime.runMediaOnce(), { processed: false });
+  assert.equal(sends, 0);
+  assert.equal(runtime.status, "active");
+  await runtime.stop();
+});
+
+test("inbound is rejected when admission is lost across the owner fence await", async () => {
+  const f = fixture();
+  let allowed = true;
+  let connects = 0;
+  let queries = 0;
+  let entered = 0;
+  let deferFence = false;
+  const fence = deferred<void>();
+  const original = f.owner.assertCurrent.bind(f.owner);
+  f.owner.assertCurrent = async () => {
+    if (deferFence) {
+      deferFence = false;
+      entered++;
+      await fence.promise;
+    }
+    return original();
+  };
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool: {
+      async connect() {
+        connects++;
+        throw new Error("must not persist");
+      },
+      async query() {
+        queries++;
+        return { rowCount: 0, rows: [] };
+      },
+    } as any,
+    inbound: { accountId: "me", allowedPeerIds: ["peer-a"] },
+    guard: () => allowed,
+  });
+  await runtime.start();
+  deferFence = true;
+  f.listener.emit("message", {
+    threadId: "peer-a",
+    type: 0,
+    isSelf: false,
+    data: { msgId: "m-fence", uidFrom: "peer-a", msgType: "webchat" },
+  });
+  for (let i = 0; i < 20 && entered < 1; i++)
+    await new Promise((r) => setImmediate(r));
+  assert.equal(entered, 1);
+  allowed = false;
+  fence.resolve();
+  for (let i = 0; i < 20 && runtime.rejectedInbound < 1; i++)
+    await new Promise((r) => setImmediate(r));
+  assert.equal(runtime.rejectedInbound, 1);
+  assert.equal(connects, 0);
+  assert.equal(queries, 0);
+  assert.equal(runtime.status, "active");
+  await runtime.stop();
+});
+
+test("the pilot guard blocks publication when admission is already lost", async () => {
+  const f = fixture();
+  const transport = {
+    status: "connected",
+    async start() {},
+    stop() {},
+    async sendText() {
+      return { status: "sent" as const, providerId: "synthetic" };
+    },
+  };
+  let published = 0;
+  const pool = {
+    async connect() {
+      return {
+        async query() {
+          published++;
+          return { rowCount: 1, rows: [{}] };
+        },
+        release() {},
+      };
+    },
+    async query() {
+      return { rowCount: 0, rows: [] };
+    },
+  } as any;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool,
+    publishConnected: true,
+    guard: () => false,
+    createTransport: () => transport as any,
+  });
+  await assert.rejects(
+    runtime.start(),
+    (e) => e instanceof Error && e.message === "Connector runtime unavailable",
+  );
+  assert.equal(published, 0);
+  assert.equal(runtime.status, "blocked");
+  await runtime.stop();
+});
+
+test("pilot inbound gate admits only exact direct peers with a consistent sender", () => {
+  const peers = new Set(["peer-a"]);
+  const direct = {
+    threadType: 0 as const,
+    threadId: "peer-a",
+    senderId: "peer-a",
+    isSelf: false,
+  };
+  assert.equal(admitPilotInbound(peers, "me", direct), true);
+  assert.equal(
+    admitPilotInbound(peers, "me", {
+      ...direct,
+      threadId: "peer-b",
+      senderId: "peer-b",
+    }),
+    false,
+  );
+  assert.equal(admitPilotInbound(peers, "me", { ...direct, threadType: 1 }), false);
+  assert.equal(
+    admitPilotInbound(peers, "me", { ...direct, senderId: "peer-x" }),
+    false,
+  );
+  assert.equal(
+    admitPilotInbound(peers, "me", { ...direct, isSelf: true, senderId: "me" }),
+    true,
+  );
+  assert.equal(
+    admitPilotInbound(peers, "me", { ...direct, isSelf: true }),
+    false,
+  );
+});
+test("unexpected direct peers and groups are dropped without persistence", async () => {
+  const f = fixture();
+  let connects = 0,
+    queries = 0;
+  const runtime = createOwnedConnector({
+    ...f.options,
+    pool: {
+      async connect() {
+        connects++;
+        throw new Error("must not persist");
+      },
+      async query() {
+        queries++;
+        return { rows: [], rowCount: 0 };
+      },
+    } as any,
+    inbound: { accountId: "me", allowedPeerIds: ["peer-a"] },
+  });
+  await runtime.start();
+  const message = (
+    threadId: string,
+    type: 0 | 1,
+    msgId: string,
+    uidFrom = threadId,
+    isSelf = false,
+  ) => ({
+    threadId,
+    type,
+    isSelf,
+    data: { msgId, uidFrom, msgType: "chat.photo" },
+  });
+  f.listener.emit("message", message("peer-z", 0, "m-1"));
+  f.listener.emit("message", message("peer-a", 1, "m-2"));
+  f.listener.emit("message", message("peer-a", 0, "m-3", "peer-x"));
+  f.listener.emit("message", message("peer-a", 0, "m-4", "peer-a", true));
+  for (let i = 0; i < 20 && runtime.rejectedInbound < 4; i++)
+    await new Promise((r) => setImmediate(r));
+  assert.equal(runtime.rejectedInbound, 4);
+  assert.equal(connects, 0);
+  assert.equal(queries, 0);
+  assert.equal(runtime.status, "active");
+  await runtime.stop();
+});
+test("invalid inbound policy is refused at construction", () => {
+  const f = fixture();
+  for (const inbound of [
+    { accountId: "me", allowedPeerIds: [] },
+    { accountId: "me", allowedPeerIds: ["peer-a", "peer-a"] },
+    { accountId: "me", allowedPeerIds: ["peer-a", "peer-b", "peer-c", "peer-d", "peer-e"] },
+    { accountId: "me", allowedPeerIds: ["bad peer"] },
+    { accountId: "me", allowedPeerIds: [""] },
+    { allowedPeerIds: ["peer-a"] },
+    { accountId: "", allowedPeerIds: ["peer-a"] },
+    { accountId: "bad account", allowedPeerIds: ["peer-a"] },
+    { accountId: "me", allowedPeerIds: "peer-a" },
+  ])
+    assert.throws(
+      () => createOwnedConnector({ ...f.options, inbound: inbound as never }),
+      /Connector runtime unavailable/,
+    );
+});

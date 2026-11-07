@@ -1,0 +1,41 @@
+== image identity ==
+image=[zalo-shared-connector:g4-ea66d8b] id=sha256:e8a002abbd5ac4e39b8cf6c24fa2ab07eee18fe28c746bc16f4e11a7d867b72c
+{"uid":65532,"zcaJs":"2.2.0","buildIdentity":{"version":1,"sourceCommit":"ea66d8b94dde26e67bcb438e114fdd2454401a2d","lockSha256":"17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b","sdkIntegrity":"sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA=="},"expectedSourceCommit":"ea66d8b94dde26e67bcb438e114fdd2454401a2d","sourceCommitMatches":true,"lockMatches":true,"sdkMatches":true}
+
+== private permissions ==
+path=/home/zen/pilot-private/zalo-shared/pilot mode=700 uid=65532 gid=65532 size=4096
+path=/home/zen/pilot-private/zalo-shared/pilot/state mode=700 uid=65532 gid=65532 size=4096
+path=/home/zen/pilot-private/zalo-shared/pilot/state/view mode=700 uid=65532 gid=65532 size=4096
+path=/home/zen/pilot-private/zalo-shared/pilot/manifest.synthetic.json mode=600 uid=65532 gid=65532 size=1357
+path=/home/zen/pilot-private/zalo-shared/pilot/session.key mode=600 uid=65532 gid=65532 size=32
+{"uid":65532,"gid":65532,"node":"v24.22.1"}
+
+== host loopback ==
+{"ok":true}
+{"ok":true}
+
+== synthetic dry-run ==
+admitted exit=0 {"command":"dry-run","ok":true,"gate":"admitted","purpose":"observe","expiresAt":"2026-11-02T08:12:26.354Z"} 
+
+== negative manifests ==
+malformed exit=1 {"command":"dry-run","ok":false,"gate":"denied"} 
+extra-field exit=1 {"command":"dry-run","ok":false,"gate":"denied"} 
+expired exit=1 {"command":"dry-run","ok":false,"gate":"denied"} 
+wrong-commit exit=1 {"command":"dry-run","ok":false,"gate":"denied"} 
+wrong-lock exit=1 {"command":"dry-run","ok":false,"gate":"denied"} 
+
+== command gating (no live action) ==
+observe-without-ack exit=1 {"command":"run-observe","ok":false,"gate":"denied"} 
+bootstrap-wrong-purpose exit=1 {"command":"bootstrap","ok":false,"gate":"denied","purpose":"observe","expiresAt":"2026-11-02T08:12:26.354Z"} 
+send-test-wrong-purpose exit=1 {"command":"run-send-test","ok":false,"gate":"denied","purpose":"observe","expiresAt":"2026-11-02T08:12:26.354Z"} 
+unknown-command exit=2 Pilot CLI denied: expected [dry-run|bootstrap|run-observe|run-send-test] [--manifest <private-path>] [--acknowledge-pilot-risk] 
+
+== synthetic QR view ==
+{"shown":true,"mode":"600","uid":65532,"size":68}
+{"nonPngRejected":true,"cleared":true}
+view-mode=700 uid=65532 gid=65532
+qr.png cleared after synthetic view
+helper-explicit-manifest exit=0 {"command":"dry-run","ok":true,"gate":"admitted","purpose":"observe","expiresAt":"2026-11-02T08:12:26.354Z"} 
+== enrollment manifest shape ==
+enroll-null-account exit=0 {"command":"dry-run","ok":true,"gate":"admitted","purpose":"enroll-session","expiresAt":"2026-11-02T08:12:37.123Z"} 
+enroll-null-with-observe exit=1 {"command":"dry-run","ok":false,"gate":"denied"} 

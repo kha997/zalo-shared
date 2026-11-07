@@ -1,0 +1,46 @@
+{
+  "name": "zca-js",
+  "version": "2.2.0",
+  "scope": "development-only offline SDK foundation; no provider login",
+  "publishedGitHead": "dadfef18bcac53537741855c99f084152da1fad9",
+  "researchGitHead": "0586dc5e4981985c5f16b9b3a5f285a02feb6f9b",
+  "sourceEquivalence": "NOT ESTABLISHED",
+  "tarball": "https://registry.npmjs.org/zca-js/-/zca-js-2.2.0.tgz",
+  "integrity": "sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA==",
+  "sha256": "d053caea336c8f7e0ffc02ffbcbd3d28aac30ed43d0823e4cdf08d827b26d90c",
+  "license": "MIT",
+  "fileCount": 577,
+  "unpackedSize": 941470,
+  "installation": "npm install --save-dev --save-exact zca-js@2.2.0 --ignore-scripts",
+  "registrySignatures": [
+    {
+      "sig": "MEUCIAeIhOWFjn3QgcSt1zuNKPB7NwbAAsub83nDOltgdNe+AiEAzeQGm3HBCL37lRequFTJ4GJAsgjT/5LbdSrxjHaNHxY=",
+      "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+    },
+    {
+      "sig": "MEUCIDupwDPedu9WHVd91xP/c2/edy3JKJxexIKkfDHR1ggOAiEAtPmA1Ww3xysGZSOuAx667I6RD07PNSRfqpu9J/Tt7G8=",
+      "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+    }
+  ],
+  "signatureVerification": {
+    "tool": "npm audit signatures --json",
+    "status": "PASS",
+    "invalid": [],
+    "missing": [],
+    "run": "https://github.com/kha997/zalo-shared/actions/runs/40751604115",
+    "limits": "npm audit signatures exit0 with no invalid/missing entries; package counts and source-to-binary equivalence are not asserted"
+  },
+  "advisoryAudit": {
+    "tool": "npm audit --json",
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "run": "https://github.com/kha997/zalo-shared/actions/runs/40751604115"
+  },
+  "deprecationRisk": "crypto-js4.2.0 declares active development discontinued; accepted for isolated tests, live/production promotion remains open"
+}

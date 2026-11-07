@@ -1,0 +1,194 @@
+# Example only. Do not place secrets in this file or commit a filled copy.
+#
+# The pilot connector is a separate, intentionally SDK-bearing workload with no
+# published ports and no automatic restart. Image default is dry-run.
+#
+# Enforcement boundary
+# --------------------
+# The boundary is this topology, enforced by the kernel, not by in-process code:
+#
+#   pilot-connector --(pilot-db, external)-----------------> application database
+#   pilot-connector --(pilot-egress, internal=true)--------> egress-gateway
+#   egress-gateway  --(pilot-uplink, internal=false)-------> internet
+#
+# pilot-db is external, so this file cannot set its internal flag. The deployed
+# network named by PILOT_DB_NETWORK must be internal=true; the preflight refuses
+# it otherwise, and the connector image also refuses to start when its namespace
+# has a usable default route.
+#
+# Both connector networks are internal=true, so the connector's namespace has no
+# default route and no external DNS resolver. Direct provider IP, IPv6, UDP,
+# alternate-port and off-inventory hostname attempts all fail at the routing
+# layer before any application code runs. The only sanctioned path out is the
+# egress-gateway container, which is the sole member of pilot-uplink and admits
+# a TLS connection only when its ClientHello SNI is an exact allowlisted name.
+# TLS is never intercepted, so the connector still validates the provider
+# certificate end to end.
+#
+# The allowlist lives in ops/pilot-egress-allowlist.json and is reviewed.
+# ops/local/check-pilot-network.sh fails if the four runtime values below drift
+# from it: the connector's PILOT_EGRESS_HOSTS, the connector's extra_hosts pins,
+# the gateway's GATEWAY_ALLOW_HOSTS, and the gateway's static address.
+name: zalo-shared-pilot
+services:
+  egress-gateway:
+    image: ${PILOT_EGRESS_GATEWAY_IMAGE:?Build ops/Dockerfile.gateway and set its tag}
+    init: true
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,size=8m
+    cap_drop: [ALL]
+    # Port 443 only. The connector dials the provider's real port, so the
+    # gateway must listen on 443; under UID 65532 that needs this one
+    # capability. It grants nothing beyond binding a privileged port.
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    user: "65532:65532"
+    # The gateway must never act as a router. It splices two sockets in
+    # userspace; forwarding between pilot-egress and pilot-uplink at the IP
+    # layer would let the connector use it as a gateway and bypass the SNI
+    # allowlist entirely.
+    sysctls:
+      net.ipv4.ip_forward: "0"
+      net.ipv6.conf.all.forwarding: "0"
+    environment:
+      # Bind only the connector-facing address, so the uplink side exposes no
+      # listener at all.
+      GATEWAY_BIND_ADDRESS: 172.16.29.10
+      GATEWAY_PORT: "443"
+      GATEWAY_UPSTREAM_PORT: "443"
+      GATEWAY_ALLOW_HOSTS: id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me,chat.zalo.me
+      GATEWAY_MAX_TUNNELS: "32"
+      GATEWAY_HANDSHAKE_TIMEOUT_MS: "10000"
+      GATEWAY_IDLE_TIMEOUT_MS: "120000"
+    healthcheck:
+      test:
+        - CMD
+        - /nodejs/bin/node
+        - -e
+        - >-
+          const s=require("net").connect(443,"172.16.29.10");
+          s.on("connect",()=>{s.destroy();process.exit(0)});
+          s.on("error",()=>process.exit(1));
+          setTimeout(()=>process.exit(1),1000)
+      interval: 2s
+      timeout: 2s
+      retries: 10
+      start_period: 5s
+    networks:
+      pilot-egress:
+        ipv4_address: 172.16.29.10
+      pilot-uplink: {}
+    # No published ports and no volumes: the gateway holds no credential, no
+    # session material and no application code. Every decision is one JSON audit
+    # line on stdout, so `docker compose logs egress-gateway` is the endpoint
+    # discovery record for a future authorized observation window.
+
+  pilot-connector:
+    image: ${PILOT_CONNECTOR_IMAGE:?Build ops/Dockerfile.connector and set its tag}
+    init: true
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,size=16m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "65532:65532"
+    depends_on:
+      egress-gateway:
+        condition: service_healthy
+    env_file:
+      - ${PILOT_ENV_FILE:?Private env file outside the repository}
+    environment:
+      NODE_ENV: production
+      PILOT_MANIFEST: /run/pilot/manifest.json
+      PILOT_KEY_FILE: /run/pilot/session.key
+      PILOT_SESSION_FILE: /run/pilot/state/session.enc
+      PILOT_VIEW_DIR: /run/pilot/state/view
+      # Closed-vocabulary stage/reason log. It lives inside the bind-mounted
+      # state directory, so the sanitized failure evidence survives container
+      # exit. It carries no provider text, QR, cookie or credential.
+      PILOT_DIAGNOSTIC_FILE: /run/pilot/state/diagnostic.jsonl
+      # The image sets this too; repeating it keeps the precondition visible in
+      # configuration review. A namespace with a default route is refused.
+      PILOT_REQUIRE_INTERNAL_NETWORK: "1"
+      # Reviewed allowlist, repeated here rather than read from the private env
+      # file so that it is visible in configuration review and cannot drift from
+      # the gateway's own allowlist. `environment` overrides `env_file`.
+      PILOT_EGRESS_HOSTS: id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me,chat.zalo.me
+      PILOT_EGRESS_PORTS: "443"
+      PILOT_EGRESS_GATEWAY: 172.16.29.10
+      # The deployed URL uses sslmode=verify-full. The gate also admits require
+      # and verify-ca, so the stricter mode is a deployment choice, not the only
+      # value the gate accepts. requireTlsDatabaseUrl refuses a sslrootcert
+      # parameter, so the pilot CA is supplied through the Node trust store
+      # instead. NODE_EXTRA_CA_CERTS only adds a trust anchor; it cannot disable
+      # verification.
+      NODE_EXTRA_CA_CERTS: /run/pilot/db-ca.crt
+    # Each allowlisted provider name is pinned to the gateway's static address,
+    # so the connector's own resolution of a provider name yields exactly one
+    # address and the guard's PILOT_EGRESS_GATEWAY pin check accepts it. A name
+    # that is not pinned here has no resolver and no route, which is how an
+    # off-inventory redirect target from zca-js dist/utils.js:289 is refused.
+    # chat.zalo.me is pinned only because the SDK fetch layer follows exactly one
+    # validated checkSession Location to it; it is never a direct target.
+    extra_hosts:
+      - id.zalo.me:172.16.29.10
+      - wpa.chat.zalo.me:172.16.29.10
+      - jr.chat.zalo.me:172.16.29.10
+      - chat.zalo.me:172.16.29.10
+    volumes:
+      - type: bind
+        source: ${PILOT_MANIFEST_FILE:?Private owner-only manifest file}
+        target: /run/pilot/manifest.json
+        read_only: true
+      - type: bind
+        source: ${PILOT_KEY_FILE:?Private owner-only session key}
+        target: /run/pilot/session.key
+        read_only: true
+      - type: bind
+        source: ${PILOT_STATE_DIR:?Private state directory for session.enc and local QR view}
+        target: /run/pilot/state
+      - type: bind
+        source: ${PILOT_DB_CA_FILE:?Private pilot database CA certificate}
+        target: /run/pilot/db-ca.crt
+        read_only: true
+    # No published ports. The connector image preloads a default-deny egress
+    # guard from its entrypoint and NODE_OPTIONS, so clearing NODE_OPTIONS in
+    # the env file cannot remove it. The guard is defense in depth on top of the
+    # network boundary described above, not a substitute for it.
+    #
+    # An empty PILOT_EGRESS_HOSTS denies all provider egress. DATABASE_URL must
+    # be a postgres URL and must resolve to private, loopback or unique-local
+    # space; a non-loopback database host also requires sslmode=require,
+    # verify-ca or verify-full. Never publish PostgreSQL or attach it to
+    # pilot-egress or pilot-uplink.
+    networks: [pilot-db, pilot-egress]
+    # Live commands additionally require --acknowledge-pilot-risk and the
+    # matching unexpired grant. Example:
+    #   docker compose run --rm pilot-connector \
+    #     dist/connector/tools/pilot-connector.js run-observe --acknowledge-pilot-risk
+    command: ["dist/connector/tools/pilot-connector.js", "dry-run"]
+networks:
+  pilot-db:
+    external: true
+    name: ${PILOT_DB_NETWORK:?Set the application private database network name}
+  pilot-egress:
+    # internal=true is what makes this a boundary: Docker creates no NAT rule
+    # and no default route for it, so a container attached only to internal
+    # networks cannot reach the internet at all.
+    internal: true
+    ipam:
+      driver: default
+      config:
+        # Inside RFC1918 172.16.0.0/12 but below Docker's default address pool
+        # (172.17.0.0/16 .. 172.31.0.0/16), so it cannot be auto-assigned to an
+        # unrelated project's network. Docker refuses to create a network whose
+        # subnet is already in use, so a collision fails loudly.
+        - subnet: 172.16.29.0/24
+          gateway: 172.16.29.1
+  pilot-uplink:
+    # The only network on this stack that reaches the internet, and the gateway
+    # is its only member. Never attach the connector or the database here.
+    internal: false
