@@ -168,6 +168,8 @@ $form.Controls.Add($hint)
 
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 1000
+# Kept in script scope: an event handler cannot see a local of another handler.
+$closeAt = if ($AutoCloseSeconds -gt 0) { (Get-Date).AddSeconds($AutoCloseSeconds) } else { $null }
 
 # The connector owns its private view file and clears it on success, failure
 # and expiry, so the viewer only ever removes its own staged copy.
@@ -184,23 +186,18 @@ $timer.Add_Tick({
     if ($LASTEXITCODE -ne 0) {
       Write-Log 'viewer-close source-cleared'
       $form.Close()
+      return
     }
+  }
+  if ($closeAt -and (Get-Date) -ge $closeAt) {
+    Write-Log 'viewer-autoclose rehearsal'
+    $form.Close()
   }
 })
 
 $form.Add_Shown({
   $form.Activate()
   $timer.Start()
-  if ($AutoCloseSeconds -gt 0) {
-    $auto = New-Object System.Windows.Forms.Timer
-    $auto.Interval = $AutoCloseSeconds * 1000
-    $auto.Add_Tick({
-      $auto.Stop()
-      Write-Log 'viewer-autoclose rehearsal'
-      $form.Close()
-    })
-    $auto.Start()
-  }
 })
 $form.Add_FormClosing({
   & $cleanup
