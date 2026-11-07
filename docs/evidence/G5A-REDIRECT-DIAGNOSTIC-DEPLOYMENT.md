@@ -139,6 +139,7 @@ This is not introduced by the diagnostic change:
 - The currently deployed baseline `zalo-shared-connector:g5-ready-6d9c0e9` reports the same two findings with the same database.
 - The pinned distroless base digest and the current `gcr.io/distroless/nodejs24-debian13:latest` (index `sha256:03980f6f…`) both ship the same `zlib1g` version, so a base refresh is not a known remedy.
 - Hosted CI runs the same `ops/pilot-scan.sh`; it will fail for any build until the findings are fixed upstream or explicitly assessed.
+- Confirmed on hosted run `42323762758` for commit `8a71644`: the `pilot` job failed its connector scan and the `test` job failed its app-image scan with the same two findings, `highCriticalCount=2`, `fixableHighCriticalCount=0`. The container build and the nonroot/health smoke steps completed before the scan step failed; no other CI step failed.
 
 The project's rules require an explicit assessment of unfixed HIGH/CRITICAL findings, and the Owner alone accepts residual risk. Accordingly the candidate was **not deployed**: the private interpolation file still names `zalo-shared-connector:g5-ready-6d9c0e9`, the reviewed compose copy is unchanged, and no connector container was started. This is a fail-closed stop, not a decision to waive the gate.
 
