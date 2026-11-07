@@ -3,10 +3,10 @@
   "Trivy": {
     "Version": "0.76.1"
   },
-  "ReportID": "01a1b46f-ab87-74e2-9bf1-e98450017705",
-  "CreatedAt": "2026-11-07T12:16:19.719321829+07:00",
+  "ReportID": "01a1b479-0476-77e1-92ac-bf0f30098bea",
+  "CreatedAt": "2026-11-07T12:26:32.310518264+07:00",
   "ArtifactID": "sha256:1a5842a73502bc06a74f627d66fc86076c8be7709c7ee532cf315b7c4939f1e5",
-  "ArtifactName": "/tmp/tmp.H2YhzFg5Oj/image.tar",
+  "ArtifactName": "/tmp/tmp.WqL3kBlwxT/image.tar",
   "ArtifactType": "container_image",
   "Metadata": {
     "Size": 165990912,
@@ -420,7 +420,7 @@
   },
   "Results": [
     {
-      "Target": "/tmp/tmp.H2YhzFg5Oj/image.tar (debian 13.7)",
+      "Target": "/tmp/tmp.WqL3kBlwxT/image.tar (debian 13.7)",
       "Class": "os-pkgs",
       "Type": "debian",
       "Packages": [
@@ -2281,7 +2281,7 @@
             "Name": "Debian Security Tracker",
             "URL": "https://salsa.debian.org/security-tracker-team/security-tracker"
           },
-          "Fingerprint": "sha256:da0222cccf145b73e9b673403ca0a081e206cd1fd83c86be1f345582e0b5114a",
+          "Fingerprint": "sha256:9e777c2e0df4b4c6115eb70160ff9121feaaeff2104271285d986cddae8c8891",
           "Title": "webpack-dev-middleware: webpack-dev-middleware: Information Disclosure via Path Traversal",
           "Description": "zlib 1.2.11 through 1.3.2 contains a heap buffer overflow: after an underlying write() fails, gz_write() returns without resetting strm.next_in, leaving it pointed at the caller's buffer. A later gz* write call then derives a position from the stale pointer and writes past a heap allocation; any write() failure reaches it, including EPIPE on a blocking descriptor, and in versions before 1.3.1.2 the failed write must be followed by a gzclearerr() call.",
           "Severity": "HIGH",
@@ -2345,7 +2345,7 @@
             "Name": "Debian Security Tracker",
             "URL": "https://salsa.debian.org/security-tracker-team/security-tracker"
           },
-          "Fingerprint": "sha256:e6886536fb411f3ed763b082c77731dd98faee65d606b96a645e410bcb877aec",
+          "Fingerprint": "sha256:3ce48c294356a619d97281f43ccce6ec72f32ddef2624bb0cc5b41bc916d1607",
           "Title": "zlib: zlib: Heap buffer overflow in gz_vacate() allows arbitrary code execution",
           "Description": "zlib versions 1.3.1.2 through 1.3.2 contain a heap buffer overflow vulnerability in the gz_vacate() function when processing non-blocking gzwrite() operations with stale external buffer pointers. Attackers can trigger the overflow by calling gzprintf() or gzvprintf() after a write stall, causing an unchecked memmove() to write beyond the internal input buffer boundary.",
           "Severity": "HIGH",

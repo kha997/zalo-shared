@@ -64,7 +64,9 @@ reported=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["Meta
   fail "the scan report describes $reported but the tag's config blob is $derived_config"
 
 say "evaluating the disposition for $image ($image_id) config=$derived_config"
-node ops/g5a-cve-disposition.cjs evaluate \
+# The interpreter environment is stripped of NODE_OPTIONS: a preload could shadow
+# Date.now and turn the real-clock expiry back into something a caller controls.
+env -u NODE_OPTIONS node ops/g5a-cve-disposition.cjs evaluate \
   --vulnerabilities "$vulnerabilities" \
   --disposition ops/g5a-cve-disposition.json \
   --image-ref "$image" \
