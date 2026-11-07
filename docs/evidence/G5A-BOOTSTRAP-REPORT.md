@@ -784,3 +784,21 @@ fenced `uncertain` at epoch 5 and must be reconciled through the reviewed
 operation under a new Owner approval; a further bootstrap requires a new explicit
 UTC Owner window and an Owner decision on the post-scan redirect policy. The QR,
 console log and all private material stay outside the repository.
+
+### Reconciliation of this incident
+
+Executed once on Owner approval in the window
+`2026-11-07T00:54:00Z`–`01:14:00Z` by the reviewed driver rebound to this
+incident (commit `353bf02`): 13/13 read-only preflight checks, one authenticated
+request, HTTP 200 with `alreadyApplied=false`, epoch 5→6, gap 5→6,
+`uncertain → idle`, owner and fault null, `reconciliation_required=false`,
+`last_fenced_*` preserving `7cc878cf-…`/5, audit id 19 `connector.reconciled`
+(request `a646b408-…`, `evidenceRef` this section), 21/21 post-checks, no retry
+or replay, and the gateway log unchanged. Details:
+[G5A-RECONCILIATION-EXECUTION-2026-11-07.md](G5A-RECONCILIATION-EXECUTION-2026-11-07.md).
+
+**STOP — `G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION`.** The incident is
+closed and ownership is `idle` at epoch 6 with zero unresolved work. A further
+bootstrap requires a new explicit UTC Owner window, a fresh grant, and an Owner
+decision on the post-scan redirect policy; the unreviewed redirect target remains
+UNPROVEN. No retry exists and no control state may be reset by hand.
