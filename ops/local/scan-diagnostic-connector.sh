@@ -49,8 +49,21 @@ for cve, package, version, severity, fixed in findings:
     print(f"g5a-scan: retained residual risk {cve} {package} {version} {severity} fixed={fixed}")
 PY
 
-image_id=$(docker inspect -f '{{.Id}}' "$image")
-say "evaluating the disposition for $image ($image_id)"
+image_id=$(docker inspect -f '{{.Id}}' "$image") || fail "the image is not in the local store"
+
+# Trivy names the config blob while docker names the tag's index. Derive the
+# config digest from this tag independently and require the report to describe
+# that same blob, so a report for another artifact cannot satisfy the pin.
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+docker save "$image" -o "$work/image.tar"
+config_blob=$(tar -xOf "$work/image.tar" manifest.json | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["Config"])')
+derived_config="sha256:$(tar -xOf "$work/image.tar" "$config_blob" | sha256sum | cut -d' ' -f1)"
+reported=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["Metadata"]["ImageID"])' "$vulnerabilities")
+[ "$derived_config" = "$reported" ] ||
+  fail "the scan report describes $reported but the tag's config blob is $derived_config"
+
+say "evaluating the disposition for $image ($image_id) config=$derived_config"
 node ops/g5a-cve-disposition.cjs evaluate \
   --vulnerabilities "$vulnerabilities" \
   --disposition ops/g5a-cve-disposition.json \
