@@ -51,25 +51,32 @@ decision is required: explicitly assess the two CVEs or approve a separately
 reviewed base-image refresh; deployment then also needs the image rebuilt at the
 reviewed HEAD or the manifest pinned to `8a71644`
 **zlib CVE adjudication (2026-11-07):** `G5A_ZLIB_CVE_ADJUDICATED_AWAITING_OWNER_DECISION`
-— `CVE-2026-76844` is real and applies to the deployed `zlib1g 1.3.1`
-(affected 1.2.11–1.3.2); `CVE-2026-85091` is real but its applicability to 1.3.1
-is **UNPROVEN** and must not be recorded as a false positive (the `gz_vacate`
-code is absent from 1.3.1, while Debian tracks trixie as vulnerable). Debian 13
+— `CVE-2026-76844` applies to the deployed `zlib1g 1:1.3.dfsg+really1.3.1-1+b1`
+(the tracker qualifies it: before 1.3.1.2 the failed write must be followed by
+`gzclearerr()`); `CVE-2026-85091` is real but its applicability to 1.3.1 is
+**UNPROVEN** and must not be recorded as a false positive (the `gz_vacate` code
+is absent from 1.3.1, while Debian tracks trixie as vulnerable). Debian 13
 publishes no fixed `zlib1g` in `trixie`, `-updates`, `-security`,
 `-proposed-updates` or `-backports`; `forky`/`sid` carry
-`1:1.3.dfsg+really1.3.2-4`, which the tracker marks fixed for both CVEs. Three
-throwaway scans prove the gate reports **every** `zlib1g` version in a Debian 13
-image (the fixed 1.3.2-4 build and a fabricated `1.4.0-1` probe are both still
-flagged with `FixedVersion=null`), so no Debian 13 artifact can be green without
-changing the OS target or changing what the gate accepts. A dpkg-authored overlay
-of `1.3.2-4` was built and functionally verified (loads via `libz.so.1`,
-compress/uncompress round trip) but **not committed and not deployed**. No
-scanner suppression, ignore file, VEX, metadata rewrite or library deletion was
-used. Option A (overlay + time-boxed Owner disposition, recommended), Option B
-(vendor base with fixed advisory data — Chainguard Wolfi measured at 0
-HIGH/CRITICAL, but 16 `/nodejs/bin/node` files, a new registry and Node 26) and
-Option C (wait for the Debian 13 fix) are set out in
-[G5A-ZLIB-CVE-REMEDIATION.md](docs/evidence/G5A-ZLIB-CVE-REMEDIATION.md)
+`1:1.3.dfsg+really1.3.2-4`. Six throwaway probes establish that Trivy keys the
+Debian advisory by `/etc/debian_version` and that the trixie bucket carries no
+fixed version for either CVE, so **every** installed `zlib1g` on a Debian 13
+image is reported — the fixed 1.3.2-4 overlay and a fabricated `1.4.0` probe
+included. Relabelling the release was measured and rejected: it is metadata
+forgery and surfaces 10 `libssl3t64` findings instead. Nothing in the connector,
+app or gateway image maps `libz.so.1` (Node bundles its own zlib
+`1.3.2.1-motley`, there are no `.node` addons, and the runtime has no `libz`
+`NEEDED` entry). A dpkg-authored `1.3.2-4` overlay was built and functionally
+verified but **not committed and not deployed**; it is gate-neutral, forks the
+signed base and would mask a future trixie DSA. The first draft of the evidence
+carried two recipe defects and a wrong scanner mechanism; both independent
+reviews' corrections are applied. No scanner suppression, ignore file, VEX,
+metadata rewrite or library deletion was used. Options: A overlay (evidence
+only), B vendor base (Chainguard Wolfi measured 0 HIGH/CRITICAL, but Node 26, a
+new registry and 16 files with an explicit `/nodejs/bin/node` path), C wait for
+the Debian 13 fix, D time-boxed, ID-keyed disposition in the two scan scripts
+(recommended). The live egress gateway image carries the same two findings. See
+[G5A-ZLIB-CVE-REMEDIATION.md](docs/evidence/G5A-ZLIB-CVE-REMEDIATION.md).
 
 ## Gates
 
@@ -93,7 +100,7 @@ Option C (wait for the Debian 13 fix) are set out in
 | `G5A_RECONCILED_20261107` | **PASS (reconciliation)** | [G5A-RECONCILIATION-EXECUTION-2026-11-07.md](docs/evidence/G5A-RECONCILIATION-EXECUTION-2026-11-07.md); executed once in the Owner window `00:54–01:14Z` by the incident-bound reviewed driver (commit `353bf02`): 13/13 preflight checks, one authenticated request HTTP 200 (`alreadyApplied=false`), epoch 5→6, gap 5→6, `uncertain → idle`, audit id 19 (`a646b408-…`), 21/21 post-checks, gateway unchanged, no retry or replay. Provider `disconnected`, `reconciliation_required=false`, zero unresolved work |
 | `G5A_BLOCKED_REDIRECT_POLICY_20261107` | **BLOCKED** | [G5A-REDIRECT-POLICY-BLOCKED-2026-11-07.md](docs/evidence/G5A-REDIRECT-POLICY-BLOCKED-2026-11-07.md); window `01:02–01:32Z` opened with no grant, no QR and no provider contact. The sanitized evidence fixes the failure to an in-process redirect refusal (gateway: one admitted tunnel, nothing after the scan) but not the refused host; three policy-consistent candidates imply different minimal changes, and offline fixtures cannot distinguish them. State verified unchanged: `idle`, epoch 6, gap 6, `reconciliation_required=false`, zero sessions and zero work |
 | `G5A_DIAGNOSTIC_DEPLOYMENT_BLOCKED` | **BLOCKED (image scan)** | [G5A-REDIRECT-DIAGNOSTIC-DEPLOYMENT.md](docs/evidence/G5A-REDIRECT-DIAGNOSTIC-DEPLOYMENT.md); diagnostic-only `8a71644` and viewer `3f8703b`/`1ab90bb`/`c2f6a05`; 16 new A/B/C/adversarial tests plus the unchanged 53 redirect/bootstrap tests PASS, full suite 393/393 twice, `tsc` clean and 50 redirect tests PASS after the viewer commits; independent review PASS WITH FINDINGS (admission unchanged, one tightening; no URL, `Location`, credential or identifier can reach the sink; three viewer defects found and fixed). The candidate admits a synthetic manifest bound to `8a71644` and refuses the old commit in-image; the in-image sink probe writes only the closed shape (0600, 245 bytes, one `cid`, invalid value rejected); the viewer was rehearsed in fixture, WSL-source and corrupt-PNG modes, including shell-injection refusal with no command run. The candidate `zalo-shared-connector:g5-diag-8a71644` (`sha256:ab20e296…`, UID 65532, no ports/files) was built and identity-verified but **not deployed**: the scan fails on two unfixed HIGH `zlib1g` findings (`CVE-2026-76844`, `CVE-2026-85091`) that equally affect the deployed baseline `g5-ready-6d9c0e9` and the current distroless head. Image pointer, allowlist, TLS, compose and ownership (`idle`, epoch 6, fenced `7cc878cf-…`/5) are unchanged; no connector was started and no provider contact occurred. Owner decision required: accept the two CVEs or approve a base refresh; deployment then needs a rebuild at the reviewed HEAD or a manifest pinned to `8a71644` |
-| `G5A_ZLIB_CVE_ADJUDICATED_AWAITING_OWNER_DECISION` | **BLOCKED (Owner decision)** | [G5A-ZLIB-CVE-REMEDIATION.md](docs/evidence/G5A-ZLIB-CVE-REMEDIATION.md); `CVE-2026-76844` applies to the deployed 1.3.1, `CVE-2026-85091` applicability UNPROVEN (not a false positive); Debian 13 has no fixed `zlib1g` in any suite, `forky`/`sid` have `1:1.3.dfsg+really1.3.2-4`. Trivy 0.76.1 flags every version in a Debian 13 image (fixed 1.3.2-4 and a fabricated 1.4.0 probe both `FixedVersion=null`), so the gate cannot go green on this base. A dpkg-authored 1.3.2-4 overlay was built and functionally verified but not committed or deployed; no suppression, ignore file, VEX, metadata rewrite or library removal was used. Options: A overlay + time-boxed disposition (recommended), B vendor base (Chainguard Wolfi measured 0 HIGH/CRITICAL; 3 Dockerfiles + 16 path-dependent files + new registry + Node 26), C wait for the Debian 13 fix. State unchanged: `idle`, epoch 6, gap 6, `reconciliation_required=false`, gateway healthy, no connector, image pointer `g5-ready-6d9c0e9` |
+| `G5A_ZLIB_CVE_ADJUDICATED_AWAITING_OWNER_DECISION` | **BLOCKED (Owner decision)** | [G5A-ZLIB-CVE-REMEDIATION.md](docs/evidence/G5A-ZLIB-CVE-REMEDIATION.md); `CVE-2026-76844` applies to the deployed 1.3.1 (with the tracker's `gzclearerr` qualifier), `CVE-2026-85091` applicability UNPROVEN (not a false positive); no fixed `zlib1g` in any Debian 13 suite, `forky`/`sid` have `1:1.3.dfsg+really1.3.2-4`. Trivy keys the Debian advisory by `/etc/debian_version`; the trixie bucket has no fixed version for either CVE, so every installed `zlib1g` on Debian 13 is reported (six probes: the fixed 1.3.2-4 overlay and a fabricated 1.4.0 probe both still flagged). Relabelling the release is forgery and still yields 10 `libssl3t64` findings. No image maps `libz.so.1` (Node bundles zlib `1.3.2.1-motley`, zero `.node` addons, no `libz` NEEDED). A dpkg-authored 1.3.2-4 overlay was built and functionally verified but not committed or deployed; it is gate-neutral, forks the signed base and would mask a future trixie DSA. No suppression, ignore file, VEX, metadata rewrite or library removal was used. Options: A overlay (evidence only), B vendor base (Chainguard Wolfi 0 HIGH/CRITICAL; Node 26, new registry, 16 files with an explicit `/nodejs/bin/node` path), C wait, D time-boxed ID-keyed disposition in `ops/pilot-scan.sh:96`/`ops/scan-image.sh:30` (recommended). The running gateway image shares both findings. State unchanged: `idle`, epoch 6, gap 6, `reconciliation_required=false`, gateway healthy, no connector, pointer `zalo-shared-connector:g5-ready-6d9c0e9` |
 | `G5A_NEXT_BOOTSTRAP_READY_AWAITING_OWNER_START` | **SUPERSEDED — DEPLOYED** | [G5A-REDIRECT-READINESS.md](docs/evidence/G5A-REDIRECT-READINESS.md); preparation and independent review completed before deployment. The admission is no longer undeployed; see the row above |
 | `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION` | **PASS** | [G5A-PILOT-ADMIN-PROVISIONING.md](docs/evidence/G5A-PILOT-ADMIN-PROVISIONING.md); exactly one active admin (`4fd6c034d5e7`), 22/22 pilot auth/CSRF/route checks, 19/19 disposable success-path checks, ownership/provider/delivery rows unchanged. No reconciliation executed |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
