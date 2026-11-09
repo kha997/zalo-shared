@@ -152,6 +152,13 @@ test("only one exact hop shape is followable", () => {
     followableLocation(" https://jr.zaloapp.com/index.html "),
     REDIRECT,
   );
+  // URL parsing lowercases the host, so an uppercase Location is the same hop.
+  // The runtime host list stays case-sensitive: uppercase entries are refused
+  // at construction (next test), so the two sides fail closed together.
+  assert.equal(
+    followableLocation("https://JR.ZALOAPP.COM/index.html"),
+    REDIRECT,
+  );
   for (const refused of [
     "https://jr.zaloapp.com.evil.test/",
     "https://evil.jr.zaloapp.com.test/",
@@ -254,6 +261,35 @@ test("a 3xx that is not checksession is refused, not handed to the SDK", async (
     (error: any) => error?.cause?.code === REDIRECT_DENIED,
   );
   assert.deepEqual(calls, ["https://id.zalo.me/account/logininfo"]);
+});
+
+test("a checkSession-shaped 3xx with a different continue grants no hop", async () => {
+  for (const url of [
+    "https://id.zalo.me/account/checksession?continue=https%3A%2F%2Fevil.test%2F",
+    "https://id.zalo.me/account/checksession",
+    "https://id.zalo.me/account/checksession/extra?continue=https%3A%2F%2Fchat.zalo.me%2Findex.html",
+  ]) {
+    const calls: string[] = [];
+    const base = async (input: unknown) => {
+      calls.push(String(input));
+      return redirect(REDIRECT);
+    };
+    const policy = createBootstrapFetch({
+      fetch: base,
+      egressHosts: REVIEWED_HOSTS,
+    });
+    await assert.rejects(
+      policy(url),
+      (error: any) => error?.cause?.code === REDIRECT_DENIED,
+      url,
+    );
+    await assert.rejects(
+      policy(REDIRECT),
+      (error: any) => error?.cause?.code === REDIRECT_DENIED,
+      url,
+    );
+    assert.deepEqual(calls, [url]);
+  }
 });
 
 test("a stale hop is cleared by an unrelated provider request", async () => {

@@ -12,10 +12,9 @@ import { pathToFileURL } from "node:url";
  * jr.zaloapp.com; the 2026-11-04 attempt was consistent with the same shape but
  * without host attribution. The pinned SDK is driven through its real `loginQR`
  * implementation with a synthetic `fetch` polyfill, so no socket, DNS query or
- * provider contact happens. The redirect targets are deliberately outside the
- * running three-host allowlist and are refused by the connector guard, which is
- * exercised in a separate child process against the real
- * `ops/pilot-egress-guard.cjs`.
+ * provider contact happens. The redirect host is deliberately withheld from the
+ * child's environment in the guard tests, even though the reviewed four-host
+ * allowlist admits it, so the real `ops/pilot-egress-guard.cjs` must refuse it.
  */
 
 const guard = resolve(process.cwd(), "ops/pilot-egress-guard.cjs");
