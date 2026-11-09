@@ -1,25 +1,26 @@
 # Pilot gate status
 
-**Date:** 2026-11-07
-**Branch:** `feat/shared-inbox`; reviewed source commit `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; connector source unchanged at the live attempt (`3ceac2b`, `ops/` and evidence only after `2dff06e`); deployment remediation `9d94a26`
+**Date:** 2026-11-09
+**Branch:** `feat/shared-inbox`; staged connector artifact source commit `8d9e39d671202b9588748ef6122b3d2992b1185f` (CI run 42635857403); previously reviewed source `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; deployment remediation `9d94a26`
 **PR #3:** OPEN, **Draft** (not merged, not deployed)
 **Owner decision:** `G5_SCOPE_APPROVED_ACTIVATION_PENDING` — D1–D7 approved in scope; live activation withheld
-**G5-A authorization:** three live bootstrap authorizations have been consumed —
+**G5-A authorization:** four live bootstrap authorizations have been consumed —
 `2026-11-04T00:46Z–01:16Z` (failed before login), `2026-11-06T23:40Z–00:10Z`
-(`qr-expired`) and `2026-11-07T00:00Z–00:20Z` (post-scan `redirect-denied`). A
-fourth window, `2026-11-07T01:02Z–01:32Z`, was blocked before any QR
-(`G5A_BLOCKED_REDIRECT_POLICY`) because the post-scan redirect chain could not be
-established, reviewed and deployed in time. None may be extended, rescheduled or
-reused; the earlier `2026-11-03` windows are invalid.
-**Live pilot:** **NOT ACTIVATED** — three live attempts emitted a QR and
-contacted only `id.zalo.me`; no completed handshake, no UID, no session, no
-encrypted store and no real account operation. On 2026-11-07 the phone approved
-the scan and the connector refused the post-scan redirect, exiting 1.
+(`qr-expired`), `2026-11-07T00:00Z–00:20Z` (post-scan `redirect-denied`) and
+`2026-11-09T13:12Z–13:42Z` (post-scan redirect to the unreviewed
+`jr.zaloapp.com`, refused; `G5A_BOOTSTRAP_FAIL`). A fifth window,
+`2026-11-07T01:02Z–01:32Z`, was blocked before any QR
+(`G5A_BLOCKED_REDIRECT_POLICY`). None may be extended, rescheduled or reused.
+**Live pilot:** **NOT ACTIVATED** — four live attempts emitted a QR and contacted
+only `id.zalo.me`; no completed handshake, no UID, no session, no encrypted store
+and no real account operation. On 2026-11-09 the phone scan succeeded and the
+connector refused the provider's `checkSession` redirect to `jr.zaloapp.com`.
 **Owner reconciliation gate:** the 2026-11-07 incident was reconciled once in the
-Owner window `00:54–01:14Z` (epoch 5→6, gap 5→6, `uncertain → idle`,
-`reconciliation_required=false`, audit id 19, 21/21 post-checks, no retry or
-replay); ownership now preserves the fenced pair `7cc878cf-…`/5. No control state
-was reset by hand and no provider contact occurred.
+Owner window `00:54–01:14Z` (epoch 5→6, gap 5→6). The 2026-11-09 incident is
+fenced `uncertain` at epoch 7 with gap 7 and `reconciliation_required=true`; the
+read-only preflight passes and the single transition is prepared but **not
+executed** (`G5A_RECONCILIATION_REQUIRED_AWAITING_OWNER`). No control state was
+reset by hand.
 **Pilot admin provisioning (2026-11-04):** `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION`
 — exactly one active pilot admin was created through the reviewed identity model
 and verified through the reviewed login/CSRF/authorization path; the credential
@@ -102,6 +103,9 @@ the Debian 13 fix, D time-boxed, ID-keyed disposition in the two scan scripts
 | `G5A_DIAGNOSTIC_DEPLOYMENT_BLOCKED` | **BLOCKED (image scan)** | [G5A-REDIRECT-DIAGNOSTIC-DEPLOYMENT.md](docs/evidence/G5A-REDIRECT-DIAGNOSTIC-DEPLOYMENT.md); diagnostic-only `8a71644` and viewer `3f8703b`/`1ab90bb`/`c2f6a05`; 16 new A/B/C/adversarial tests plus the unchanged 53 redirect/bootstrap tests PASS, full suite 393/393 twice, `tsc` clean and 50 redirect tests PASS after the viewer commits; independent review PASS WITH FINDINGS (admission unchanged, one tightening; no URL, `Location`, credential or identifier can reach the sink; three viewer defects found and fixed). The candidate admits a synthetic manifest bound to `8a71644` and refuses the old commit in-image; the in-image sink probe writes only the closed shape (0600, 245 bytes, one `cid`, invalid value rejected); the viewer was rehearsed in fixture, WSL-source and corrupt-PNG modes, including shell-injection refusal with no command run. The candidate `zalo-shared-connector:g5-diag-8a71644` (`sha256:ab20e296…`, UID 65532, no ports/files) was built and identity-verified but **not deployed**: the scan fails on two unfixed HIGH `zlib1g` findings (`CVE-2026-76844`, `CVE-2026-85091`) that equally affect the deployed baseline `g5-ready-6d9c0e9` and the current distroless head. Image pointer, allowlist, TLS, compose and ownership (`idle`, epoch 6, fenced `7cc878cf-…`/5) are unchanged; no connector was started and no provider contact occurred. Owner decision required: accept the two CVEs or approve a base refresh; deployment then needs a rebuild at the reviewed HEAD or a manifest pinned to `8a71644` |
 | `G5A_ZLIB_CVE_ADJUDICATED_AWAITING_OWNER_DECISION` | **BLOCKED (Owner decision)** | [G5A-ZLIB-CVE-REMEDIATION.md](docs/evidence/G5A-ZLIB-CVE-REMEDIATION.md); `CVE-2026-76844` applies to the deployed 1.3.1 (with the tracker's `gzclearerr` qualifier), `CVE-2026-85091` applicability UNPROVEN (not a false positive); no fixed `zlib1g` in any Debian 13 suite, `forky`/`sid` have `1:1.3.dfsg+really1.3.2-4`. Trivy keys the Debian advisory by `/etc/debian_version`; the trixie bucket has no fixed version for either CVE, so every installed `zlib1g` on Debian 13 is reported (six probes: the fixed 1.3.2-4 overlay and a fabricated 1.4.0 probe both still flagged). Relabelling the release is forgery and still yields 10 `libssl3t64` findings. No image maps `libz.so.1` (Node bundles zlib `1.3.2.1-motley`, zero `.node` addons, no `libz` NEEDED). A dpkg-authored 1.3.2-4 overlay was built and functionally verified but not committed or deployed; it is gate-neutral, forks the signed base and would mask a future trixie DSA. No suppression, ignore file, VEX, metadata rewrite or library removal was used. Options: A overlay (evidence only), B vendor base (Chainguard Wolfi 0 HIGH/CRITICAL; Node 26, new registry, 16 files with an explicit `/nodejs/bin/node` path), C wait, D time-boxed ID-keyed disposition in `ops/pilot-scan.sh:96`/`ops/scan-image.sh:30` (recommended). The running gateway image shares both findings. State unchanged: `idle`, epoch 6, gap 6, `reconciliation_required=false`, gateway healthy, no connector, pointer `zalo-shared-connector:g5-ready-6d9c0e9` |
 | `G5A_NEXT_BOOTSTRAP_READY_AWAITING_OWNER_START` | **SUPERSEDED — DEPLOYED** | [G5A-REDIRECT-READINESS.md](docs/evidence/G5A-REDIRECT-READINESS.md); preparation and independent review completed before deployment. The admission is no longer undeployed; see the row above |
+| `G5A_BOOTSTRAP_FAIL_20261109` | **FAIL (`redirect-denied`)** | [G5A-BOOTSTRAP-ATTEMPT-2026-11-09.md](docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-09.md); one authorized attempt at 13:25:05Z: preflight admitted, QR shown and scanned, `checkSession` returned a `Location` for `jr.zaloapp.com`, refused as `unexpected-location` (hops 0). No session, no UID, QR cleared; ownership fenced `uncertain` epoch 7, gap 7, `reconciliation_required=true`. No retry or policy loosening |
+| `G5A_REDIRECT_REMEDIATION_STAGED` | **PASS (offline, staged)** | [G5A-REDIRECT-REMEDIATION-2026-11-09.md](docs/evidence/G5A-REDIRECT-REMEDIATION-2026-11-09.md); `REDIRECT_HOST`, the admitted redirect-target and the compose values replace `chat.zalo.me` with the observed `jr.zaloapp.com` (443, one hop, host-level), still four hosts; independent review APPROVE WITH CONDITIONS and all conditions closed; typecheck clean, 78/78 redirect suites, 407/407 full suite, network checker all assertions PASS; CI run 42635857403 at `8d9e39d` published the artifact, verified locally and staged as `zalo-shared-connector:g5-ci-8d9e39d` (archive `d416e76f…`, embedded `sourceCommit 8d9e39d…`); **not deployed**, the live gateway still admits `chat.zalo.me` |
+| `G5A_RECONCILIATION_REQUIRED_AWAITING_OWNER` | **BLOCKED (Owner authorization)** | The 2026-11-09 fence is confirmed read-only: ownership `uncertain` epoch 7 (`af5048a8-…`, `shutdown`), provider `disconnected` gap 7 `reconciliation_required=true`, zero unresolved work, audit 28 rows with the incident prefix intact, preflight `ok:true` with zero advisory locks and zero other sessions. The prepared single transition (`uncertain→idle`, epoch 7→8, gap 7→8) is in the remediation record; no request was sent and nothing was mutated |
 | `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION` | **PASS** | [G5A-PILOT-ADMIN-PROVISIONING.md](docs/evidence/G5A-PILOT-ADMIN-PROVISIONING.md); exactly one active admin (`4fd6c034d5e7`), 22/22 pilot auth/CSRF/route checks, 19/19 disposable success-path checks, ownership/provider/delivery rows unchanged. No reconciliation executed |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
 | `R2_EGRESS_ENFORCEMENT_PASS` | **PASS (bootstrap)** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); kernel boundary plus SNI gateway verified; observe/send-test remain functionally blocked until their runtime-only hosts are admitted |
@@ -575,3 +579,35 @@ policy loosening, no grant reuse and no reconciliation reset were performed. Res
 authorization requires the reviewed reconciliation first. Evidence
 [G5A-BOOTSTRAP-ATTEMPT-2026-11-09](docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-09.md).
 **G5A_BOOTSTRAP_FAIL** — gate: `G5A_RECONCILIATION_REQUIRED_AWAITING_OWNER`
+
+**G5-A REDIRECT REMEDIATION STAGED, RECONCILIATION PREPARED — `G5A_REDIRECT_FIX_REVIEWED_AND_RECONCILIATION_READY`.**
+Under the Owner's remediation-preparation directive, the observed post-scan hop was
+admitted narrowly: `REDIRECT_HOST`, the single admitted redirect-target and the compose
+values now name `jr.zaloapp.com` (HTTPS 443, one hop, only from the exact `checkSession`
+call, host-level because the `Location` path/query were never recorded), replacing the
+previously hypothesised `chat.zalo.me`, which is now explicitly excluded. The grammar is
+unchanged: manual redirects everywhere, exact-URL origin, single-use hop, no direct target,
+any further 3xx refused. Attribution rests on the provider's own redirect during the
+authorized attempt and on Certificate Transparency data (current DigiCert `*.zaloapp.com`
+wildcard plus Zalo service names); no DNS or live TLS probe was made and the earlier
+unverifiable A-record claim was removed. Offline: typecheck clean, 78/78 redirect/QR
+transport tests, 407/407 full suite, all static network-checker assertions PASS. An
+independent review returned APPROVE WITH CONDITIONS and every condition is closed. CI run
+[42635857403](https://github.com/kha997/zalo-shared/actions/runs/42635857403) succeeded at
+`8d9e39d` and its artifact was downloaded, hash-matched (`d416e76f…`), loaded, identity-read
+(`sourceCommit 8d9e39d…`) and staged as `zalo-shared-connector:g5-ci-8d9e39d`; the compiled
+image contains the new host and not the old one. **Nothing was deployed**: no connector
+container exists and the running gateway still admits `chat.zalo.me`. Mission B confirmed
+the fence read-only — ownership `uncertain` epoch 7, provider `disconnected` gap 7,
+`reconciliation_required=true`, zero unresolved work, audit 28 rows, preflight `ok:true`
+(0 advisory locks, 0 other sessions) — and prepared, but did not execute, the single
+transition `uncertain → idle`, epoch 7→8, gap 7→8, `reconciliation_required → false`
+(one authenticated POST, audit id 29). The automatic Windows QR viewer is unchanged, so a
+next attempt needs only scan plus identity confirmation once the fix is deployed and the
+fence reconciled. Remaining Owner approvals: deploy the staged fix; authorize reconciliation
+with a UTC window; authorize a fresh bootstrap grant bound to `sourceCommit 8d9e39d…`; and
+acknowledge that a further redirect from `jr.zaloapp.com` would fail closed with
+`redirect-after-hop`. No QR, provider contact, live allowlist change, reconciliation, send,
+merge or deployment occurred. Evidence
+[G5A-REDIRECT-REMEDIATION-2026-11-09](docs/evidence/G5A-REDIRECT-REMEDIATION-2026-11-09.md).
+**G5A_REDIRECT_FIX_REVIEWED_AND_RECONCILIATION_READY**
