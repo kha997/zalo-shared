@@ -557,3 +557,21 @@ Owner instruction for an authorized bootstrap: the QR appears automatically, abo
 after emission, at `C:\Users\Admin\pilot-private-qr\g5a-qr.png` in a Windows viewer; scan it
 with the Zalo phone within the 100-second lifetime.
 **G5A_OWNER_START_READY**
+
+
+**G5-A SINGLE AUTHORIZED BOOTSTRAP — FAILED AT REDIRECT POLICY, FENCED, RECONCILIATION REQUIRED.**
+The one attempt authorized for `2026-11-09T13:12–13:42Z` ran once at 13:25:05Z against
+`zalo-shared-connector:g5-ci-1052466` (CI run 42602520323, source `1052466`); preflight was
+admitted, the four-host boundary held and the automatic Windows viewer showed the real QR in
+the interactive foreground at 13:25:10Z. The Owner scanned it at 13:25:16.5Z. The SDK's
+`check-session` request then returned a redirect from `id.zalo.me` to `jr.zaloapp.com`, a host
+outside the reviewed inventory, and the fetch policy refused it (`redirect-denied`,
+`unexpected-location`, `request=check-session`, `hops=0`) at 13:25:18.4Z. No session was
+stored, no delivery work exists, the QR source was cleared and the staged copy removed. The
+connector exited and was removed; ownership is `uncertain` epoch 7 (`fault=shutdown`) and
+provider state is `disconnected` gap 7 with `reconciliation_required=true`. No retry, no
+policy loosening, no grant reuse and no reconciliation reset were performed. Resolving the
+`jr.zaloapp.com` redirect requires an Owner decision and independent review, and a new
+authorization requires the reviewed reconciliation first. Evidence
+[G5A-BOOTSTRAP-ATTEMPT-2026-11-09](docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-09.md).
+**G5A_BOOTSTRAP_FAIL** — gate: `G5A_RECONCILIATION_REQUIRED_AWAITING_OWNER`
