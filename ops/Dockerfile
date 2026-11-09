@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Builder and runtime are pinned to immutable, CI-verified digests.
-ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs24-debian13@sha256:cb606325b7ec4af55462cb0b424a53b452a5b4a894ffe841fcf1048d216fb9f8
+ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs24-debian13@sha256:b770c59f44ed459329508a73794e6d284f6c10143f83c8012a8f775cd514eca2
 FROM node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
