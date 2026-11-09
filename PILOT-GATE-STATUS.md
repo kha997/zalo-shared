@@ -3,6 +3,13 @@
 **Date:** 2026-11-09
 **Branch:** `feat/shared-inbox`; staged connector artifact source commit `8d9e39d671202b9588748ef6122b3d2992b1185f` (CI run 42635857403); previously reviewed source `2dff06e063b87d6abf5e25e4a1ca9c369ba7236e`; deployment remediation `9d94a26`
 **PR #3:** OPEN, **Draft** (not merged, not deployed)
+**Deployed pilot configuration (2026-11-09T14:55Z):** the independently reviewed redirect
+fix is deployed offline — connector artifact `zalo-shared-connector:g5-ci-8d9e39d`
+(`sourceCommit 8d9e39d…`), allowlist `id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me,jr.zaloapp.com`
+(no `chat.zalo.me`), gateway `zalo-shared-egress-gateway:g5-patched-af2be54` healthy with no
+tunnel. No connector container exists and **no live activation** has occurred; the single
+reconciliation awaits a separate Owner UTC window
+(`G5A_REDIRECT_DEPLOYED_RECONCILIATION_AWAITING_OWNER_START`).
 **Owner decision:** `G5_SCOPE_APPROVED_ACTIVATION_PENDING` — D1–D7 approved in scope; live activation withheld
 **G5-A authorization:** four live bootstrap authorizations have been consumed —
 `2026-11-04T00:46Z–01:16Z` (failed before login), `2026-11-06T23:40Z–00:10Z`
@@ -105,6 +112,7 @@ the Debian 13 fix, D time-boxed, ID-keyed disposition in the two scan scripts
 | `G5A_NEXT_BOOTSTRAP_READY_AWAITING_OWNER_START` | **SUPERSEDED — DEPLOYED** | [G5A-REDIRECT-READINESS.md](docs/evidence/G5A-REDIRECT-READINESS.md); preparation and independent review completed before deployment. The admission is no longer undeployed; see the row above |
 | `G5A_BOOTSTRAP_FAIL_20261109` | **FAIL (`redirect-denied`)** | [G5A-BOOTSTRAP-ATTEMPT-2026-11-09.md](docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-09.md); one authorized attempt at 13:25:05Z: preflight admitted, QR shown and scanned, `checkSession` returned a `Location` for `jr.zaloapp.com`, refused as `unexpected-location` (hops 0). No session, no UID, QR cleared; ownership fenced `uncertain` epoch 7, gap 7, `reconciliation_required=true`. No retry or policy loosening |
 | `G5A_REDIRECT_REMEDIATION_STAGED` | **PASS (offline, staged)** | [G5A-REDIRECT-REMEDIATION-2026-11-09.md](docs/evidence/G5A-REDIRECT-REMEDIATION-2026-11-09.md); `REDIRECT_HOST`, the admitted redirect-target and the compose values replace `chat.zalo.me` with the observed `jr.zaloapp.com` (443, one hop, host-level), still four hosts; independent review APPROVE WITH CONDITIONS and all conditions closed; typecheck clean, 78/78 redirect suites, 407/407 full suite, network checker all assertions PASS; CI run 42635857403 at `8d9e39d` published the artifact, verified locally and staged as `zalo-shared-connector:g5-ci-8d9e39d` (archive `d416e76f…`, embedded `sourceCommit 8d9e39d…`); **not deployed**, the live gateway still admits `chat.zalo.me` |
+| `G5A_REDIRECT_DEPLOYED_AWAITING_OWNER_START` | **PASS (deployed, offline)** | [G5A-REDIRECT-DEPLOYMENT-2026-11-09.md](docs/evidence/G5A-REDIRECT-DEPLOYMENT-2026-11-09.md); the Owner's deployment authorization was executed on 2026-11-09T14:55Z: CI-built `zalo-shared-connector:g5-ci-8d9e39d` (`sha256:220982a7…`, archive `d416e76f…`, embedded `sourceCommit 8d9e39d…`) staged and the exact four-host allowlist (`id.zalo.me`, `wpa.chat.zalo.me`, `jr.chat.zalo.me`, `jr.zaloapp.com`; `chat.zalo.me` excluded) deployed through the byte-identical reviewed compose; the gateway was recreated healthy with no tunnel. 14/14 static, 48/48 deployed-network, 21/21 allow-path, 37/37 in-image redirect, 29/29 database TLS and 5/5 preflight checks PASS; scan 0 HIGH/CRITICAL; QR viewer rehearsal PASS with a synthetic fixture only. Control state unchanged (`uncertain` epoch 7, gap 7, `reconciliation_required=true`, 0 sessions, audit 28 rows), no connector container, no provider contact. The single reconciliation is prepared and awaits a separate Owner UTC window |
 | `G5A_RECONCILIATION_REQUIRED_AWAITING_OWNER` | **BLOCKED (Owner authorization)** | The 2026-11-09 fence is confirmed read-only: ownership `uncertain` epoch 7 (`af5048a8-…`, `shutdown`), provider `disconnected` gap 7 `reconciliation_required=true`, zero unresolved work, audit 28 rows with the incident prefix intact, preflight `ok:true` with zero advisory locks and zero other sessions. The prepared single transition (`uncertain→idle`, epoch 7→8, gap 7→8) is in the remediation record; no request was sent and nothing was mutated |
 | `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION` | **PASS** | [G5A-PILOT-ADMIN-PROVISIONING.md](docs/evidence/G5A-PILOT-ADMIN-PROVISIONING.md); exactly one active admin (`4fd6c034d5e7`), 22/22 pilot auth/CSRF/route checks, 19/19 disposable success-path checks, ownership/provider/delivery rows unchanged. No reconciliation executed |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
@@ -611,3 +619,34 @@ acknowledge that a further redirect from `jr.zaloapp.com` would fail closed with
 merge or deployment occurred. Evidence
 [G5A-REDIRECT-REMEDIATION-2026-11-09](docs/evidence/G5A-REDIRECT-REMEDIATION-2026-11-09.md).
 **G5A_REDIRECT_FIX_REVIEWED_AND_RECONCILIATION_READY**
+
+**G5-A REDIRECT FIX DEPLOYED OFFLINE, RECONCILIATION PREPARED — `G5A_REDIRECT_DEPLOYED_RECONCILIATION_AWAITING_OWNER_START`.**
+The Owner's deployment authorization was executed on 2026-11-09T14:55Z. The private pilot now
+runs the CI-built `zalo-shared-connector:g5-ci-8d9e39d` (archive `d416e76f…`, local manifest
+digest `sha256:220982a7…`, embedded `sourceCommit 8d9e39d…`, lock and `zca-js` integrity equal
+to the run) with the exact four-host inventory `id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me,jr.zaloapp.com`;
+`chat.zalo.me` is excluded and appears nowhere as an admitted host or pin. The reviewed compose
+is byte-identical to the private rendered copy, and the egress gateway
+(`zalo-shared-egress-gateway:g5-patched-af2be54`) was recreated healthy — no tunnel, no published
+port, `ip_forward=0`. Offline verification: 14/14 static, 48/48 deployed-network, 21/21 allow-path,
+37/37 in-image redirect (including a refused second hop, a refused direct request to the redirect
+host, a refused `chat.zalo.me` Location and malformed Locations), 29/29 database TLS
+(`verify-full`, TLSv1.3), and 5/5 preflight checks where `bootstrap`/`observe`/`send-test` are
+admitted and both an out-of-scope manifest and a manifest bound to a different commit are denied.
+The scan reports 0 HIGH/CRITICAL, and the Windows QR viewer rehearsal PASSed with a synthetic
+fixture only. No QR was generated and no provider was contacted. An independent read-only review
+returned **PASS WITH RESIDUAL RISKS** with no Critical or High finding; its three Low dispositions
+are recorded (extra query parameters still classify as `checkSession`; the hop bound is per
+response, not per process; and the application's idle pool makes `other_sessions` flicker between
+0 and 1). The fenced control state is unchanged — ownership `uncertain` epoch 7, provider
+`disconnected` gap 7, `reconciliation_required=true`, zero sessions, zero unresolved work, audit
+28 rows with three prior reconciliations — and no connector container exists. The single
+reconciliation (`uncertain→idle`, epoch 7→8, gap 7→8) stays **prepared and unexecuted**: it needs a
+separate explicit Owner UTC window, and the procedure now stops the application first so the
+read-only preflight shows `other_sessions=0` immediately before the request. One assertion in
+`ops/local/verify-pilot-db-tls.sh` was corrected and disclosed: the host postmaster start time
+moves on every host reboot, so the provisioning-order comparison is now anchored by an optional
+`PILOT_SESSION_START` (the original strict comparison applies when it is not supplied). No live
+activation, no reconciliation, no send, no merge and no provider contact occurred. Evidence
+[G5A-REDIRECT-DEPLOYMENT-2026-11-09](docs/evidence/G5A-REDIRECT-DEPLOYMENT-2026-11-09.md).
+**G5A_REDIRECT_DEPLOYED_RECONCILIATION_AWAITING_OWNER_START**

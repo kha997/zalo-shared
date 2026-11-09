@@ -179,18 +179,30 @@ printf "%s\n" "delete from messages where id='00000000-0000-4000-8000-00000000f0
   psql_run "$owner_url" /run/secrets/owner.pw >/dev/null
 
 # ------------------------------------------- unrelated workloads untouched
-# The shared cluster is queried read-only for its start time; the pilot
-# container must have been created after both the host postmaster and the G2
-# database container started. A restart or recreation during provisioning would
-# move those timestamps past the pilot container's creation time.
+# The shared cluster is queried read-only for its start time; the pilot must not
+# have restarted it. A postmaster's start time moves on every host restart, so
+# the one-time provisioning order (postmaster before the pilot container) can
+# only be asserted during provisioning. For any later verification the operator
+# anchors the comparison with PILOT_SESSION_START (ISO-8601 UTC, taken before
+# the first mutating action): the cluster must already have been up then, so a
+# restart caused by the session is still a failure while a host reboot is not
+# misreported as one.
 pilot_created=$(docker inspect -f '{{.Created}}' "$container")
 pilot_created_epoch=$(date -d "$pilot_created" +%s)
+anchor_epoch=$pilot_created_epoch
+anchor_label="the pilot container"
+if [ -n "${PILOT_SESSION_START:-}" ]; then
+  anchor_epoch=$(date -d "$PILOT_SESSION_START" +%s)
+  anchor_label="this deployment session ($PILOT_SESSION_START)"
+fi
 if host_start=$(sudo -n -u postgres psql -p 5432 -Atc "select pg_postmaster_start_time()" 2>/dev/null) &&
   [ -n "$host_start" ]; then
   host_start_epoch=$(date -d "$host_start" +%s)
-  [ "$host_start_epoch" -lt "$pilot_created_epoch" ] &&
-    pass "shared host cluster started before the pilot container (not restarted)" ||
-    fail "shared host cluster started at or after the pilot container"
+  if [ "$host_start_epoch" -lt "$anchor_epoch" ]; then
+    pass "shared host cluster started before $anchor_label (not restarted)"
+  else
+    fail "shared host cluster started at or after $anchor_label"
+  fi
 else
   printf 'pilot-db-tls: NOTE  shared host cluster was not queried; restart status UNPROVEN\n'
 fi
