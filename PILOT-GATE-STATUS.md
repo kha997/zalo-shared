@@ -650,3 +650,27 @@ moves on every host reboot, so the provisioning-order comparison is now anchored
 activation, no reconciliation, no send, no merge and no provider contact occurred. Evidence
 [G5A-REDIRECT-DEPLOYMENT-2026-11-09](docs/evidence/G5A-REDIRECT-DEPLOYMENT-2026-11-09.md).
 **G5A_REDIRECT_DEPLOYED_RECONCILIATION_AWAITING_OWNER_START**
+
+**WSL2 host and Docker recovery (2026-11-09/10):** `WSL_DOCKER_RECOVERY_BLOCKED` — the disk-full
+outage that blocked the 15:15–15:30Z reconciliation window is resolved at host level (R1 freed
+4.68 GB, C: 5.56 GB free; R2 produced a 137.26 GB pre-start copy on D: with SHA-256
+`a15c32e9…d69ef3`), the distro boots, the repository is clean at `a112327` and the fence was not
+touched. The pilot stack could **not** be restored: after the crash Docker Desktop no longer
+provisions WSL integration for `Ubuntu-24.04` (settings lost the distro list at 15:32Z, the
+per-distro agent exited at 15:24:12Z, and the backend that has run since 18:25:25Z never re-added
+one), so **every** bind mount from the distro resolves to an empty directory in containers — proved
+with an existing pilot certificate and with a file created seconds before the test — not merely the
+stale hashed references of the three pilot containers. `pilot-postgres` was recreated from the
+reviewed provisioning recipe (same pinned digest, environment, command, health check, restart
+policy and mounts; new container ID, volume `pilot-postgres-data` never removed or initialised —
+63 MB, `PG_VERSION` 17 intact) and stops at TLS load because its certificate bind is empty; the
+application and the egress gateway were not started. Fixing the integration needs a Docker Desktop
+restart, which the authorization's §8 forbids, so no health, TLS, allowlist, egress or
+authoritative database check was reached and the expected control state (`uncertain`, epoch 7,
+gap 7, `reconciliation_required=true`, audit 28) is neither confirmed nor contradicted. No
+reconciliation request, no QR, no provider contact, no database reset, no certificate or credential
+regeneration, no image change, no network change, no VHDX move and no unrelated-container
+restart occurred; the three volume-only containers of the other projects can be started on their
+own authorization, while the zena application and Docker-based CI jobs share the pilot's blocker.
+Evidence [WSL-DOCKER-RECOVERY-2026-11-09](docs/evidence/WSL-DOCKER-RECOVERY-2026-11-09.md).
+**WSL_DOCKER_RECOVERY_BLOCKED**
