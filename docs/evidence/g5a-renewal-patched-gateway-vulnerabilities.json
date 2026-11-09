@@ -3,10 +3,10 @@
   "Trivy": {
     "Version": "0.76.1"
   },
-  "ReportID": "01a1bf00-56e9-7933-90d6-79fe28fc5b81",
-  "CreatedAt": "2026-11-09T13:30:32.937604894+07:00",
+  "ReportID": "01a1bf05-fd87-7f20-931a-a1116e936ac8",
+  "CreatedAt": "2026-11-09T13:36:43.271994169+07:00",
   "ArtifactID": "sha256:b52967d0ee85e3a4b4341ea05454b7ffc104974572ed8f56264d31fba9acc7ab",
-  "ArtifactName": "/tmp/g5a-renewal-scan/patched-gateway.tar",
+  "ArtifactName": "/tmp/tmp.2ic1yTXhny/image.tar",
   "ArtifactType": "container_image",
   "Metadata": {
     "Size": 156281344,
@@ -44,9 +44,9 @@
       "sha256:6d3b1e8c8374f89eacc5086ac01b10a117ac6e24708f3fcadf62a5777bfe40e3"
     ],
     "RepoTags": [
-      "zalo-shared-egress-gateway:g5-patched-probe"
+      "zalo-shared-egress-gateway:g5-patched-af2be54"
     ],
-    "Reference": "zalo-shared-egress-gateway:g5-patched-probe",
+    "Reference": "zalo-shared-egress-gateway:g5-patched-af2be54",
     "ImageConfig": {
       "architecture": "amd64",
       "created": "2026-11-09T06:29:50.698989337Z",
@@ -377,7 +377,7 @@
   },
   "Results": [
     {
-      "Target": "/tmp/g5a-renewal-scan/patched-gateway.tar (debian 13.7)",
+      "Target": "/tmp/tmp.2ic1yTXhny/image.tar (debian 13.7)",
       "Class": "os-pkgs",
       "Type": "debian",
       "Packages": [

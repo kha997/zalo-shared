@@ -1,28 +1,9 @@
 {
   "scanner": "Trivy0.76.1",
-  "image": "zalo-shared-connector:g5-diag-a2a7aa0",
-  "highCriticalCount": 2,
-  "fixableHighCriticalCount": 2,
-  "findings": [
-    {
-      "target": "/tmp/tmp.5JxzIapC0n/image.tar (debian 13.7)",
-      "id": "CVE-2026-76844",
-      "package": "zlib1g",
-      "installed": "1:1.3.dfsg+really1.3.1-1+b1",
-      "fixed": "1:1.3.dfsg+really1.3.1-1+deb13u1",
-      "severity": "HIGH",
-      "url": "https://avd.aquasec.com/nvd/cve-2026-76844"
-    },
-    {
-      "target": "/tmp/tmp.5JxzIapC0n/image.tar (debian 13.7)",
-      "id": "CVE-2026-85091",
-      "package": "zlib1g",
-      "installed": "1:1.3.dfsg+really1.3.1-1+b1",
-      "fixed": "1:1.3.dfsg+really1.3.1-1+deb13u1",
-      "severity": "HIGH",
-      "url": "https://avd.aquasec.com/nvd/cve-2026-85091"
-    }
-  ],
+  "image": "zalo-shared-connector:g5-patched-af2be54",
+  "highCriticalCount": 0,
+  "fixableHighCriticalCount": 0,
+  "findings": [],
   "licenses": [
     {
       "target": "OS Packages",
@@ -645,7 +626,7 @@
     "cryptoJs": "4.2.0",
     "buildIdentity": {
       "version": 1,
-      "sourceCommit": "a2a7aa038886ad7324a4906685026ef70406db4b",
+      "sourceCommit": "af2be54db767ff703f7c4db8580739efd50b401a",
       "lockSha256": "17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b",
       "sdkIntegrity": "sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA=="
     },

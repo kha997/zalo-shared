@@ -3,10 +3,10 @@
   "Trivy": {
     "Version": "0.76.1"
   },
-  "ReportID": "01a1bf00-632d-77ca-bc63-b502c55d6014",
-  "CreatedAt": "2026-11-09T13:30:36.077512327+07:00",
-  "ArtifactID": "sha256:b72979a71fbb13894dfc514a33f7a678e801f5f450abf87cb594904a02a1eac7",
-  "ArtifactName": "/tmp/g5a-renewal-scan/deployed-app.tar",
+  "ReportID": "01a1bf0a-1369-775b-aba6-023250b0fb64",
+  "CreatedAt": "2026-11-09T13:41:11.017485169+07:00",
+  "ArtifactID": "sha256:e4b2b807bc4452111b49110ef52e30c51995f3644c6f32ecbb52a85db5a42112",
+  "ArtifactName": "/tmp/tmp.sKMNR8Z7SD/image.tar",
   "ArtifactType": "container_image",
   "Metadata": {
     "Size": 183470592,
@@ -44,9 +44,9 @@
       "sha256:8e20bc09dd570fbeea705e1ce6c5f9af33e2caa61742f88ae54c53f55b21adb0"
     ],
     "RepoTags": [
-      "zalo-shared:g2-adf8ceca9bd6"
+      "zalo-shared-g2-app:latest"
     ],
-    "Reference": "zalo-shared:g2-adf8ceca9bd6",
+    "Reference": "zalo-shared-g2-app:latest",
     "ImageConfig": {
       "architecture": "amd64",
       "created": "2026-11-02T06:20:43.186615547Z",
@@ -376,7 +376,7 @@
   },
   "Results": [
     {
-      "Target": "/tmp/g5a-renewal-scan/deployed-app.tar (debian 13.7)",
+      "Target": "/tmp/tmp.sKMNR8Z7SD/image.tar (debian 13.7)",
       "Class": "os-pkgs",
       "Type": "debian",
       "Packages": [
@@ -2241,7 +2241,7 @@
             "Name": "Debian Security Tracker",
             "URL": "https://salsa.debian.org/security-tracker-team/security-tracker"
           },
-          "Fingerprint": "sha256:62d57482b0c5762f24cec89dd87ddf3ae470dec8ff8bc7a16396f3aab74e8a0c",
+          "Fingerprint": "sha256:23f77acf2e54c3009bb6cce5b0cbefaa3d6c5de5ed93e9c15ce1a5886c28b11f",
           "Title": "webpack-dev-middleware: webpack-dev-middleware: Information Disclosure via Path Traversal",
           "Description": "zlib 1.2.11 through 1.3.2 contains a heap buffer overflow: after an underlying write() fails, gz_write() returns without resetting strm.next_in, leaving it pointed at the caller's buffer. A later gz* write call then derives a position from the stale pointer and writes past a heap allocation; any write() failure reaches it, including EPIPE on a blocking descriptor, and in versions before 1.3.1.2 the failed write must be followed by a gzclearerr() call.",
           "Severity": "HIGH",
@@ -2310,7 +2310,7 @@
             "Name": "Debian Security Tracker",
             "URL": "https://salsa.debian.org/security-tracker-team/security-tracker"
           },
-          "Fingerprint": "sha256:27754486b2d9f1c90d4d43e3f1b6109ae4615adfb7c8f3a2e5e54d6a9058cac3",
+          "Fingerprint": "sha256:7ee3d6535ad3799ac49805c11e357ce27dae99a6fc909d43bddd39c4f22752cb",
           "Title": "zlib: zlib: Heap buffer overflow in gz_vacate() allows arbitrary code execution",
           "Description": "zlib versions 1.3.1.2 through 1.3.2 contain a heap buffer overflow vulnerability in the gz_vacate() function when processing non-blocking gzwrite() operations with stale external buffer pointers. Attackers can trigger the overflow by calling gzprintf() or gzvprintf() after a write stall, causing an unchecked memmove() to write beyond the internal input buffer boundary.",
           "Severity": "HIGH",
