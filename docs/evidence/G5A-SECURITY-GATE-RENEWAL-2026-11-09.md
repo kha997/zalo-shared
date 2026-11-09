@@ -143,7 +143,7 @@ passes it. Nothing is suppressed.
 | Pilot ownership | `epoch 6`, `phase idle`, `owner_id NULL`, `last_fenced_owner_id 7cc878cf-…`, `last_fenced_epoch 5` |
 | Provider state | `disconnected`, `reconciliation_required false`, `gap_version 6` |
 | Pending work | outbox 0, messages 0, delivery_parts 0, sessions 0, attachments 0, pilot_send_budget 0, provider_media_jobs 0, provider_events 0 |
-| Connector container | none active or stopped |
+| Connector container | none running; only inert `Created` containers left by earlier probe attempts (oldest names from 2026-11-02, newest `charming_buck` on `g5-diag-a2a7aa0`), none with a process or attached network |
 | Gateway | healthy, unchanged image `g5-local` |
 | Diagnostic sink | 15 lines, `sha256 43fc4212c8cfe0b07be193ff44b33e1830a6291e91ff0f7f214db54245080543…`, unchanged |
 
@@ -202,6 +202,12 @@ authorization; the security patch alone does not authorize a live stage.
   `docs/operations/PRIVATE-PILOT.md`.
 - The running application container (`zalo-shared-g2-app-1`) and gateway still use the old base.
   They must be redeployed from the patched tags before they stop reporting the two findings.
+  `zalo-shared-g2-app-1` also reports unhealthy; that predates this work and was not investigated
+  here.
+- Local tags `zalo-shared-connector:g5-patched-probe`, `zalo-shared:g5-patched-probe` and
+  `zalo-shared-egress-gateway:g5-patched-probe` are scratch builds from a dirty tree at `1aa35f3`.
+  They are not the reviewed artifacts and must not be deployed; deploy only the
+  `*:g5-patched-af2be54` tags above.
 
 ## 10. Independent review
 
@@ -209,4 +215,34 @@ Recorded in section 11 after review of this document and the enforcement claims.
 
 ## 11. Review record
 
-_Pending._
+**Round 1 — 2026-11-09, commit `fb2f8cb`: APPROVE.**
+
+An independent reviewer (separate read-only agent, no shared context) re-derived the evidence rather
+than trusting the record. Verified:
+
+1. Pins only: `git diff 1aa35f3..HEAD` on the three Dockerfiles changes only `ARG RUNTIME_IMAGE`;
+   no commit in the range touches `ops/pilot-scan.sh`, `ops/scan-image.sh`,
+   `ops/local/scan-diagnostic-connector.sh` or `.github/`; no `.trivyignore` or trivy ignore flags
+   anywhere.
+2. Expiry enforced: disposition file unchanged since `f84661e`; ledger 3 entries with a valid hash
+   chain; the documented evaluator run exits 3 and leaves the ledger byte-identical; `--now` exits 2
+   and a wrong scope exits 4.
+3. Evidence digests: all six config digests re-derived from `docker save` tars match both the tags
+   and the report; image IDs and OS 13.7 match.
+4. Installed package read inside all six images: deployed generation `-1+b1`, patched generation
+   `+deb13u1`; the patched connector layers start from the patched base.
+5. Independent rescan with cached Trivy 0.76.1 and identical flags: patched connector 0
+   HIGH/CRITICAL (ImageID `0664e441…`); deployed connector/gateway/app 2 each; patched app/gateway 0.
+6. Invariants: UID 65532, zca-js 2.2.0, crypto-js 4.2.0, no exposed ports, no private files, no
+   `.node` addons, 8 shared objects with no `libz`, `sourceCommit=af2be54…`.
+7. No overclaiming: the deployed images are never described as patched, and no deployment, merge or
+   live authorization is implied.
+
+Blocking findings: none.
+
+Non-blocking residuals accepted into section 9: the reviewer did not re-run the §6 suite/QR/control
+checks (they were run in this session and are recorded above, but not independently repeated);
+PR #3 draft status was not re-checked by the reviewer (it remains draft); the `*:g5-patched-probe`
+scratch tags linger locally; inert `Created` connector containers from earlier probes remain; and
+`zalo-shared-g2-app-1` is unhealthy.
+
