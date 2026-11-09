@@ -15,8 +15,8 @@
  *      follow a provider redirect inside fetch where this policy would never
  *      see it;
  *   3. a `Location` is followed only when it answers the exact `checkSession`
- *      request, is an absolute `https:` URL for exactly `chat.zalo.me`, and is
- *      followed exactly once; any other 3xx — including a checkSession 3xx
+ *      request, is an absolute `https:` URL for exactly `jr.zaloapp.com`, and
+ *      is followed exactly once; any other 3xx — including a checkSession 3xx
  *      whose Location cannot be validated — is refused;
  *   4. the redirect host is never a direct target — even when the runtime
  *      allowlist admits it, the only way in is the validated hop;
@@ -24,7 +24,7 @@
  *
  * The hop is bootstrap-scoped in code, not in the network layer. In the
  * prepared compose, `PILOT_EGRESS_HOSTS` is container-wide, so once this
- * admission is deployed the guard and gateway admit `chat.zalo.me:443` for the
+ * admission is deployed the guard and gateway admit `jr.zaloapp.com:443` for the
  * whole connector process, not only while `bootstrap` runs. Only the bootstrap
  * path installs this policy; observe and send-test use the SDK facade's own
  * transport.
@@ -45,7 +45,13 @@ import {
 
 export const CHECK_SESSION_URL =
   "https://id.zalo.me/account/checksession?continue=https%3A%2F%2Fchat.zalo.me%2Findex.html";
-export const REDIRECT_HOST = "chat.zalo.me";
+/**
+ * The one host a validated checkSession `Location` may name; the provider
+ * returned it on 2026-11-09. The `continue` value above is the SDK's own
+ * request parameter, so `chat.zalo.me` appears there but is never a
+ * destination: it is not admitted, pinable or reachable by this policy.
+ */
+export const REDIRECT_HOST = "jr.zaloapp.com";
 export const REDIRECT_DENIED = "PILOT_REDIRECT_DENIED";
 
 export type FetchTransport = (

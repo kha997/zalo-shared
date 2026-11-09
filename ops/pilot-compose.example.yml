@@ -58,7 +58,7 @@ services:
       GATEWAY_BIND_ADDRESS: 172.16.29.10
       GATEWAY_PORT: "443"
       GATEWAY_UPSTREAM_PORT: "443"
-      GATEWAY_ALLOW_HOSTS: id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me,chat.zalo.me
+      GATEWAY_ALLOW_HOSTS: id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me,jr.zaloapp.com
       GATEWAY_MAX_TUNNELS: "32"
       GATEWAY_HANDSHAKE_TIMEOUT_MS: "10000"
       GATEWAY_IDLE_TIMEOUT_MS: "120000"
@@ -116,7 +116,7 @@ services:
       # Reviewed allowlist, repeated here rather than read from the private env
       # file so that it is visible in configuration review and cannot drift from
       # the gateway's own allowlist. `environment` overrides `env_file`.
-      PILOT_EGRESS_HOSTS: id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me,chat.zalo.me
+      PILOT_EGRESS_HOSTS: id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me,jr.zaloapp.com
       PILOT_EGRESS_PORTS: "443"
       PILOT_EGRESS_GATEWAY: 172.16.29.10
       # The deployed URL uses sslmode=verify-full. The gate also admits require
@@ -131,13 +131,14 @@ services:
     # address and the guard's PILOT_EGRESS_GATEWAY pin check accepts it. A name
     # that is not pinned here has no resolver and no route, which is how an
     # off-inventory redirect target from zca-js dist/utils.js:289 is refused.
-    # chat.zalo.me is pinned only because the SDK fetch layer follows exactly one
-    # validated checkSession Location to it; it is never a direct target.
+    # jr.zaloapp.com is pinned only because the SDK fetch layer follows exactly
+    # one validated checkSession Location to it; it is never a direct target,
+    # and a second redirect is refused rather than followed.
     extra_hosts:
       - id.zalo.me:172.16.29.10
       - wpa.chat.zalo.me:172.16.29.10
       - jr.chat.zalo.me:172.16.29.10
-      - chat.zalo.me:172.16.29.10
+      - jr.zaloapp.com:172.16.29.10
     volumes:
       - type: bind
         source: ${PILOT_MANIFEST_FILE:?Private owner-only manifest file}

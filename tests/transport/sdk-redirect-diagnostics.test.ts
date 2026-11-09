@@ -40,12 +40,15 @@ const POSIX = process.platform !== "win32";
 const sdkZalo = pathToFileURL(
   resolve(process.cwd(), "node_modules/zca-js/dist/zalo.js"),
 ).href;
-const CHAT = "https://chat.zalo.me/index.html";
+// The destination observed from the authorized 2026-11-09 attempt.
+const REDIRECT = "https://jr.zaloapp.com/index.html";
+// The earlier unobserved hypothesis; it must stay refused.
+const PREVIOUS_HYPOTHESIS = "https://chat.zalo.me/index.html";
 const REVIEWED_HOSTS = [
   "id.zalo.me",
   "wpa.chat.zalo.me",
   "jr.chat.zalo.me",
-  "chat.zalo.me",
+  "jr.zaloapp.com",
 ];
 const PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -81,7 +84,7 @@ function rawRedirect(location: string) {
 
 type Session = {
   checksession: () => Response;
-  chat?: () => Response;
+  redirectTarget?: () => Response;
 };
 
 function fixture(session: Session) {
@@ -117,9 +120,9 @@ function fixture(session: Session) {
           throw new Error("unexpected provider path");
       }
     }
-    if (parsed.origin === "https://chat.zalo.me") {
-      if (session.chat) return session.chat();
-      return html("<html>synthetic chat</html>");
+    if (parsed.origin === "https://jr.zaloapp.com") {
+      if (session.redirectTarget) return session.redirectTarget();
+      return html("<html>synthetic redirect target</html>");
     }
     if (parsed.origin === "https://jr.chat.zalo.me")
       return json({
@@ -328,22 +331,40 @@ test("A: a lookalike host is recorded as a host, never as a URL", async () => {
   }
 });
 
+test("A: the previously assumed chat.zalo.me redirect is now an unexpected host", async () => {
+  const { policy, calls, denials } = policyFor({
+    checksession: () => redirect(PREVIOUS_HYPOTHESIS),
+  });
+  await assert.rejects(policy(CHECK_SESSION_URL), denied);
+  assert.deepEqual(calls, [CHECK_SESSION_URL]);
+  assert.deepEqual(denials, [
+    {
+      request: "check-session",
+      redirect: "unexpected-location",
+      source: "id.zalo.me",
+      destination: "chat.zalo.me",
+      hops: 0,
+    },
+  ]);
+  assertClosed(denials[0]);
+});
+
 // ------------------------------------------- scenario B: redirect after hop
 
 test("B: a further redirect after the admitted hop is classified as such", async () => {
   const { policy, calls, denials } = policyFor({
-    checksession: () => redirect(CHAT),
-    chat: () => redirect(`https://chat.zalo.me/app?next=${SENTINEL}`),
+    checksession: () => redirect(REDIRECT),
+    redirectTarget: () => redirect(`https://jr.zaloapp.com/app?next=${SENTINEL}`),
   });
   assert.equal((await policy(CHECK_SESSION_URL)).status, 302);
-  await assert.rejects(policy(CHAT), denied);
-  assert.deepEqual(calls, [CHECK_SESSION_URL, CHAT]);
+  await assert.rejects(policy(REDIRECT), denied);
+  assert.deepEqual(calls, [CHECK_SESSION_URL, REDIRECT]);
   assert.deepEqual(denials, [
     {
       request: "redirect-follow",
       redirect: "redirect-after-hop",
-      source: "chat.zalo.me",
-      destination: "chat.zalo.me",
+      source: "jr.zaloapp.com",
+      destination: "jr.zaloapp.com",
       hops: 1,
     },
   ]);
@@ -352,11 +373,11 @@ test("B: a further redirect after the admitted hop is classified as such", async
 
 test("B: a checkout to a third host after the hop stays a post-hop redirect", async () => {
   const { policy, denials } = policyFor({
-    checksession: () => redirect(CHAT),
-    chat: () => redirect(`https://third.example/next?x=${SENTINEL}`),
+    checksession: () => redirect(REDIRECT),
+    redirectTarget: () => redirect(`https://third.example/next?x=${SENTINEL}`),
   });
   await policy(CHECK_SESSION_URL);
-  await assert.rejects(policy(CHAT), denied);
+  await assert.rejects(policy(REDIRECT), denied);
   assert.equal(denials.length, 1);
   assert.equal(denials[0].redirect, "redirect-after-hop");
   assert.equal(denials[0].destination, "third.example");
@@ -369,15 +390,15 @@ test("C: a direct request to the redirect host is classified and never sent", as
   const { policy, calls, denials } = policyFor({
     checksession: () => json({ error_code: 0 }),
   });
-  await assert.rejects(policy(CHAT), denied);
-  await assert.rejects(policy("https://chat.zalo.me"), denied);
+  await assert.rejects(policy(REDIRECT), denied);
+  await assert.rejects(policy("https://jr.zaloapp.com"), denied);
   assert.deepEqual(calls, []);
   assert.deepEqual(denials, [
     {
       request: "redirect-follow",
       redirect: "direct-redirect-host",
       source: null,
-      destination: "chat.zalo.me",
+      destination: "jr.zaloapp.com",
       hops: 0,
     },
   ]);
@@ -387,24 +408,24 @@ test("C: a direct request to the redirect host is classified and never sent", as
 // ------------------------------------- stale, malformed and unexpected shapes
 
 test("a stale or reused hop is distinguished from a direct request", async () => {
-  const cleared = policyFor({ checksession: () => redirect(CHAT) });
+  const cleared = policyFor({ checksession: () => redirect(REDIRECT) });
   await cleared.policy(CHECK_SESSION_URL);
   await cleared.policy("https://id.zalo.me/account");
-  await assert.rejects(cleared.policy(CHAT), denied);
+  await assert.rejects(cleared.policy(REDIRECT), denied);
   assert.equal(cleared.denials[0].redirect, "stale-hop");
   assert.equal(cleared.denials[0].hops, 0);
 
-  const reused = policyFor({ checksession: () => redirect(CHAT) });
+  const reused = policyFor({ checksession: () => redirect(REDIRECT) });
   await reused.policy(CHECK_SESSION_URL);
-  assert.equal((await reused.policy(CHAT)).status, 200);
-  await assert.rejects(reused.policy(CHAT), denied);
+  assert.equal((await reused.policy(REDIRECT)).status, 200);
+  await assert.rejects(reused.policy(REDIRECT), denied);
   assert.equal(reused.denials[0].redirect, "stale-hop");
 
-  const mismatched = policyFor({ checksession: () => redirect(CHAT) });
+  const mismatched = policyFor({ checksession: () => redirect(REDIRECT) });
   await mismatched.policy(CHECK_SESSION_URL);
-  await assert.rejects(mismatched.policy("https://chat.zalo.me/other"), denied);
+  await assert.rejects(mismatched.policy("https://jr.zaloapp.com/other"), denied);
   assert.equal(mismatched.denials[0].redirect, "stale-hop");
-  assert.equal(mismatched.denials[0].destination, "chat.zalo.me");
+  assert.equal(mismatched.denials[0].destination, "jr.zaloapp.com");
 });
 
 test("malformed and downgraded redirects are named without the raw value", async () => {
@@ -412,17 +433,17 @@ test("malformed and downgraded redirects are named without the raw value", async
     [null, "invalid"],
     ["", "invalid"],
     ["/index.html", "invalid"],
-    ["//chat.zalo.me/index.html", "invalid"],
-    ["http://chat.zalo.me/index.html", "chat.zalo.me"],
-    ["https://chat.zalo.me:8443/index.html", "chat.zalo.me"],
-    ["https://user:pass@chat.zalo.me/index.html", "chat.zalo.me"],
+    ["//jr.zaloapp.com/index.html", "invalid"],
+    ["http://jr.zaloapp.com/index.html", "jr.zaloapp.com"],
+    ["https://jr.zaloapp.com:8443/index.html", "jr.zaloapp.com"],
+    ["https://user:pass@jr.zaloapp.com/index.html", "jr.zaloapp.com"],
     ["https://93.184.216.34/", "invalid"],
     ["https://[2001:db8::1]/", "invalid"],
     // The URL parser rewrites these before the host is read, so the recorded
     // host is still just the host; the class stays malformed because the
     // policy refuses the value.
-    ["https://chat.zalo.me\\@evil.test/", "chat.zalo.me"],
-    ["https://chat.zalo.me/index.html\r\nX-Injected: 1", "chat.zalo.me"],
+    ["https://jr.zaloapp.com\\@evil.test/", "jr.zaloapp.com"],
+    ["https://jr.zaloapp.com/index.html\r\nX-Injected: 1", "jr.zaloapp.com"],
     ["file:///etc/passwd", "invalid"],
   ] as const) {
     const { policy, calls, denials } = policyFor({
@@ -448,7 +469,7 @@ test("a 3xx where no redirect is permitted stays distinct from an unexpected Loc
   const policy = createBootstrapFetch({
     fetch: async (input: unknown) => {
       calls.push(String(input));
-      return redirect(CHAT);
+      return redirect(REDIRECT);
     },
     egressHosts: REVIEWED_HOSTS,
     onDenial: (value) => denials.push(value),
@@ -463,7 +484,7 @@ test("a 3xx where no redirect is permitted stays distinct from an unexpected Loc
       request: "provider-direct",
       redirect: "unexpected-redirect",
       source: "id.zalo.me",
-      destination: "chat.zalo.me",
+      destination: "jr.zaloapp.com",
       hops: 0,
     },
   ]);
@@ -670,19 +691,20 @@ test("end-to-end A: the pinned SDK denial carries the unexpected destination", a
 
 test("end-to-end B: the pinned SDK denial names the post-hop redirect", async () => {
   const outcome = await bootstrapThroughSdk({
-    checksession: () => redirect(CHAT),
-    chat: () => redirect(`https://chat.zalo.me/app?next=${SENTINEL}`),
+    checksession: () => redirect(REDIRECT),
+    redirectTarget: () =>
+      redirect(`https://jr.zaloapp.com/app?next=${SENTINEL}`),
   });
   assert.equal(outcome.error?.code, "redirect-denied");
   assert.deepEqual(outcome.error?.detail, {
     request: "redirect-follow",
     redirect: "redirect-after-hop",
-    source: "chat.zalo.me",
-    destination: "chat.zalo.me",
+    source: "jr.zaloapp.com",
+    destination: "jr.zaloapp.com",
     hops: 1,
   });
-  assert.equal(outcome.calls.filter((url) => url === CHAT).length, 1);
-  assert.ok(!outcome.calls.includes("https://chat.zalo.me/app"));
+  assert.equal(outcome.calls.filter((url) => url === REDIRECT).length, 1);
+  assert.ok(!outcome.calls.includes("https://jr.zaloapp.com/app"));
   assert.equal(outcome.writes.length, 0);
 });
 
@@ -716,7 +738,7 @@ test("end-to-end C: a direct redirect-host request is named before any socket", 
         }
         async loginQR() {
           // The SDK requests the redirect-only host directly, with no hop.
-          await this.options.polyfill?.(CHAT).catch(() => {});
+          await this.options.polyfill?.(REDIRECT).catch(() => {});
           throw new Error("Cannot get session, login failed");
         }
       },
@@ -738,7 +760,7 @@ test("end-to-end C: a direct redirect-host request is named before any socket", 
     request: "redirect-follow",
     redirect: "direct-redirect-host",
     source: null,
-    destination: "chat.zalo.me",
+    destination: "jr.zaloapp.com",
     hops: 0,
   });
   assert.deepEqual(calls, []);
@@ -771,7 +793,7 @@ test("the classified denial survives process exit and never carries a secret", a
       `class Zalo {`,
       `  constructor(options) { this.options = options; }`,
       `  async loginQR() {`,
-      `    await this.options.polyfill("https://chat.zalo.me/index.html?leak=${SENTINEL}").catch(() => {});`,
+      `    await this.options.polyfill("https://jr.zaloapp.com/index.html?leak=${SENTINEL}").catch(() => {});`,
       `    throw new Error("Cannot get session, login failed");`,
       `  }`,
       `}`,
@@ -779,7 +801,7 @@ test("the classified denial survives process exit and never carries a secret", a
       `  grant: ${JSON.stringify(grant())},`,
       `  owner, view, sessionStore,`,
       `  loader: async () => ({ Zalo }),`,
-      `  egressHosts: ["id.zalo.me", "wpa.chat.zalo.me", "jr.chat.zalo.me", "chat.zalo.me"],`,
+      `  egressHosts: ["id.zalo.me", "wpa.chat.zalo.me", "jr.chat.zalo.me", "jr.zaloapp.com"],`,
       `  fetch: async () => new Response("ok", { status: 200 }),`,
       `  signal: new AbortController().signal,`,
       `}).then(() => null, (error) => error);`,
@@ -808,7 +830,7 @@ test("the classified denial survives process exit and never carries a secret", a
     assert.equal(line.redirect, "direct-redirect-host");
     assert.equal(line.request, "redirect-follow");
     assert.equal(line.source, null);
-    assert.equal(line.destination, "chat.zalo.me");
+    assert.equal(line.destination, "jr.zaloapp.com");
     assert.equal(line.hops, 0);
     assert.match(line.cid, /^[0-9a-f-]{36}$/);
     for (const secret of [

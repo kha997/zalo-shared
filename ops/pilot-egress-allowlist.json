@@ -8,13 +8,14 @@
     "  3. the egress gateway's GATEWAY_ALLOW_HOSTS",
     "Hosts listed under `pending` are NOT admitted and must not appear in any",
     "runtime configuration. Adding a host means moving it into `admitted` with",
-    "evidence, then re-running the checker. `chat.zalo.me` is admitted as a",
+    "evidence, then re-running the checker. `jr.zaloapp.com` is admitted as a",
     "`redirect-target`: it is reachable only as the single validated Location of",
     "the exact checkSession request (adapters/zalo/redirect-policy.ts), never as",
     "a direct request target, and only for the bootstrap stage.",
-    "Every hostname here is derived from the shipped zca-js@2.2.0 artifacts.",
-    "Nothing was guessed and no hostname was observed from live traffic; see",
-    "docs/evidence/G5A-PROVIDER-ENDPOINT-POLICY.md."
+    "All confirmed-static hostnames are derived from the shipped zca-js@2.2.0",
+    "artifacts. The one redirect-target is the destination observed from the",
+    "authorized 2026-11-09 attempt, not a guess; see",
+    "docs/evidence/G5A-REDIRECT-REMEDIATION-2026-11-09.md."
   ],
   "version": 1,
   "sdk": {
@@ -50,7 +51,7 @@
       "evidence": "zca-js@2.2.0 dist/apis/loginQR.js:215 (/jr/userinfo), reached from qr-bootstrap.ts loginQR()"
     },
     {
-      "host": "chat.zalo.me",
+      "host": "jr.zaloapp.com",
       "classification": "redirect-target",
       "stages": ["bootstrap"],
       "port": 443,
@@ -59,7 +60,7 @@
         "maxHops": 1,
         "rule": "absolute https only; exact host; port empty or 443; no userinfo, IP literal, trailing dot or backslash; never a direct request target; enforced in adapters/zalo/redirect-policy.ts before the socket"
       },
-      "evidence": "zca-js@2.2.0 dist/apis/loginQR.js:194-211 requests /account/checksession with continue=https://chat.zalo.me/index.html and dist/utils.js:289-298 follows any Location it receives. The 2026-11-04 attempt is consistent with that redirect but the provider's 302 was not observed, so the admission is conditional on the live observation documented in docs/evidence/G5A-SDK-REDIRECT-ANALYSIS.md"
+      "evidence": "Observed 2026-11-09: after the Owner scanned the authorized QR, the checkSession response carried a Location for jr.zaloapp.com; the fetch policy refused it as request=check-session, redirect=unexpected-location, source=id.zalo.me, destination=jr.zaloapp.com, hops=0 (docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-09.md). The path and query of that Location are not recorded, so the admission is host-level. zca-js@2.2.0 dist/utils.js:289-298 follows any Location it receives after dist/apis/loginQR.js:194-211 requests checkSession with continue=https://chat.zalo.me/index.html. Independent attribution: A record in the same /24 as id.zalo.me (49.213.95.0/24), domain registration and vendor catalogues identify zaloapp.com as Zalo; details in docs/evidence/G5A-REDIRECT-REMEDIATION-2026-11-09.md"
     }
   ],
   "pending": [
@@ -94,7 +95,7 @@
     },
     {
       "classification": "redirect-target",
-      "reason": "zca-js@2.2.0 dist/utils.js:289-298 follows any Location response header with request(ctx, redirectURL, ...). A provider redirect can therefore name a host that is not in this file. The gateway allowlist and the connector's internal-network topology both refuse it: an unpinned name has no route and no external resolver. Redirect targets must be admitted here before they can be followed. chat.zalo.me is the only target admitted so far (above); every other target stays in this class and is refused by adapters/zalo/redirect-policy.ts as well as by the network boundary.",
+      "reason": "zca-js@2.2.0 dist/utils.js:289-298 follows any Location response header with request(ctx, redirectURL, ...). A provider redirect can therefore name a host that is not in this file. The gateway allowlist and the connector's internal-network topology both refuse it: an unpinned name has no route and no external resolver. Redirect targets must be admitted here before they can be followed. jr.zaloapp.com is the only target admitted so far (above); every other target stays in this class and is refused by adapters/zalo/redirect-policy.ts as well as by the network boundary.",
       "stages": ["bootstrap", "observe", "send-test"]
     }
   ],
@@ -106,6 +107,10 @@
     {
       "host": "registry.npmjs.org",
       "reason": "dist/update.js:4 NPM_REGISTRY, called from dist/zalo.js:51 checkUpdate(ctx), which returns immediately when ctx.options.checkUpdate is falsy. adapters/zalo/sdk-facade.ts sets checkUpdate:false, so no request is made. Not admitted; if it were ever reached, the gateway would refuse it."
+    },
+    {
+      "host": "chat.zalo.me",
+      "reason": "Not admitted. In the reviewed SDK it appears only as the `continue` query parameter of the checkSession request and as a cookie-domain comparison; it is never a request target. The 2026-11-09 observation showed the post-scan redirect naming jr.zaloapp.com instead, so chat.zalo.me is not needed, and any redirect to it is refused and reported as unexpected-location."
     },
     {
       "host": "catalog.zalo.me",

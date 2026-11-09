@@ -395,7 +395,7 @@ test("the bootstrap installs the one-hop fetch policy on the SDK", async () => {
       "id.zalo.me",
       "wpa.chat.zalo.me",
       "jr.chat.zalo.me",
-      "chat.zalo.me",
+      "jr.zaloapp.com",
     ],
     fetch: base,
   });
@@ -404,7 +404,7 @@ test("the bootstrap installs the one-hop fetch policy on the SDK", async () => {
   assert.equal(typeof options.polyfill, "function");
   // The admitted redirect host is never a direct target, even here.
   await assert.rejects(
-    options.polyfill("https://chat.zalo.me/index.html"),
+    options.polyfill("https://jr.zaloapp.com/index.html"),
     (error: any) => error?.cause?.code === "PILOT_REDIRECT_DENIED",
   );
   assert.equal((await options.polyfill("https://id.zalo.me/account")).status, 200);
@@ -415,7 +415,7 @@ test("a destination the fetch policy refused is attributed as redirect-denied", 
   const state = counters();
   const loader = fakeLoader(async () => {
     await (state.constructorOptions as any)
-      .polyfill("https://chat.zalo.me/index.html")
+      .polyfill("https://jr.zaloapp.com/index.html")
       .catch(() => {});
     throw new Error("Cannot get session, login failed");
   }, state);
@@ -432,7 +432,7 @@ test("a destination the fetch policy refused is attributed as redirect-denied", 
         "id.zalo.me",
         "wpa.chat.zalo.me",
         "jr.chat.zalo.me",
-        "chat.zalo.me",
+        "jr.zaloapp.com",
       ],
       fetch: async () => new Response("ok", { status: 200 }),
     }),

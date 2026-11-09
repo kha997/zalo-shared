@@ -6,13 +6,16 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 /**
- * Offline reproduction of the 2026-11-04 post-confirmation handshake.
+ * Offline reproduction of the post-confirmation handshake.
  *
- * The pinned SDK is driven through its real `loginQR` implementation with a
- * synthetic `fetch` polyfill, so no socket, DNS query or provider contact
- * happens. The redirect targets are deliberately outside the reviewed
- * allowlist and are refused by the connector guard, which is exercised in a
- * separate child process against the real `ops/pilot-egress-guard.cjs`.
+ * The 2026-11-09 attempt observed the checkSession redirect naming
+ * jr.zaloapp.com; the 2026-11-04 attempt was consistent with the same shape but
+ * without host attribution. The pinned SDK is driven through its real `loginQR`
+ * implementation with a synthetic `fetch` polyfill, so no socket, DNS query or
+ * provider contact happens. The redirect targets are deliberately outside the
+ * running three-host allowlist and are refused by the connector guard, which is
+ * exercised in a separate child process against the real
+ * `ops/pilot-egress-guard.cjs`.
  */
 
 const guard = resolve(process.cwd(), "ops/pilot-egress-guard.cjs");
@@ -23,7 +26,7 @@ const loginQRModule = pathToFileURL(
 const PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
-type SessionFixture = "redirect-chat" | "redirect-foreign" | "ok";
+type SessionFixture = "redirect-jr" | "redirect-foreign" | "ok";
 
 function html(body: string) {
   return new Response(body, {
@@ -66,10 +69,10 @@ function fixture(session: SessionFixture) {
         case "/account/authen/qr/waiting-confirm":
           return json({ error_code: 0 });
         case "/account/checksession":
-          if (session === "redirect-chat")
+          if (session === "redirect-jr")
             return new Response(null, {
               status: 302,
-              headers: { location: "https://chat.zalo.me/index.html" },
+              headers: { location: "https://jr.zaloapp.com/index.html" },
             });
           if (session === "redirect-foreign")
             return new Response(null, {
@@ -82,7 +85,7 @@ function fixture(session: SessionFixture) {
       }
     }
     if (
-      parsed.origin === "https://chat.zalo.me" ||
+      parsed.origin === "https://jr.zaloapp.com" ||
       parsed.origin === "https://redirect.example.test"
     ) {
       // What the process guard does: fail before any socket is created, so the
@@ -163,8 +166,8 @@ try {
 `;
 }
 
-test("the pinned SDK follows a checkSession Location to chat.zalo.me", async () => {
-  const outcome = await run("redirect-chat");
+test("the pinned SDK follows a checkSession Location to jr.zaloapp.com", async () => {
+  const outcome = await run("redirect-jr");
   assert.ok("error" in outcome, "loginQR must fail when the redirect fails");
   assert.match(
     (outcome.error as Error).message,
@@ -175,7 +178,7 @@ test("the pinned SDK follows a checkSession Location to chat.zalo.me", async () 
   );
   assert.ok(checksession >= 0);
   assert.ok(
-    outcome.calls.includes("https://chat.zalo.me/index.html"),
+    outcome.calls.includes("https://jr.zaloapp.com/index.html"),
     outcome.calls.join("\n"),
   );
   assert.ok(
@@ -188,7 +191,7 @@ test("the pinned SDK follows a checkSession Location to chat.zalo.me", async () 
     !outcome.events.includes(outcome.LoginQRCallbackEventType.GotLoginInfo),
   );
   // The error text is the SDK's fixed sentence; it never echoes the redirect.
-  assert.ok(!(outcome.error as Error).message.includes("chat.zalo.me"));
+  assert.ok(!(outcome.error as Error).message.includes("jr.zaloapp.com"));
 });
 
 test("the SDK follows any Location, so an unlisted redirect is refused too", async () => {
@@ -216,13 +219,16 @@ test("without a redirect the SDK reaches userinfo and resolves", async () => {
   );
 });
 
-test("the connector guard refuses chat.zalo.me before any socket", () => {
-  const chat = guarded(connect("chat.zalo.me"));
-  assert.equal(chat.status, 0);
-  assert.equal(chat.stdout.trim(), "THREW PILOT_EGRESS_DENIED");
-  const foreign = guarded(connect("redirect.example.test"));
-  assert.equal(foreign.status, 0);
-  assert.equal(foreign.stdout.trim(), "THREW PILOT_EGRESS_DENIED");
+test("the connector guard refuses the redirect host before any socket", () => {
+  for (const host of [
+    "jr.zaloapp.com",
+    "chat.zalo.me",
+    "redirect.example.test",
+  ]) {
+    const result = guarded(connect(host));
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout.trim(), "THREW PILOT_EGRESS_DENIED", host);
+  }
 });
 
 test("the installed SDK is the reviewed pin and still uses the observed URL", async () => {
