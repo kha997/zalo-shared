@@ -526,3 +526,34 @@ provider reachability from the app namespace) is outside this acceptance and req
 Owner decision. Recorded in
 [G5A-PATCHED-PILOT-DEPLOYMENT-2026-11-09](docs/evidence/G5A-PATCHED-PILOT-DEPLOYMENT-2026-11-09.md)
 §13.3 and §15. **OWNER ACCEPTANCE RECORDED — G5-A EDGE POSTURE, NO TOPOLOGY CHANGE**
+
+**CI PROVENANCE CLOSED AND FINAL G5-A OFFLINE READINESS — `G5A_OWNER_START_READY`.**
+The connector staged for the pilot is now the artifact CI built, not a local build. Workflow
+run [42602520323](https://github.com/kha997/zalo-shared/actions/runs/42602520323) succeeded
+at `10524666274704daa8e940a9ddad13719a56a967` (both jobs, 10:39:52Z–10:44:25Z) and published
+the image itself as `pilot-connector-image`. The pilot job now checks out that commit, asserts
+`HEAD` equals it, builds with `SOURCE_COMMIT` set to it and exports the exact image with its
+id, archive sha256 and a self-describing manifest; the synthetic manifests bind to the same
+SHA. The downloaded archive re-hashes to the run's record
+(`a9d2f2440ead231c5b86e5975ce262554a1bb454bdd0bfd4b885794ed701cb76`), its config blob hashes
+to the run's image id (`sha256:5ab893f7…`), all 29 layer diffIDs and the config match, and
+the image's own identity reads `sourceCommit 1052466…` with the reviewed lock hash and
+`zca-js` integrity. The reviewed scan gate exits 0 with zero HIGH/CRITICAL and no exposed
+ports; uid is 65532 and no private pilot file is present. The artifact is staged as
+`zalo-shared-connector:g5-ci-1052466` (local manifest digest `sha256:f54f760b…`, a store
+difference from the runner's config digest, both recorded) and referenced by the private
+interpolation with no connector container started. The image carries the eight-class redirect
+vocabulary including candidates A/B/C. Because `server/pilot-policy.ts` compares the grant's
+build block with the image identity, any live bootstrap grant must name `sourceCommit`
+`1052466…`. Readiness re-verified: application `sha256:989c6154…` and gateway
+`sha256:f75c2e8a…` healthy with 0 restarts and ready 200, four-host allowlist unchanged,
+ownership `idle` epoch 6 with `7cc878cf…`/5 preserved, provider `disconnected` gap 6
+`reconciliation_required=false`, one admin and zero sessions/work, DB `verify-full`, no live
+grant (both private grants expired 2026-11-07), the Windows QR viewer rehearsal PASS with a
+synthetic fixture and the accepted edge posture unchanged. No QR, no provider contact, no
+merge; PR #3 stays draft. Evidence
+[G5A-CI-PROVENANCE-2026-11-09](docs/evidence/G5A-CI-PROVENANCE-2026-11-09.md).
+Owner instruction for an authorized bootstrap: the QR appears automatically, about a second
+after emission, at `C:\Users\Admin\pilot-private-qr\g5a-qr.png` in a Windows viewer; scan it
+with the Zalo phone within the 100-second lifetime.
+**G5A_OWNER_START_READY**

@@ -1,0 +1,84 @@
+=== artifact files ===
+total 162212
+-rw-r--r-- 1 zen zen       257 Nov  9 17:46 ci-image-diagnostics.json
+-rw-r--r-- 1 zen zen        72 Nov  9 17:44 connector-image-id.txt
+-rw-r--r-- 1 zen zen      7198 Nov  9 17:44 connector-image-inspect.json
+-rw-r--r-- 1 zen zen       753 Nov  9 17:44 connector-image-manifest.json
+-rw-r--r-- 1 zen zen       110 Nov  9 17:44 connector-image-sha256.txt
+-rw-r--r-- 1 zen zen 166074880 Nov  9 17:44 connector-image.tar
+
+=== manifest recorded by the run ===
+{
+  "version": 1,
+  "repository": "kha997/zalo-shared",
+  "workflowRef": "kha997/zalo-shared/.github/workflows/ci.yml@refs/pull/3/merge",
+  "eventName": "pull_request",
+  "runId": "42602520323",
+  "runAttempt": "1",
+  "sourceCommit": "10524666274704daa8e940a9ddad13719a56a967",
+  "imageId": "sha256:5ab893f7fdc627d92ab10136234e2a8da75c0e57cf822b980c6058768c6de563",
+  "archiveSha256": "a9d2f2440ead231c5b86e5975ce262554a1bb454bdd0bfd4b885794ed701cb76",
+  "builderImage": "node@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df",
+  "lockSha256": "17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b",
+  "sdkIntegrity": "sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA=="
+}
+
+recorded_id=sha256:5ab893f7fdc627d92ab10136234e2a8da75c0e57cf822b980c6058768c6de563
+recorded_tar=a9d2f2440ead231c5b86e5975ce262554a1bb454bdd0bfd4b885794ed701cb76
+actual_tar=a9d2f2440ead231c5b86e5975ce262554a1bb454bdd0bfd4b885794ed701cb76
+PASS archive digest matches the run's record
+PASS manifest fields 42602520323 1 pull_request 1052466 sha256:5ab893f7fdc6
+
+=== load the archive ===
+Loaded image: zalo-shared-connector:ci
+loaded_id=sha256:f54f760b1d11a59784e143726ae0f8a177130bb0d34788e2b9da888c79b18903
+PASS RootFS.Layers layers=29
+PASS Created
+PASS Config.User
+PASS Config.Entrypoint
+PASS Config.Cmd
+PASS Config.Env
+PASS Config.ExposedPorts
+PASS loaded image content equals the run's image (29 diffIDs, config)
+
+=== config blob recorded inside the archive ===
+archive config blob= blobs/sha256/5ab893f7fdc627d92ab10136234e2a8da75c0e57cf822b980c6058768c6de563
+computed config digest= sha256:5ab893f7fdc627d92ab10136234e2a8da75c0e57cf822b980c6058768c6de563
+layers in archive= 29
+PASS archive config blob is intact (sha256:5ab893f7fdc6…)
+
+=== gate scan of the CI image using the reviewed script ===
+scan_exit=0
+/tmp/tmp.FBG8WGoLDa/trivy.tar.gz: OK
+Version: 0.76.1
+Vulnerability DB:
+  Version: 2
+  UpdatedAt: 2026-11-09 00:56:17.155719746 +0000 UTC
+  NextUpdate: 2026-11-10 00:56:17.155719496 +0000 UTC
+  DownloadedAt: 2026-11-09 06:30:04.848342321 +0000 UTC
+2026-11-09T17:49:28+07:00	INFO	[vuln] Vulnerability scanning is enabled
+2026-11-09T17:49:28+07:00	INFO	Detected OS	family="debian" version="13.7"
+2026-11-09T17:49:28+07:00	INFO	[debian] Detecting vulnerabilities...	os_version="13" pkg_num=14
+2026-11-09T17:49:28+07:00	INFO	Number of language-specific files	num=1
+2026-11-09T17:49:28+07:00	INFO	[node-pkg] Detecting vulnerabilities...
+2026-11-09T17:49:28+07:00	WARN	Using severities from other vendors for some vulnerabilities. Read https://trivy.dev/docs/v0.76/guide/scanner/vulnerability#severity-selection for details.
+2026-11-09T17:49:28+07:00	INFO	[license] License scanning is enabled
+2026-11-09T17:49:28+07:00	INFO	Detected OS	family="debian" version="13.7"
+2026-11-09T17:49:28+07:00	INFO	Number of language-specific files	num=1
+{"uid":65532,"zcaJs":"2.2.0","zcaResolved":"/app/node_modules/zca-js/dist/cjs/index.cjs","cryptoJs":"4.2.0","buildIdentity":{"version":1,"sourceCommit":"10524666274704daa8e940a9ddad13719a56a967","lockSha256":"17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b","sdkIntegrity":"sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA=="},"privateFiles":[]}
+{"scanner": "Trivy0.76.1", "image": "zalo-shared-connector:ci", "highCriticalCount": 0, "fixableHighCriticalCount": 0, "findings": [], "licenses": [{"target": "OS Packages", "package": "base-files", "license": "GPL-2.0-or-later", "severity": "HIGH"}, {"target": "OS Packages", "package": "base-files", "license": "GPL-2.0-only", "severity": "HIGH"}, {"target": "OS Packages", "package": "base-files", "license": "verbatim", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "ca-certificates", "license": "GPL-2.0-or-later", "severity": "HIGH"}, {"target": "OS Packages", "package": "ca-certificates", "license": "GPL-2.0-only", "severity": "HIGH"}, {"target": "OS Packages", "package": "ca-certificates", "license": "MPL-2.0", "severity": "MEDIUM"}, {"target": "OS Packages", "package": "gcc-14-base", "license": "GPL-2.0-or-later", "severity": "HIGH"}, {"target": "OS Packages", "package": "gcc-14-base", "license": "GPL-3.0-only", "severity": "HIGH"}, {"target": "OS Packages", "package": "gcc-14-base", "license": "GFDL-1.2-only", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "gcc-14-base", "license": "Artistic-2.0", "severity": "LOW"}, {"target": "OS Packages", "package": "gcc-14-base", "license": "LGPL-2.0-or-later", "severity": "HIGH"}, {"target": "OS Packages", "package": "libc6", "license": "LGPL-2.1-or-later", "severity": "HIGH"}, {"target": "OS Packages", "package": "libc6", "license": "LGPL-2.0-or-later", "severity": "HIGH"}, {"target": "OS Packages", "package": "libc6", "license": "LGPL-2.1+-with-link-exception", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "LGPL-3.0-or-later", "severity": "HIGH"}, {"target": "OS Packages", "package": "libc6", "license": "GPL-2.0-or-later", "severity": "HIGH"}, {"target": "OS Packages", "package": "libc6", "license": "GPL-2+-with-link-exception", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "GPL-2.0-only", "severity": "HIGH"}, {"target": "OS Packages", "package": "libc6", "license": "GPL-3.0-or-later", "severity": "HIGH"}, {"target": "OS Packages", "package": "libc6", "license": "FSFAP", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "Carnegie", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "Inner-Net", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "MIT-like-Lord", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "BSD-like-Spencer", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "PCRE", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "BSD-3-clause-Carnegie", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "Unicode-DFS-2016", "severity": "LOW"}, {"target": "OS Packages", "package": "libc6", "license": "BSL-1.0", "severity": "LOW"}, {"target": "OS Packages", "package": "libc6", "license": "SunPro", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "CORE-MATH", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "BSD-3-clause-Berkeley", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "BSD-3-clause-WIDE", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "BSD-2-Clause", "severity": "LOW"}, {"target": "OS Packages", "package": "libc6", "license": "BSD-3-clause-Oracle", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "DEC", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "IBM", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "ISC", "severity": "LOW"}, {"target": "OS Packages", "package": "libc6", "license": "Univ-Coimbra", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "public-domain", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "libc6", "license": "GPL-3.0-only", "severity": "HIGH"}, {"target": "OS Packages", "package": "libc6", "license": "LGPL-2.0-only", "severity": "HIGH"}, {"target": "OS Packages", "package": "libc6", "license": "LGPL-2.1-only", "severity": "HIGH"}, {"target": "OS Packages", "package": "libc6", "license": "LGPL-3.0-only", "severity": "HIGH"}, {"target": "OS Packages", "package": "libssl3t64", "license": "Apache-2.0", "severity": "LOW"}, {"target": "OS Packages", "package": "libssl3t64", "license": "Artistic-2.0", "severity": "LOW"}, {"target": "OS Packages", "package": "libssl3t64", "license": "GPL-1.0-or-later", "severity": "HIGH"}, {"target": "OS Packages", "package": "libssl3t64", "license": "GPL-1.0-only", "severity": "HIGH"}, {"target": "OS Packages", "package": "libzstd1", "license": "BSD-3-Clause", "severity": "LOW"}, {"target": "OS Packages", "package": "libzstd1", "license": "GPL-2.0-only", "severity": "HIGH"}, {"target": "OS Packages", "package": "libzstd1", "license": "Zlib", "severity": "LOW"}, {"target": "OS Packages", "package": "libzstd1", "license": "MIT", "severity": "LOW"}, {"target": "OS Packages", "package": "media-types", "license": "ad-hoc", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "netbase", "license": "GPL-2.0-only", "severity": "HIGH"}, {"target": "OS Packages", "package": "tzdata", "license": "public-domain", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "tzdata-legacy", "license": "public-domain", "severity": "UNKNOWN"}, {"target": "OS Packages", "package": "zlib1g", "license": "Zlib", "severity": "LOW"}, {"target": "Node.js", "package": "asynckit", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "bignumber.js", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "call-bind-apply-helpers", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "combined-stream", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "crypto-js", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "delayed-stream", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "dunder-proto", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "es-define-property", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "es-errors", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "es-object-atoms", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "es-set-tostringtag", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "form-data", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "function-bind", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "get-intrinsic", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "get-proto", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "gopd", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "has-symbols", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "has-tostringtag", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "hasown", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "ipaddr.js", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "json-bigint", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "math-intrinsics", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "mime-db", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "mime-types", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "pako", "license": "(MIT AND Zlib)", "severity": "LOW"}, {"target": "Node.js", "package": "pg", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "pg-cloudflare", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "pg-connection-string", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "pg-int8", "license": "ISC", "severity": "LOW"}, {"target": "Node.js", "package": "pg-pool", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "pg-protocol", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "pg-types", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "pgpass", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "postgres-array", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "postgres-bytea", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "postgres-date", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "postgres-interval", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "semver", "license": "ISC", "severity": "LOW"}, {"target": "Node.js", "package": "spark-md5", "license": "(WTFPL OR MIT)", "severity": "LOW"}, {"target": "Node.js", "package": "split2", "license": "ISC", "severity": "LOW"}, {"target": "Node.js", "package": "tldts", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "tldts-core", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "tough-cookie", "license": "BSD-3-Clause", "severity": "LOW"}, {"target": "Node.js", "package": "ws", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "xtend", "license": "MIT", "severity": "LOW"}, {"target": "Node.js", "package": "zca-js", "license": "MIT", "severity": "LOW"}], "exposedPorts": {}, "runtime": {"uid": 65532, "zcaJs": "2.2.0", "zcaResolved": "/app/node_modules/zca-js/dist/cjs/index.cjs", "cryptoJs": "4.2.0", "buildIdentity": {"version": 1, "sourceCommit": "10524666274704daa8e940a9ddad13719a56a967", "lockSha256": "17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b", "sdkIntegrity": "sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA=="}, "privateFiles": []}, "residualRisks": ["crypto-js is deprecated/unmaintained but required transitively by zca-js 2.2.0", "unofficial client behavior and account restrictions remain unproven until the approved live pilot"]}
+PASS highCriticalCount= 0 exposedPorts= {}
+uid= 65532 zcaJs= 2.2.0 cryptoJs= 4.2.0
+buildIdentity= {"version": 1, "sourceCommit": "10524666274704daa8e940a9ddad13719a56a967", "lockSha256": "17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b", "sdkIntegrity": "sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA=="}
+privateFiles= []
+
+=== compiled redirect diagnostics inside the image ===
+{"redirectClasses":["direct-redirect-host","invalid-target","malformed-redirect","not-admitted","redirect-after-hop","stale-hop","unexpected-location","unexpected-redirect"],"requestCategories":["check-session","provider-direct","redirect-follow","other"]}
+source classes: ['direct-redirect-host', 'invalid-target', 'malformed-redirect', 'not-admitted', 'redirect-after-hop', 'stale-hop', 'unexpected-location', 'unexpected-redirect']
+image classes : ['direct-redirect-host', 'invalid-target', 'malformed-redirect', 'not-admitted', 'redirect-after-hop', 'stale-hop', 'unexpected-location', 'unexpected-redirect']
+PASS image vocabulary matches source and names candidates A/B/C
+
+=== pin the verified artifact under the review tag ===
+zalo-shared-connector:ci -> sha256:f54f760b1d11a59784e143726ae0f8a177130bb0d34788e2b9da888c79b18903
+zalo-shared-connector:g5-ci-1052466 -> sha256:f54f760b1d11a59784e143726ae0f8a177130bb0d34788e2b9da888c79b18903
+STAGED_OK tag=zalo-shared-connector:g5-ci-1052466 local_id=sha256:f54f760b1d11a59784e143726ae0f8a177130bb0d34788e2b9da888c79b18903 run_image_id=sha256:5ab893f7fdc627d92ab10136234e2a8da75c0e57cf822b980c6058768c6de563 archive_sha256=a9d2f2440ead231c5b86e5975ce262554a1bb454bdd0bfd4b885794ed701cb76
