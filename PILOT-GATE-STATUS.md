@@ -482,3 +482,30 @@ a separate Owner START. The live redirect and the phone-side session outcome
 remain UNPROVEN.
 
 The 2026-11-09 renewal assessment ([G5A-SECURITY-GATE-RENEWAL-2026-11-09](docs/evidence/G5A-SECURITY-GATE-RENEWAL-2026-11-09.md)) supersedes the time-boxed exception instead of renewing it. The expired disposition is untouched (`expiresAt 2026-11-09T00:00:00Z`): the evaluator now refuses it with exit 3 and the three-entry ledger is unchanged. Debian trixie-security fixed both CVEs in `zlib1g 1:1.3.dfsg+really1.3.1-1+deb13u1`, the current distroless `nodejs24-debian13` base (`b770c59f…`) carries it, and images rebuilt at `af2be54` from that base scan with zero HIGH/CRITICAL: connector `7ae6f66f…` (config `0664e441…`, gate exit 0), application `989c6154…` (config `1ea4f333…`) and gateway `f75c2e8a…` (config `e2296655…`). The deployed generation still reports exactly the two findings and the unfiltered gate still fails on it (exit 1), so nothing is suppressed. The patched images are built and scanned only — not deployed and not merged; PR #3 stays draft. Offline checks at `af2be54`: typecheck clean, 403/403 suite, 40/40 redirect diagnostics, synthetic Windows QR viewer PASS. An independent review at `fb2f8cb` returned APPROVE with no blocking findings. Ownership remains `idle` at epoch 6 with gap 6, zero unresolved work, no running connector (the earlier "no connector container" wording is corrected: inert `Created` probe containers remain), the gateway is healthy and the sink is unchanged (15 lines, `43fc4212…`). Redeploying the patched artifacts and any live stage still require a separate Owner decision and start authorization. **G5A_SECURITY_GATE_PATCHED_NO_EXCEPTION_NEEDED**
+
+**PATCHED PILOT DEPLOYED — `G5A_PATCHED_PILOT_DEPLOYED_AWAITING_OWNER_START`.**
+Under the Owner's patched-redeploy authorization the private G5-A pilot now runs the
+reviewed patched generation from the digest-pinned Debian 13 distroless Node 24 base
+(`b770c59f…`, `zlib1g 1:1.3.dfsg+really1.3.1-1+deb13u1`): application
+`zalo-shared:g5-patched-af2be54` (`sha256:989c6154…`, config `1ea4f333…`) healthy on
+`127.0.0.1:3100`, and egress gateway `zalo-shared-egress-gateway:g5-patched-af2be54`
+(`sha256:f75c2e8a…`, config `e2296655…`) healthy with the unchanged four-host allowlist,
+no published port and `ip_forward 0`. The connector
+`zalo-shared-connector:g5-patched-af2be54` (`sha256:7ae6f66f…`, config `0664e441…`) is
+staged only: no connector container exists, so no session and no provider contact. Gate
+scans report zero HIGH/CRITICAL on all three; a genuinely unfiltered rescan (no severity
+flag) reports 46 MEDIUM/LOW findings per image, zero HIGH/CRITICAL, and its non-zero exit
+is recorded rather than suppressed. No waiver or override is in force; the time-boxed zlib
+disposition remains expired and unused. Offline acceptance re-ran at the deployed
+generation: typecheck exit 0, 403/403 suite, 40/40 redirect diagnostics, admin proof 22/22,
+container boundary 25/25, deployed topology 48/48, synthetic Windows QR viewer PASS with no
+real QR. Ownership is `idle` at epoch 6 with the fenced pair `7cc878cf-…`/5 preserved,
+provider `disconnected` with `reconciliation_required=false`, gap 6, one admin, zero
+sessions and zero unresolved work; audit grew only by the proof's login/logout pairs
+(20 → 26); the sink is unchanged (15 lines, `43fc4212…`) and no `session.enc` exists. The
+stale G2 stack is stopped with its volume intact. An independent read-only review returned
+APPROVE WITH CONDITIONS; all code and evidence conditions are closed, and the only carried
+condition is the Owner's acknowledgment of the app's reviewed edge posture before any live
+stage. No QR was generated, no provider was contacted, nothing was merged and PR #3 stays
+draft. Any live G5-A stage requires a separate Owner START.
+**G5A_PATCHED_PILOT_DEPLOYED_AWAITING_OWNER_START**

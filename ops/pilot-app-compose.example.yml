@@ -1,0 +1,60 @@
+# Example only. Do not place secrets in this file or commit a filled copy.
+#
+# The patched application deployed onto the dedicated pilot database. It is the
+# same reviewed app service as ops/compose.yaml, restricted to the pilot:
+#
+#   zalo-shared-pilot-app --(pilot-db, external, internal=true)--> pilot database
+#   zalo-shared-pilot-app --(pilot-edge, loopback-published)-----> 127.0.0.1:3100
+#
+# PostgreSQL stays on the internal network and is never published. The app joins
+# a second, project-scoped bridge only because Docker cannot publish a port for a
+# container attached solely to an internal network; that bridge carries no other
+# member and publishes nothing beyond the reviewed loopback origin. The app holds
+# no SDK, no session material and no provider credential, and it starts with the
+# provider disabled. It never contacts the provider; the connector remains an
+# on-demand, separately authorized workload.
+name: zalo-shared-pilot-app
+services:
+  app:
+    image: ${PILOT_APP_IMAGE:?Build ops/Dockerfile and set its tag}
+    container_name: ${PILOT_APP_CONTAINER:-zalo-shared-pilot-app-1}
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    user: "65532:65532"
+    env_file:
+      - ${PILOT_APP_ENV_FILE:?Private env file outside the repository}
+    environment:
+      # The deployed URL uses sslmode=verify-full; the pilot CA is supplied
+      # through the Node trust store. This only adds a trust anchor, it cannot
+      # disable certificate verification.
+      NODE_EXTRA_CA_CERTS: /run/pilot/db-ca.crt
+    ports: ["127.0.0.1:3100:3100"]
+    volumes:
+      - type: bind
+        source: ${PILOT_DB_CA_FILE:?Private pilot database CA certificate}
+        target: /run/pilot/db-ca.crt
+        read_only: true
+    healthcheck:
+      test:
+        [
+          CMD,
+          /nodejs/bin/node,
+          -e,
+          "fetch('http://127.0.0.1:3100/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks: [pilot-db, pilot-edge]
+networks:
+  pilot-db:
+    external: true
+    name: ${PILOT_DB_NETWORK:?Set the application private database network name}
+  pilot-edge:
+    internal: false

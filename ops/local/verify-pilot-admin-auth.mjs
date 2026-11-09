@@ -8,6 +8,11 @@
 // is written. The harness snapshots the control rows itself and compares them
 // before and after, so any unexpected mutation fails the run. Login and logout
 // necessarily append their normal auth audit and session rows.
+//
+// The expected pre-test control state is supplied by the caller rather than
+// hardcoded, because the pilot has moved through several reconciled baselines:
+// PILOT_EXPECT_PHASE (default uncertain), PILOT_EXPECT_EPOCH (default 1) and
+// PILOT_EXPECT_RECONCILIATION_REQUIRED (default true).
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { checkPassword, createPool } from "../../dist/server/db.js";
@@ -40,6 +45,10 @@ const read = (path, key) => {
 const email = read(credentialFile, "PILOT_ADMIN_EMAIL");
 const credential = read(credentialFile, "PILOT_ADMIN_PASSWORD");
 const wrong = credential + "x";
+const expectPhase = process.env.PILOT_EXPECT_PHASE || "uncertain";
+const expectEpoch = process.env.PILOT_EXPECT_EPOCH || "1";
+const expectReconciliation =
+  (process.env.PILOT_EXPECT_RECONCILIATION_REQUIRED ?? "true") === "true";
 
 const checks = [];
 const record = (name, pass, detail = {}) => {
@@ -105,7 +114,7 @@ let cookie = null;
 let csrf = null;
 try {
   const before = await snapshot();
-  record("baseline is uncertain with one admin", before.ownership.phase === "uncertain" && before.ownership.epoch === "1" && before.provider.reconciliation_required === true && before.counts.users === 1 && before.counts.admins === 1, {
+  record("baseline matches the expected control state with one admin", before.ownership.phase === expectPhase && before.ownership.epoch === expectEpoch && before.provider.reconciliation_required === expectReconciliation && before.counts.users === 1 && before.counts.admins === 1, {
     phase: before.ownership.phase,
     epoch: before.ownership.epoch,
     reconciliationRequired: before.provider.reconciliation_required,
@@ -155,7 +164,7 @@ try {
   record("the reconciliation route rejects a malformed body before any operation", reachable.status === 400 && reachable.json?.ok !== true, { status: reachable.status });
 
   const summary = await call("/api/provider/operations", { cookie });
-  record("the admin reads the fenced control state", summary.status === 200 && summary.json?.owner?.phase === "uncertain" && summary.json?.reconciliationRequired === true && summary.json?.owner?.epoch === "1" && summary.json?.gapVersion === before.provider.gap_version, {
+  record("the admin reads the fenced control state", summary.status === 200 && summary.json?.owner?.phase === expectPhase && summary.json?.owner?.epoch === expectEpoch && summary.json?.reconciliationRequired === expectReconciliation && summary.json?.gapVersion === before.provider.gap_version, {
     status: summary.status,
     phase: summary.json?.owner?.phase,
     epoch: summary.json?.owner?.epoch,
@@ -177,7 +186,7 @@ try {
   record("provider state is unchanged", providerFields.every((key) => before.provider[key] === after.provider[key]), {
     fields: providerFields,
   });
-  record("no reconciliation was applied", after.counts.reconciled === 0 && after.counts.reconciled === before.counts.reconciled, {
+  record("no reconciliation was applied", after.counts.reconciled === before.counts.reconciled, {
     reconciledRows: after.counts.reconciled,
   });
   record("delivery state is unchanged", ["messages", "outbox", "delivery_parts", "provider_ledger"].every((key) => before.counts[key] === after.counts[key]), {
@@ -196,7 +205,7 @@ try {
   const afterActions = after.counts.actions ?? [];
   const appended = afterActions.slice(beforeActions.length);
   const prefixIntact = JSON.stringify(afterActions.slice(0, beforeActions.length)) === JSON.stringify(beforeActions);
-  record("only the login and logout audit rows were appended", prefixIntact && after.counts.audit === before.counts.audit + 2 && appended.length === 2 && appended[0] === "auth.login" && appended[1] === "auth.logout" && !afterActions.includes("connector.reconciled") && !afterActions.includes("user.create"), {
+  record("only the login and logout audit rows were appended", prefixIntact && after.counts.audit === before.counts.audit + 2 && appended.length === 2 && appended[0] === "auth.login" && appended[1] === "auth.logout" && !appended.includes("connector.reconciled") && !appended.includes("user.create"), {
     appended,
     auditBefore: before.counts.audit,
     auditAfter: after.counts.audit,

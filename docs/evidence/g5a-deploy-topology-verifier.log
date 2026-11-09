@@ -1,0 +1,49 @@
+pilot-deployed: PASS  the deployed egress network is internal=true                                  
+pilot-deployed: PASS  the deployed uplink network has exactly one member, the gateway               
+pilot-deployed: PASS  the deployed gateway publishes no port                                        
+pilot-deployed: PASS  the deployed gateway does not forward packets                                 
+pilot-deployed: PASS  the deployed gateway recovered healthy after the stop test                    
+pilot-deployed: PASS  the rendered connector joins the database and egress networks only            
+pilot-deployed: PASS  the rendered gateway joins the egress and uplink networks                     
+pilot-deployed: PASS  the rendered connector publishes no port                                      
+pilot-deployed: PASS  the rendered connector keeps the reviewed egress allowlist                    
+pilot-deployed: PASS  the rendered connector pins every allowlisted name to the gateway             
+pilot-deployed: PASS  the rendered connector refuses a namespace with a default route               
+pilot-deployed: PASS  the rendered connector keeps provider egress on port 443 only                 
+pilot-deployed: PASS  the rendered connector mounts the pilot CA read-only and trusts it            
+pilot-deployed: PASS  the rendered gateway keeps the reviewed SNI allowlist                         
+pilot-deployed: PASS  the rendered gateway binds only the connector-facing address                  
+pilot-deployed: PASS  the rendered gateway keeps IP forwarding disabled                             
+pilot-deployed: PASS  the rendered egress subnet is the reviewed 172.16.29.0/24                     
+pilot-deployed: PASS  the rendered uplink network is not internal                                   
+pilot-deployed: PASS  the rendered database network is the deployed one                             
+pilot-deployed: PASS  the kernel-only probe runs without the guard                                  
+pilot-deployed: PASS  the deployed connector namespace has no IPv4 default route                    
+pilot-deployed: PASS  the deployed connector namespace has no usable IPv6 default route             
+pilot-deployed: PASS  a direct connection to a public IPv4 address fails at the network layer       
+pilot-deployed: PASS  a direct connection to a public IPv6 address fails at the network layer       
+pilot-deployed: PASS  the deployed host bridge port 2026 is unreachable from the connector network  
+pilot-deployed: PASS  the deployed host bridge port 5432 is unreachable from the connector network  
+pilot-deployed: PASS  the deployed host bridge port 8080 is unreachable from the connector network  
+pilot-deployed: PASS  UDP to a public address is not accepted from the deployed network             
+pilot-deployed: PASS  an unpinned name does not resolve in the deployed network                     
+pilot-deployed: PASS  the deployed gateway's private address is reachable from the connector network
+pilot-deployed: PASS  the deployed gateway refuses an unapproved SNI                                
+pilot-deployed: PASS  the deployed connector image loads its guard                                  
+pilot-deployed: PASS  the guard resolves the pinned name to the gateway                             
+pilot-deployed: PASS  the guard denies a direct public IPv4 address before any connect              
+pilot-deployed: PASS  the guard denies a direct public IPv6 address before any connect              
+pilot-deployed: PASS  the guard denies an unpinned name before DNS                                  
+pilot-deployed: PASS  the guard denies UDP                                                          
+pilot-deployed: PASS  the pinned name reaches the deployed gateway and is not forwarded blindly     
+pilot-deployed: PASS  the guard starts with an empty egress policy                                  
+pilot-deployed: PASS  an empty egress policy denies the pinned allowlisted name at DNS              
+pilot-deployed: PASS  an empty egress policy denies a direct public address                         
+pilot-deployed: PASS  an empty egress policy denies UDP                                             
+pilot-deployed: PASS  an empty egress policy denies the pinned TLS target                           
+pilot-deployed: PASS  with the gateway stopped the pinned gateway address refuses the connection    
+pilot-deployed: PASS  with the gateway stopped the guarded allowlisted path is closed               
+pilot-deployed: PASS  a connector attached to the uplink network refuses to start                   
+pilot-deployed: PASS  the deployed gateway admitted no tunnel during verification                   
+pilot-deployed: PASS  the deployed gateway recorded the unapproved SNI refusal                      
+pilot-deployed: all 48 deployed-network assertions PASS
