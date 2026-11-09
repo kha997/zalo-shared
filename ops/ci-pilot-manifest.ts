@@ -11,7 +11,7 @@ const locked = JSON.parse(lock.toString("utf8"));
 const sdkIntegrity = locked.packages?.["node_modules/zca-js"]?.integrity;
 if (typeof sdkIntegrity !== "string" || !/^sha512-/.test(sdkIntegrity))
   throw new Error("Connector lock is missing the reviewed zca-js integrity");
-const commit = process.env.GITHUB_SHA ?? "a".repeat(40);
+const commit = process.env.SOURCE_SHA ?? process.env.GITHUB_SHA ?? "a".repeat(40);
 if (!/^[a-f0-9]{40}$/.test(commit))
   throw new Error("CI source commit must be a 40-character lowercase SHA");
 const now = Date.now();

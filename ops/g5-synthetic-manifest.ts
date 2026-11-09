@@ -21,7 +21,11 @@ const locked = JSON.parse(lock.toString("utf8"));
 const sdkIntegrity = locked.packages?.["node_modules/zca-js"]?.integrity;
 if (typeof sdkIntegrity !== "string" || !/^sha512-/.test(sdkIntegrity))
   throw new Error("Connector lock is missing the reviewed zca-js integrity");
+// A pull_request run sets GITHUB_SHA to the ephemeral merge commit while the
+// pilot job checks out and builds the reviewed commit; claiming the merge
+// commit here would make the manifest describe an artifact that cannot exist.
 const commit =
+  process.env.SOURCE_SHA ??
   process.env.GITHUB_SHA ??
   execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 if (!/^[a-f0-9]{40}$/.test(commit))
