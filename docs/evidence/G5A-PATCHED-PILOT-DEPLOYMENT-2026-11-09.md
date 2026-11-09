@@ -302,6 +302,13 @@ vulnerabilities; the licence inventory is kept in the connector evidence for rev
    network. Traffic admission for the connector is unaffected. The independent reviewer
    asked for the Owner's explicit acknowledgment of this posture before the live gate; it
    is listed as a condition in §15.
+   **Resolved 2026-11-09 — Owner acceptance.** The Owner explicitly accepted this reviewed
+   edge-network posture for the private G5-A pilot only, on the record that the application
+   holds no Zalo SDK, no provider credentials, no QR payload and no authenticated provider
+   session, and that the connector stays isolated behind the dedicated egress gateway. The
+   acceptance covers this residual condition alone: it does not extend to G5-B, G5-C,
+   production or any wider deployment, and it neither changes nor was used to change the
+   topology. The posture itself is unchanged by this acceptance.
 4. The stale G2 stack remains stopped with a broken database container. Its volume is
    intact; recovering or deleting it is an Owner decision.
 5. `crypto-js@4.2.0` remains deprecated and transitively required by `zca-js@2.2.0`.
@@ -354,6 +361,7 @@ images.
 | 8 | NIT | §14/§15 were pending. | Filled by this section. |
 
 Conditions carried to the Owner's live start: (a) acknowledge the app's reviewed edge
-posture in §13.3; (b) commit this record and the ops tooling with the deployment (this
-commit); (c) supply a separate START authorization for any live stage. No condition
-requires work inside the private pilot, and none was left open in the deployment.
+posture in §13.3 — **satisfied 2026-11-09 by explicit Owner acceptance, G5-A pilot only**;
+(b) commit this record and the ops tooling with the deployment (this commit); (c) supply a
+separate START authorization for any live stage. No condition requires work inside the
+private pilot, and none was left open in the deployment.

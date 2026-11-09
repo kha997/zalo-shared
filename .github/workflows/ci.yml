@@ -134,10 +134,25 @@ jobs:
       run:
         shell: bash
     timeout-minutes: 20
+    env:
+      # The reviewed commit, not the ephemeral pull_request merge commit that
+      # checkout produces. A grant binds to a reviewed SHA, so the built image
+      # must embed that SHA and not a merge artifact that later disappears.
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - name: Built tree is the reviewed commit's tree
+        run: |
+          mkdir -p docs/evidence
+          printf 'SOURCE_SHA=%s\nGITHUB_SHA=%s\n' "$SOURCE_SHA" "$GITHUB_SHA"
+          printf '%s' "$SOURCE_SHA" | grep -Eq '^[0-9a-f]{40}$' || { echo "SOURCE_SHA is not a 40-char lowercase SHA"; exit 1; }
+          git cat-file -e "$SOURCE_SHA^{commit}"
+          built_tree=$(git rev-parse 'HEAD^{tree}')
+          source_tree=$(git rev-parse "$SOURCE_SHA^{tree}")
+          printf 'built_tree=%s\nsource_tree=%s\n' "$built_tree" "$source_tree" | tee docs/evidence/connector-source-tree.txt
+          [ "$built_tree" = "$source_tree" ] || { echo "checked-out tree differs from $SOURCE_SHA"; exit 1; }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24.19.0"
@@ -155,7 +170,7 @@ jobs:
           docker pull "$builder_image"
           builder_base=$(docker image inspect --format '{{index .RepoDigests 0}}' "$builder_image")
           printf '%s\n' "$builder_base" | tee docs/evidence/connector-builder-digest.txt
-          docker build --build-arg BUILDER_IMAGE="$builder_base" --build-arg SOURCE_COMMIT="$GITHUB_SHA" -f ops/Dockerfile.connector -t zalo-shared-connector:ci .
+          docker build --build-arg BUILDER_IMAGE="$builder_base" --build-arg SOURCE_COMMIT="$SOURCE_SHA" -f ops/Dockerfile.connector -t zalo-shared-connector:ci .
       - name: Dry-run default performs no vault, SDK, database or network work
         run: |
           # The connector enforces owner-only manifest files; the CI runner UID
@@ -225,10 +240,60 @@ jobs:
           const identity = require("./docs/evidence/connector-image-inventory.json").buildIdentity;
           const lock = fs.readFileSync("connector/package-lock.json");
           const sdk = JSON.parse(lock.toString("utf8")).packages["node_modules/zca-js"].integrity;
-          if (identity.sourceCommit !== process.env.GITHUB_SHA) throw new Error("source commit mismatch");
+          if (identity.sourceCommit !== process.env.SOURCE_SHA) throw new Error("source commit mismatch");
           if (identity.lockSha256 !== crypto.createHash("sha256").update(lock).digest("hex")) throw new Error("lock hash mismatch");
           if (identity.sdkIntegrity !== sdk) throw new Error("SDK integrity mismatch");
           '
+      - name: Export the exact built connector image for verified deployment
+        run: |
+          set -o pipefail
+          # PRIVATE-PILOT.md makes the CI-built image digest the trust anchor for
+          # a grant. A log line cannot carry that, so the image itself leaves the
+          # run together with the digest this run recorded for it. A consumer
+          # proves the archive is this run's artifact by re-hashing it and by
+          # comparing the loaded image id with connector-image-id.txt.
+          image_id=$(docker image inspect zalo-shared-connector:ci --format '{{.Id}}')
+          printf '%s\n' "$image_id" | tee docs/evidence/connector-image-id.txt
+          docker image inspect zalo-shared-connector:ci > docs/evidence/connector-image-inspect.json
+          docker save zalo-shared-connector:ci -o "$RUNNER_TEMP/connector-image.tar"
+          sha256sum "$RUNNER_TEMP/connector-image.tar" | tee docs/evidence/connector-image-sha256.txt
+          node -e '
+          const fs = require("node:fs");
+          const id = fs.readFileSync("docs/evidence/connector-image-id.txt", "utf8").trim();
+          const tar = fs.readFileSync("docs/evidence/connector-image-sha256.txt", "utf8").trim().split(/\s+/)[0];
+          const inventory = require("./docs/evidence/connector-image-inventory.json");
+          if (!/^sha256:[0-9a-f]{64}$/.test(id)) throw new Error("image id is not a sha256 digest");
+          if (!/^[0-9a-f]{64}$/.test(tar)) throw new Error("archive digest is not sha256");
+          if (!inventory.buildIdentity || inventory.buildIdentity.sourceCommit !== process.env.SOURCE_SHA) throw new Error("inventory source commit mismatch");
+          const manifest = {
+            version: 1,
+            repository: process.env.GITHUB_REPOSITORY,
+            workflowRef: process.env.GITHUB_WORKFLOW_REF,
+            eventName: process.env.GITHUB_EVENT_NAME,
+            runId: process.env.GITHUB_RUN_ID,
+            runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            sourceCommit: process.env.SOURCE_SHA,
+            imageId: id,
+            archiveSha256: tar,
+            builderImage: fs.readFileSync("docs/evidence/connector-builder-digest.txt", "utf8").trim(),
+            lockSha256: inventory.buildIdentity.lockSha256,
+            sdkIntegrity: inventory.buildIdentity.sdkIntegrity,
+          };
+          fs.writeFileSync("docs/evidence/connector-image-manifest.json", JSON.stringify(manifest, null, 2) + "\n");
+          '
+          cat docs/evidence/connector-image-manifest.json
+      - name: Preserve the exact built connector image
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pilot-connector-image
+          path: |
+            ${{ runner.temp }}/connector-image.tar
+            docs/evidence/connector-image-id.txt
+            docs/evidence/connector-image-sha256.txt
+            docs/evidence/connector-image-manifest.json
+            docs/evidence/connector-image-inspect.json
+          retention-days: 14
       - name: Preserve pilot connector evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

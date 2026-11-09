@@ -509,3 +509,20 @@ condition is the Owner's acknowledgment of the app's reviewed edge posture befor
 stage. No QR was generated, no provider was contacted, nothing was merged and PR #3 stays
 draft. Any live G5-A stage requires a separate Owner START.
 **G5A_PATCHED_PILOT_DEPLOYED_AWAITING_OWNER_START**
+
+**Owner acceptance of the application edge-network posture (2026-11-09, G5-A only).**
+The Owner explicitly accepted the existing, independently reviewed application
+edge-network posture **for the private G5-A pilot only**: the application container joins
+the reviewed non-internal `zalo-shared-pilot-app_pilot-edge` bridge, so its namespace has
+an outbound default route, and its API is published only on `127.0.0.1:3100`. The
+acceptance was given on the record that the application holds no Zalo SDK, no provider
+credentials, no QR payload and no authenticated provider session, and that the connector
+stays isolated behind the dedicated egress gateway with only the four reviewed provider
+hosts admitted. It covers that residual condition and nothing else: it does **not** apply
+to G5-B, G5-C, production or any broader deployment. The topology was not changed to close
+the condition and remains exactly as reviewed; any future attempt to widen the app's
+network reach (a new non-internal attachment, a second published port, a public bind, or
+provider reachability from the app namespace) is outside this acceptance and requires a new
+Owner decision. Recorded in
+[G5A-PATCHED-PILOT-DEPLOYMENT-2026-11-09](docs/evidence/G5A-PATCHED-PILOT-DEPLOYMENT-2026-11-09.md)
+§13.3 and §15. **OWNER ACCEPTANCE RECORDED — G5-A EDGE POSTURE, NO TOPOLOGY CHANGE**
