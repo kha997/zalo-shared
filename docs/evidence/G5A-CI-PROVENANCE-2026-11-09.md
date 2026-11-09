@@ -55,8 +55,11 @@ Three commits on `feat/shared-inbox`:
 | `1052466` | `ops/g5-synthetic-manifest.ts` and `ops/ci-pilot-manifest.ts` prefer `SOURCE_SHA` over `GITHUB_SHA`. The offline G5 preflight compares the manifest's `sourceCommit` with the image's embedded identity, and `GITHUB_SHA` on a PR is the merge commit, so the preflight denied the image built from the reviewed commit. |
 
 Two earlier runs of the workflow (`42601700384` at `8a1e68c`, `42602047981` at `b5ead06`)
-were cancelled after the failing job; neither published a `pilot-connector-image` artifact,
-so exactly one CI-built connector image exists for this branch.
+were cancelled after the failing job; neither published a `pilot-connector-image` artifact.
+The image from run `42602520323` is therefore the only CI-built connector artifact for this
+branch up to `1052466`, and it is the one staged here. Commits after `1052466` in this
+directive are evidence-only; any build they trigger embeds a different `sourceCommit`,
+matches a different tree only in `docs/`, and is not the staged artifact.
 
 The provenance policy was not relaxed: the export step only adds an artifact, `SOURCE_SHA`
 makes the embedded identity name a commit that survives the ephemeral merge commit, and the
