@@ -86,6 +86,20 @@ the Debian 13 fix, D time-boxed, ID-keyed disposition in the two scan scripts
 (recommended). The live egress gateway image carries the same two findings. See
 [G5A-ZLIB-CVE-REMEDIATION.md](docs/evidence/G5A-ZLIB-CVE-REMEDIATION.md).
 
+## Controlled Docker recovery — 2026-11-10
+
+**`WSL_DOCKER_PILOT_RECOVERED_RECONCILIATION_READY`** — after the 2026-11-09 WSL outage the
+Docker Desktop WSL integration list was empty (`IntegratedWslDistros: null`), so every pilot
+bind resolved to an empty VM path. The Owner's infrastructure-only recovery authorization was
+executed: the integration was restored through Docker Desktop's own settings API (pre-change
+store backed up on `D:`), PostgreSQL and the application were recreated against the unchanged
+`pilot-postgres-data` volume and the same eight read-only TLS/secret binds, and the egress
+gateway was started in place. No named volume, image, certificate, credential or key was
+changed, and no connector, session, QR or provider contact exists. The authoritative database
+state was re-read in a `READ ONLY` transaction and is unchanged: `uncertain`, epoch 7, gap 7,
+`reconciliation_required=true`, 28 audit rows. See
+[G5A-DOCKER-RECOVERY-2026-11-10.md](docs/evidence/G5A-DOCKER-RECOVERY-2026-11-10.md).
+
 ## Gates
 
 | Gate | Status | Evidence |
@@ -133,6 +147,7 @@ the Debian 13 fix, D time-boxed, ID-keyed disposition in the two scan scripts
 | `G5C_SEND_VERIFIED` | NOT AUTHORIZED | Requires G5-B PASS and separate Owner authorization |
 | `G5_LIVE_PILOT_VERIFIED` | NOT AUTHORIZED | Requires all stages and a final Owner review |
 | `G6_SOAK` | NOT AUTHORIZED | Out of scope |
+| `WSL_DOCKER_PILOT_RECOVERED_RECONCILIATION_READY` | **PASS (infrastructure)** | [G5A-DOCKER-RECOVERY-2026-11-10.md](docs/evidence/G5A-DOCKER-RECOVERY-2026-11-10.md); WSL integration restored via Docker Desktop settings (backup on `D:`), PostgreSQL and the application recreated, gateway started in place; volumes, images, TLS and credentials untouched; database fence re-read read-only at `uncertain`/7/7/`true` with 28 audit rows; no connector, no session, no provider contact. Residual: `C:` 4.8G free, the `D:` VHDX copy fails its checksum comparison, the gateway restart policy is `no`, and three `deer-flow` containers were left down after the engine restart |
 
 ## Verified identity and offline status
 
