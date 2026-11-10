@@ -13,6 +13,16 @@ deletion, host-wide shutdown or secret disclosure occurred.
 No secret value — old or new — appears in this document, in the console output
 of any step, in git, or in CI.
 
+> **Verification addendum — 2026-11-10, later the same day.** An independent re-verification
+> of this rotation is recorded in
+> [G5A-CREDENTIAL-ROTATION-VERIFICATION-2026-11-10.md](G5A-CREDENTIAL-ROTATION-VERIFICATION-2026-11-10.md).
+> Two statements below are corrected there and remain in place only as the historical record:
+> the pilot password is **not** accepted by the g2 stack (§1 — the shared-value finding was an
+> environment comparison; authentication probes against g2 `zs_app` and `zalo_owner` are
+> rejected), and the copy scan in §5 missed two further copies of the old values (a stale
+> `<PILOT_PRIVATE>/app.env`, which is also the g2 compose environment file, and one Qoder
+> transcript), both redacted in place afterwards. No part of this document was rewritten.
+
 ## 1. Dependency inventory (read-only, before rotation)
 
 | Credential | Consumers found | Decision |

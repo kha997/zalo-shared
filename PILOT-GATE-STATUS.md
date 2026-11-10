@@ -143,6 +143,37 @@ reconciliation around the reviewed driver, takes its window only from an Owner-s
 file (not yet created), and was **not executed**. See
 [G5A-CREDENTIAL-ROTATION-2026-11-10.md](docs/evidence/G5A-CREDENTIAL-ROTATION-2026-11-10.md).
 
+**Independent verification of the rotation — 2026-11-10 (addendum, supersedes two claims above).**
+The follow-up directive required the rotation to be re-verified, not repeated; the private
+marker and the reviewed script's own guard make a second run a no-op, so the live pilot and
+`a49775f` were verified independently instead. **The g2 claim above is wrong as written:** a
+password probe with the exposed value is **rejected** by the g2 `zs_app` role **and** the g2
+`zalo_owner` role, while the same probe accepts that stack's own `zalo_owner` password, so the
+method is sound; the earlier sentence came from comparing env files, not from authenticating.
+The two stacks did share the value in their environment files, so rotating the pilot half
+removed the pilot's copy, but no g2 credential was tested as accepted. **The copy inventory
+above is also incomplete:** two further copies of the old values were found and redacted in
+place, length-preserving — a stale `<PILOT_PRIVATE>/app.env` (1 password + 1 dead token, 552 B
+unchanged, `6689abd2…` → `8bf1d3eb…`) that is *also* the g2 compose environment file, and one
+past Qoder transcript (5 + 4 occurrences, 78,738,821 B unchanged, `8fb03fe5…` → `665f0bf7…`,
+all 32,320 JSONL records still valid). Redacting that `app.env` changed the g2 compose
+environment file; no g2 container was started, stopped, recreated or modified. After the
+redaction a scan of the repository (working tree and all 132 commits), the private tree,
+`D:\WSL-Backups`, the Qoder store and `%TEMP%` returns zero copies of either old value, and the
+new values appear only in the four live consumer files. Everything else above was reproduced:
+old DSN password rejected / new accepted over `verify-full`, `/metrics` 401 for the old token
+and 200 for the new, application healthy as uid 65532 with one idle TLSv1.3 `zs_app` session,
+gateway healthy with its last event still `startup`, the fence unchanged (`uncertain`/7,
+`af5048a8-…`, `shutdown`, gap 7, `reconciliation_required=true`, audit 28 rows / 3
+reconciliations, zero locks, zero unresolved work), the backup ACL still restricted and the
+VHDX byte size and mtime unchanged. `ops/local/reconcile-20261110.sh` preflight was re-run
+read-only from a temporary LF worktree at the same commit (the Windows checkout's CRLF endings
+make its `pipefail\r` line invalid; no file was rewritten) and passed with
+`app_quiesce_required=1`; no window file, no attempt marker and no new reconciliation record
+exist. No reconciliation was executed. See
+[G5A-CREDENTIAL-ROTATION-VERIFICATION-2026-11-10.md](docs/evidence/G5A-CREDENTIAL-ROTATION-VERIFICATION-2026-11-10.md).
+**`G5A_CREDENTIALS_ROTATED_RECONCILIATION_READY`**
+
 ## Gates
 
 | Gate | Status | Evidence |
