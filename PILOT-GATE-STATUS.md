@@ -100,6 +100,25 @@ state was re-read in a `READ ONLY` transaction and is unchanged: `uncertain`, ep
 `reconciliation_required=true`, 28 audit rows. See
 [G5A-DOCKER-RECOVERY-2026-11-10.md](docs/evidence/G5A-DOCKER-RECOVERY-2026-11-10.md).
 
+## Post-recovery stabilization — 2026-11-10
+
+**`G5A_POST_RECOVERY_SECURED_RECONCILIATION_READY`** — the Owner's post-recovery
+security-and-preparation authorization was executed without touching the pilot. The private
+backup set `D:\WSL-Backups` inherited `Authenticated Users:(M)` and `BUILTIN\Users:(RX)`; two
+enabled `Codex*` sandbox accounts sit in `Users`, and `inspect-before.json` carried the
+`zs_app` DSN password and `METRICS_TOKEN`, so those credentials were reachable by unintended
+principals. Inheritance was removed and replaced by explicit `Admin`/`SYSTEM`/`Administrators`
+grants, verified recursively over all 22 items with zero remaining `Users`/`Everyone`/`Codex`
+ACEs; no data was moved or deleted. Rotation is warranted but was **not** performed. The
+gateway, down since the 06:28:58Z host reboot because it has `restart: no`, was started in
+place (same container ID, healthy, no tunnel). The local evidence commit `cfddd1c` was pushed
+to `feat/shared-inbox` as a clean fast-forward with no rewrite. The fence was re-read in a
+`READ ONLY` transaction and is unchanged (`uncertain`/7, gap 7, audit 28), and one exact
+incident-bound request was prepared — `requestId 521bbecd-…`, body SHA-256 `709270a0…`,
+`notSent: true` — awaiting an Owner UTC window. Storage and the unrelated workloads were
+inspected read-only only. See
+[G5A-POST-RECOVERY-STABILIZATION-2026-11-10.md](docs/evidence/G5A-POST-RECOVERY-STABILIZATION-2026-11-10.md).
+
 ## Gates
 
 | Gate | Status | Evidence |
@@ -148,6 +167,7 @@ state was re-read in a `READ ONLY` transaction and is unchanged: `uncertain`, ep
 | `G5_LIVE_PILOT_VERIFIED` | NOT AUTHORIZED | Requires all stages and a final Owner review |
 | `G6_SOAK` | NOT AUTHORIZED | Out of scope |
 | `WSL_DOCKER_PILOT_RECOVERED_RECONCILIATION_READY` | **PASS (infrastructure)** | [G5A-DOCKER-RECOVERY-2026-11-10.md](docs/evidence/G5A-DOCKER-RECOVERY-2026-11-10.md); WSL integration restored via Docker Desktop settings (backup on `D:`), PostgreSQL and the application recreated, gateway started in place; volumes, images, TLS and credentials untouched; database fence re-read read-only at `uncertain`/7/7/`true` with 28 audit rows; no connector, no session, no provider contact. Residual: `C:` 4.8G free, the `D:` VHDX copy fails its checksum comparison, the gateway restart policy is `no`, and three `deer-flow` containers were left down after the engine restart |
+| `G5A_POST_RECOVERY_SECURED_RECONCILIATION_READY` | **PASS (security + preparation)** | [G5A-POST-RECOVERY-STABILIZATION-2026-11-10.md](docs/evidence/G5A-POST-RECOVERY-STABILIZATION-2026-11-10.md); private backup set restricted to owner/`SYSTEM`/`Administrators` after `Authenticated Users`/`Users` exposure was confirmed, credentials exposed but **not rotated** (Owner decision); gateway restarted in place after the 06:28:58Z reboot, healthy, no tunnel; `cfddd1c` pushed as a fast-forward; fence re-read read-only unchanged (`uncertain` epoch 7, gap 7, `reconciliation_required=true`, 28 audit rows, zero unresolved work, one idle application session); request prepared `521bbecd-…` / `709270a0…` and **not sent**. UNPROVEN: storage reclamation, restore-point inventory (needs elevation), WSL relocation, unrelated-workload restores — all prepared, none executed |
 
 ## Verified identity and offline status
 
