@@ -119,6 +119,30 @@ incident-bound request was prepared — `requestId 521bbecd-…`, body SHA-256 `
 inspected read-only only. See
 [G5A-POST-RECOVERY-STABILIZATION-2026-11-10.md](docs/evidence/G5A-POST-RECOVERY-STABILIZATION-2026-11-10.md).
 
+## Credential rotation — 2026-11-10
+
+**`G5A_CREDENTIALS_ROTATED_RECONCILIATION_READY`** — the two credentials exposed through the
+2026-11-09 backup set were rotated inside the private pilot: the `zs_app` database password
+(new 48-character URL-safe value) and `METRICS_TOKEN` (new 43-character value), independent of
+each other and of every other credential. `pilot-db/secrets/app.pw`, `pilot-app/metrics.token`,
+`pilot-app/app.env` and the connector env were replaced atomically, the application was
+recreated from the reviewed image and is healthy, and the exposed values — read back from the
+backup file itself — are now rejected (`password authentication failed` over
+`sslmode=verify-full`; HTTP 401 for the old token) while the new ones are accepted (TLS
+`verify-full`; HTTP 200). The `zs_owner` role, the pilot admin credential, the TLS material and
+the session key were not touched, and no unrelated service credential was modified. The
+exposed DSN password also authenticates the unrelated `zalo-shared-g2-postgres-1` stack; that
+was reported and left for a separate decision. Two copies of the old values (the backup record
+and one past subagent transcript) were rewritten byte-for-byte with same-length redaction
+placeholders; a scan of 571 WSL files, 132 commits and 7,485 Windows text files found no other
+copy, and the new values appear only in the three intended live consumer files. The control
+state was re-read on a separate read-only connection and is unchanged (`uncertain` epoch 7,
+owner `af5048a8-…`, gap 7, `reconciliation_required=true`, 28 audit rows, zero unresolved work,
+zero advisory locks). `ops/local/reconcile-20261110.sh` prepares the single epoch-7
+reconciliation around the reviewed driver, takes its window only from an Owner-supplied private
+file (not yet created), and was **not executed**. See
+[G5A-CREDENTIAL-ROTATION-2026-11-10.md](docs/evidence/G5A-CREDENTIAL-ROTATION-2026-11-10.md).
+
 ## Gates
 
 | Gate | Status | Evidence |
@@ -168,6 +192,7 @@ inspected read-only only. See
 | `G6_SOAK` | NOT AUTHORIZED | Out of scope |
 | `WSL_DOCKER_PILOT_RECOVERED_RECONCILIATION_READY` | **PASS (infrastructure)** | [G5A-DOCKER-RECOVERY-2026-11-10.md](docs/evidence/G5A-DOCKER-RECOVERY-2026-11-10.md); WSL integration restored via Docker Desktop settings (backup on `D:`), PostgreSQL and the application recreated, gateway started in place; volumes, images, TLS and credentials untouched; database fence re-read read-only at `uncertain`/7/7/`true` with 28 audit rows; no connector, no session, no provider contact. Residual: `C:` 4.8G free, the `D:` VHDX copy fails its checksum comparison, the gateway restart policy is `no`, and three `deer-flow` containers were left down after the engine restart |
 | `G5A_POST_RECOVERY_SECURED_RECONCILIATION_READY` | **PASS (security + preparation)** | [G5A-POST-RECOVERY-STABILIZATION-2026-11-10.md](docs/evidence/G5A-POST-RECOVERY-STABILIZATION-2026-11-10.md); private backup set restricted to owner/`SYSTEM`/`Administrators` after `Authenticated Users`/`Users` exposure was confirmed, credentials exposed but **not rotated** (Owner decision); gateway restarted in place after the 06:28:58Z reboot, healthy, no tunnel; `cfddd1c` pushed as a fast-forward; fence re-read read-only unchanged (`uncertain` epoch 7, gap 7, `reconciliation_required=true`, 28 audit rows, zero unresolved work, one idle application session); request prepared `521bbecd-…` / `709270a0…` and **not sent**. UNPROVEN: storage reclamation, restore-point inventory (needs elevation), WSL relocation, unrelated-workload restores — all prepared, none executed |
+| `G5A_CREDENTIALS_ROTATED_RECONCILIATION_READY` | **PASS (rotation + preparation)** | [G5A-CREDENTIAL-ROTATION-2026-11-10.md](docs/evidence/G5A-CREDENTIAL-ROTATION-2026-11-10.md); `zs_app` password and `METRICS_TOKEN` rotated and applied atomically to `app.pw`, `metrics.token`, `app.env` and the connector env; application recreated healthy from `sha256:989c6154…`; exposed values rejected over `verify-full`/HTTP 401 and new values accepted/200; PostgreSQL and gateway healthy, app session TLSv1.3, no connector, no session or QR artefact; fence re-read read-only unchanged (`uncertain` epoch 7, `af5048a8-…`, gap 7, `reconciliation_required=true`, 28 audit rows, zero unresolved work, zero advisory locks); two copies of the old values redacted in place, no other copy found; `ops/local/reconcile-20261110.sh` prepared around the reviewed driver with an Owner-supplied window and **not executed**. Residual: the old pilot password remains valid on the unrelated `zalo-shared-g2-postgres-1` stack; no reconciliation, QR, provider contact or state change |
 
 ## Verified identity and offline status
 
