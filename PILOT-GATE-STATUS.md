@@ -11,23 +11,27 @@ tunnel. No connector container exists and **no live activation** has occurred; t
 reconciliation awaits a separate Owner UTC window
 (`G5A_REDIRECT_DEPLOYED_RECONCILIATION_AWAITING_OWNER_START`).
 **Owner decision:** `G5_SCOPE_APPROVED_ACTIVATION_PENDING` — D1–D7 approved in scope; live activation withheld
-**G5-A authorization:** four live bootstrap authorizations have been consumed —
+**G5-A authorization:** five live bootstrap authorizations have been consumed —
 `2026-11-04T00:46Z–01:16Z` (failed before login), `2026-11-06T23:40Z–00:10Z`
-(`qr-expired`), `2026-11-07T00:00Z–00:20Z` (post-scan `redirect-denied`) and
+(`qr-expired`), `2026-11-07T00:00Z–00:20Z` (post-scan `redirect-denied`),
 `2026-11-09T13:12Z–13:42Z` (post-scan redirect to the unreviewed
-`jr.zaloapp.com`, refused; `G5A_BOOTSTRAP_FAIL`). A fifth window,
-`2026-11-07T01:02Z–01:32Z`, was blocked before any QR
-(`G5A_BLOCKED_REDIRECT_POLICY`). None may be extended, rescheduled or reused.
-**Live pilot:** **NOT ACTIVATED** — four live attempts emitted a QR and contacted
-only `id.zalo.me`; no completed handshake, no UID, no session, no encrypted store
-and no real account operation. On 2026-11-09 the phone scan succeeded and the
-connector refused the provider's `checkSession` redirect to `jr.zaloapp.com`.
+`jr.zaloapp.com`, refused; `G5A_BOOTSTRAP_FAIL`) and
+`2026-11-11T00:52Z–01:22Z` (post-scan second redirect, refused;
+`G5A_BOOTSTRAP_FAIL`). A sixth window, `2026-11-07T01:02Z–01:32Z`, was blocked
+before any QR (`G5A_BLOCKED_REDIRECT_POLICY`). None may be extended, rescheduled
+or reused.
+**Live pilot:** **NOT ACTIVATED** — five live attempts emitted a QR; no completed
+handshake, no UID, no session, no encrypted store and no real account operation.
+On 2026-11-09 the phone scan succeeded and the connector refused the provider's
+`checkSession` redirect to `jr.zaloapp.com`. On 2026-11-11 the allowed redirect
+was followed, then the provider issued a second redirect from `jr.zaloapp.com` to
+`jr.chat.zalo.me`, which the reviewed one-hop policy refused (`redirect-after-hop`).
 **Owner reconciliation gate:** the 2026-11-07 incident was reconciled once in the
 Owner window `00:54–01:14Z` (epoch 5→6, gap 5→6). The 2026-11-09 incident was
 reconciled once in the Owner window `2026-11-11T00:05Z–00:20Z` through the reviewed
-API (epoch 7→8, gap 7→8, `reconciliation_required=false`); ownership is `idle` and
-the earlier fence history is preserved in the audit. No control state was reset by
-hand.
+API (epoch 7→8, gap 7→8, `reconciliation_required=false`). The 2026-11-11 attempt
+is fenced `uncertain` at epoch 9, gap 9, `reconciliation_required=true`; no
+reconciliation was performed. No control state was reset by hand.
 **Pilot admin provisioning (2026-11-04):** `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION`
 — exactly one active pilot admin was created through the reviewed identity model
 and verified through the reviewed login/CSRF/authorization path; the credential
@@ -202,6 +206,29 @@ residual was not touched. No retry, replay, second request, direct SQL control-s
 volume deletion, WSL shutdown, deployment or merge occurred. See
 [G5A-RECONCILIATION-EXECUTION-2026-11-11.md](docs/evidence/G5A-RECONCILIATION-EXECUTION-2026-11-11.md).
 
+## G5-A bootstrap attempt — 2026-11-11
+
+**`G5A_BOOTSTRAP_FAIL`** — the Owner's one authorized QR bootstrap ran once inside
+`2026-11-11T00:52:00Z–01:22:00Z` and failed closed at the provider handshake. Preflight was
+fully green (`idle` epoch 8, `disconnected` gap 8, `reconciliation_required=false`, no
+`session.enc`, no worker, zero unresolved work, app/gateway healthy, `verify-full`, four-host
+boundary PASS, viewer session 1 interactive) and the grant
+(`G5A-OWNER-AUTH-2026-11-11T0052Z`, `g5a-enroll-2026-11-11T0052Z`) was admitted offline against
+`zalo-shared-connector:g5-ci-8d9e39d` (`sha256:220982a7…`, `sourceCommit 8d9e39d…`). The QR was
+written at `00:54:36.927Z` and displayed automatically (399×399, session 1, topmost); the Owner
+scanned at `00:54:43.171Z`. The gateway admitted `id.zalo.me` and then `jr.zaloapp.com` (the one
+reviewed redirect); the provider then returned a **second** redirect from `jr.zaloapp.com` to
+`jr.chat.zalo.me`, which the reviewed one-hop policy refused at `00:54:44.986Z` (`reason:
+redirect-denied`, `redirect-after-hop`, `hops=1`). No tunnel to `jr.chat.zalo.me` opened. No UID
+was obtained, no identity confirmation was requested, no `session.enc` was written and no
+account data was touched. The attempt fenced ownership `uncertain` epoch 9
+(`0280fd84-…`, `shutdown`, `00:54:44.993Z`), provider `disconnected` gap 9
+`reconciliation_required=true`; audit grew 31 → 33 (`connector.reserved`, `connector.uncertain`)
+with the `af5048a8-…`/7 fence history preserved. The viewer closed and the stale staged copy was
+removed; the private manifest pointer was restored to the synthetic file. No retry, second
+grant, second QR, allowlist/gateway change, reconciliation, deployment or merge occurred. See
+[G5A-BOOTSTRAP-ATTEMPT-2026-11-11.md](docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-11.md).
+
 ## Gates
 
 | Gate | Status | Evidence |
@@ -231,6 +258,7 @@ volume deletion, WSL shutdown, deployment or merge occurred. See
 | `G5A_REDIRECT_DEPLOYED_AWAITING_OWNER_START` | **PASS (deployed, offline)** | [G5A-REDIRECT-DEPLOYMENT-2026-11-09.md](docs/evidence/G5A-REDIRECT-DEPLOYMENT-2026-11-09.md); the Owner's deployment authorization was executed on 2026-11-09T14:55Z: CI-built `zalo-shared-connector:g5-ci-8d9e39d` (`sha256:220982a7…`, archive `d416e76f…`, embedded `sourceCommit 8d9e39d…`) staged and the exact four-host allowlist (`id.zalo.me`, `wpa.chat.zalo.me`, `jr.chat.zalo.me`, `jr.zaloapp.com`; `chat.zalo.me` excluded) deployed through the byte-identical reviewed compose; the gateway was recreated healthy with no tunnel. 14/14 static, 48/48 deployed-network, 21/21 allow-path, 37/37 in-image redirect, 29/29 database TLS and 5/5 preflight checks PASS; scan 0 HIGH/CRITICAL; QR viewer rehearsal PASS with a synthetic fixture only. Control state unchanged (`uncertain` epoch 7, gap 7, `reconciliation_required=true`, 0 sessions, audit 28 rows), no connector container, no provider contact. The single reconciliation is prepared and awaits a separate Owner UTC window |
 | `G5A_RECONCILIATION_REQUIRED_AWAITING_OWNER` | **CLEARED (reconciled 2026-11-11)** | The 2026-11-09 fence was confirmed read-only: ownership `uncertain` epoch 7 (`af5048a8-…`, `shutdown`), provider `disconnected` gap 7 `reconciliation_required=true`, zero unresolved work, audit 28 rows with the incident prefix intact, preflight `ok:true` with zero advisory locks and zero other sessions. The prepared single transition (`uncertain→idle`, epoch 7→8, gap 7→8) was executed once in the Owner's 2026-11-11 window; see the execution row below |
 | `G5A_RECONCILED_20261111` | **PASS (reconciliation)** | [G5A-RECONCILIATION-EXECUTION-2026-11-11.md](docs/evidence/G5A-RECONCILIATION-EXECUTION-2026-11-11.md); executed once in the Owner window `2026-11-11T00:05–00:20Z` at reviewed HEAD `eda6c18` with the pinned driver/preflight blobs and image `sha256:989c6154…`: application quiesced, zero other sessions and zero advisory locks, read-only preflight `ok:true` (13/13), one authenticated request at `00:05:29.085Z` HTTP 200 (`alreadyApplied=false`), epoch 7→8, gap 7→8, `uncertain → idle`, driver 20/20, audit 28 → 31 with exactly one `connector.reconciled` row (id 30) carrying `521bbecd-…`, fence baseline `af5048a8-…`/7 with history preserved, gateway log unchanged (`startup`, zero tunnels), no connector, zero unresolved work, application healthy since `00:05:31Z`. Disclosed: the wrapper's post-check failed after the successful request on an unbound counter and a `+1` audit-row assumption (marker `verification-failed`, fixed in `9eedf5c`, marker not rewritten) and one earlier invocation was refused `outside-window` without stopping or sending. No retry, replay or second request |
+| `G5A_BOOTSTRAP_FAIL_20261111` | **FAIL (`redirect-after-hop`)** | [G5A-BOOTSTRAP-ATTEMPT-2026-11-11.md](docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-11.md); one authorized attempt in `00:52–01:22Z`: preflight fully PASS at `idle`/8, grant admitted against `g5-ci-8d9e39d` (`sha256:220982a7…`), QR shown automatically at `00:54:36.927Z` and scanned by the Owner at `00:54:43.171Z`; the gateway admitted `id.zalo.me` then `jr.zaloapp.com`, and the provider's second redirect `jr.zaloapp.com → jr.chat.zalo.me` was refused (`redirect-denied`, `redirect-after-hop`, `hops=1`) at `00:54:44.986Z`. No UID, no confirmation, no `session.enc`, no account data touched; ownership fenced `uncertain` epoch 9 (`0280fd84-…`, `shutdown`), provider gap 9 `reconciliation_required=true`, audit 31 → 33. Viewer closed, staged copy removed, synthetic manifest pointer restored. No retry or second QR |
 | `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION` | **PASS** | [G5A-PILOT-ADMIN-PROVISIONING.md](docs/evidence/G5A-PILOT-ADMIN-PROVISIONING.md); exactly one active admin (`4fd6c034d5e7`), 22/22 pilot auth/CSRF/route checks, 19/19 disposable success-path checks, ownership/provider/delivery rows unchanged. No reconciliation executed |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
 | `R2_EGRESS_ENFORCEMENT_PASS` | **PASS (bootstrap)** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); kernel boundary plus SNI gateway verified; observe/send-test remain functionally blocked until their runtime-only hosts are admitted |
