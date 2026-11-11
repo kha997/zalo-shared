@@ -1,7 +1,7 @@
 # Pilot gate status
 
 **Date:** 2026-11-11
-**Branch:** `feat/shared-inbox`; HEAD `973ea7e`; deployed connector source commit `d6f8aec2197bc8249b91bd9d4595e36f3129c0b4` (CI run 42943971343); previously staged `8d9e39d…` (CI run 42635857403)
+**Branch:** `feat/shared-inbox`; HEAD `6638d3b` (attempt); deployed connector source commit `d6f8aec2197bc8249b91bd9d4595e36f3129c0b4` (CI run 42943971343); previously staged `8d9e39d…` (CI run 42635857403)
 **PR #3:** OPEN, **Draft** (not merged)
 **Deployed pilot configuration (2026-11-11T08:43Z):** the independently reviewed two-hop
 fix is deployed offline — connector artifact `zalo-shared-connector:g5-ci-d6f8aec`
@@ -10,31 +10,41 @@ allowlist `id.zalo.me,wpa.chat.zalo.me,jr.chat.zalo.me,jr.zaloapp.com` (no `chat
 gateway `zalo-shared-egress-gateway:g5-patched-af2be54` healthy with one `startup` line and
 zero tunnels. No connector container exists and **no live activation** has occurred. The single
 epoch-9 reconciliation (epoch 9→10, gap 9→10) was executed once in the Owner window
-`2026-11-11T09:12–09:27Z` and independently verified; ownership is `idle` at epoch 10, gap 10,
-`reconciliation_required=false`, fencing and audit history preserved
-(`G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION`).
+`2026-11-11T09:12–09:27Z` and independently verified; ownership was `idle` at epoch 10, gap 10,
+`reconciliation_required=false`, fencing and audit history preserved. A subsequent single
+bootstrap attempt in the Owner window `2026-11-11T14:43–15:13Z` reached `qr-shown` but the QR
+expired unscanned (`G5A_BOOTSTRAP_FAIL`, `reason=qr-expired`); the connector is now fenced
+`uncertain` at epoch 11, gap 11, `reconciliation_required=true`.
 **Owner decision:** `G5_SCOPE_APPROVED_ACTIVATION_PENDING` — D1–D7 approved in scope; live activation withheld
-**G5-A authorization:** five live bootstrap authorizations have been consumed —
+**G5-A authorization:** six live bootstrap authorizations have been consumed —
 `2026-11-04T00:46Z–01:16Z` (failed before login), `2026-11-06T23:40Z–00:10Z`
 (`qr-expired`), `2026-11-07T00:00Z–00:20Z` (post-scan `redirect-denied`),
 `2026-11-09T13:12Z–13:42Z` (post-scan redirect to the unreviewed
-`jr.zaloapp.com`, refused; `G5A_BOOTSTRAP_FAIL`) and
+`jr.zaloapp.com`, refused; `G5A_BOOTSTRAP_FAIL`),
 `2026-11-11T00:52Z–01:22Z` (post-scan second redirect, refused;
-`G5A_BOOTSTRAP_FAIL`). A sixth window, `2026-11-07T01:02Z–01:32Z`, was blocked
-before any QR (`G5A_BLOCKED_REDIRECT_POLICY`). None may be extended, rescheduled
-or reused.
-**Live pilot:** **NOT ACTIVATED** — five live attempts emitted a QR; no completed
+`G5A_BOOTSTRAP_FAIL`) and `2026-11-11T14:43Z–15:13Z` (QR shown, expired
+unscanned; `G5A_BOOTSTRAP_FAIL`). A further window, `2026-11-07T01:02Z–01:32Z`,
+was blocked before any QR (`G5A_BLOCKED_REDIRECT_POLICY`). None may be extended,
+rescheduled or reused.
+**Live pilot:** **NOT ACTIVATED** — six live attempts emitted a QR; no completed
 handshake, no UID, no session, no encrypted store and no real account operation.
 On 2026-11-09 the phone scan succeeded and the connector refused the provider's
 `checkSession` redirect to `jr.zaloapp.com`. On 2026-11-11 the allowed redirect
 was followed, then the provider issued a second redirect from `jr.zaloapp.com` to
 `jr.chat.zalo.me`, which the reviewed one-hop policy refused (`redirect-after-hop`).
+On 2026-11-11 at `14:44:50Z` the two-hop build reached `qr-shown`; the primary QR
+window was logged topmost/visible in the interactive session, the QR was not
+scanned within its 100-second provider lifetime and the connector failed
+`qr-expired` at `14:46:30Z`.
 **Owner reconciliation gate:** the 2026-11-07 incident was reconciled once in the
 Owner window `00:54–01:14Z` (epoch 5→6, gap 5→6). The 2026-11-09 incident was
 reconciled once in the Owner window `2026-11-11T00:05Z–00:20Z` through the reviewed
-API (epoch 7→8, gap 7→8, `reconciliation_required=false`). The 2026-11-11 attempt
-is fenced `uncertain` at epoch 9, gap 9, `reconciliation_required=true`; no
-reconciliation was performed. No control state was reset by hand.
+API (epoch 7→8, gap 7→8, `reconciliation_required=false`). The 2026-11-11
+`00:54Z` attempt was fenced `uncertain` at epoch 9, gap 9 and was reconciled once
+in the Owner window `2026-11-11T09:12–09:27Z` (epoch 9→10, gap 9→10,
+`reconciliation_required=false`). The 2026-11-11 `14:43Z` attempt is fenced
+`uncertain` at epoch 11, gap 11, `reconciliation_required=true`; no reconciliation
+was performed for it. No control state was reset by hand.
 **Pilot admin provisioning (2026-11-04):** `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION`
 — exactly one active pilot admin was created through the reviewed identity model
 and verified through the reviewed login/CSRF/authorization path; the credential
@@ -327,6 +337,35 @@ needed. Attempt marker `outcome=reconciled`, `exitCode=0`. No retry, replay,
 direct SQL, alternative endpoint or window extension. See
 [G5A-RECONCILIATION-EXECUTION-2026-11-11-EPOCH9.md](docs/evidence/G5A-RECONCILIATION-EXECUTION-2026-11-11-EPOCH9.md).
 
+## Single bootstrap attempt `14:43Z` — QR expired unscanned — 2026-11-11
+
+**`G5A_BOOTSTRAP_FAIL`** — in the Owner window `2026-11-11T14:43:00Z–15:13:00Z`
+the sixth G5-A bootstrap used one fresh grant
+(`G5A-OWNER-AUTH-2026-11-11T1443Z` / `g5a-enroll-2026-11-11T1443Z`) against the
+deployed `zalo-shared-connector:g5-ci-d6f8aec` (image `d2a85b19…`, config
+`9923258e…`, embedded `sourceCommit d6f8aec…`). All mandatory preflight checks
+passed, including `idle` epoch 10, provider `disconnected` gap 10, zero sessions
+and unresolved work, `verify-full` database TLS, the four-host boundary and an
+offline grant preflight `ok:true`/`admitted`. The connector started at
+`14:44:49.788Z`, acquired ownership (epoch 11), opened one `id.zalo.me:443`
+tunnel and reached `qr-shown` at `14:44:50.757Z`; the automatic viewer logged
+`session=1 topmost=True visible=True` at `14:44:51Z`. No `scanned` stage was
+recorded, a second `id.zalo.me` tunnel at `14:46:30.985Z` was the expiry poll, and
+the provider QR lifetime expired at `14:46:30.759Z`
+(`gate=unavailable`, `reason=qr-expired`). No UID, display name, terminal
+`confirm`, encrypted session or account data exists; `session.enc` and `qr.png`
+are absent and no viewer or connector process remains. Disclosed observation: the
+viewer wrote no close/timeout line and its guard removed the staged copy at
+`14:44:52Z`, consistent with the window ending about one second after it
+appeared when the background launcher shell exited; the QR would have expired
+unscanned either way, and no second QR was generated. The fence is `uncertain`
+epoch 11 (`1c6bebbb-…`, `shutdown`, `14:46:30.766Z`), provider gap 11
+`reconciliation_required=true`, audit 36 → 38 with the prior rows intact. A new
+Owner-authorized reconciliation (epoch 11 → 12) is required before another
+bootstrap. No retry, alternate flow, provider allowlist change, PR merge or
+production deployment occurred. See
+[G5A-BOOTSTRAP-ATTEMPT-2026-11-11T1443Z.md](docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-11T1443Z.md).
+
 ## Gates
 
 | Gate | Status | Evidence |
@@ -361,6 +400,7 @@ direct SQL, alternative endpoint or window extension. See
 | `G5A_RECONCILIATION_REQUIRED_EPOCH9_AWAITING_OWNER` | **SUPERSEDED (executed 2026-11-11)** | Preparation record for the epoch-9 fence; superseded by the epoch-9 reconciliation execution row below |
 | `G5A_TWO_HOP_DEPLOYED_RECONCILIATION_AWAITING_OWNER_START` | **PASS (deployed, offline; APPROVE WITH CONDITIONS)** | [G5A-TWO-HOP-DEPLOYMENT-2026-11-11.md](docs/evidence/G5A-TWO-HOP-DEPLOYMENT-2026-11-11.md); CI artifact `g5-ci-d6f8aec` (id `d2a85b19…`, config `9923258e…`, 29 layers, archive `d2410cdb…`, scan 0 HIGH/CRITICAL) deployed to the private pointer at 2026-11-11T08:43Z; four-host allowlist (`jr.zaloapp.com`, no `chat.zalo.me`), egress internal, uplink gateway-only, gateway healthy with one `startup` line and zero tunnels, no connector container. Compiled policy byte-identical to the reviewed build; QR viewer single-window rehearsal PASS; typecheck and 178/178 transport at HEAD; preflight PASS (`uncertain` epoch 9, gap 9, audit 33, 0 advisory locks, gateway log `be08a8a0…`). Independent review APPROVE WITH CONDITIONS, no blocking finding; both documentation conditions closed, five residuals disclosed. Reconciliation prepared, not executed; no window file |
 | `G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION` | **PASS (reconciliation, independently verified)** | [G5A-RECONCILIATION-EXECUTION-2026-11-11-EPOCH9.md](docs/evidence/G5A-RECONCILIATION-EXECUTION-2026-11-11-EPOCH9.md); executed once in the Owner window `2026-11-11T09:12–09:27Z` at HEAD `973ea7e`: preflight 14/14, application quiesced with `other_sessions=0`, one authenticated request `4203bde7-…` at `09:12:15.840Z` HTTP 200 (`alreadyApplied=false`), epoch 9→10, gap 9→10, `uncertain → idle`, independent read-only check confirms owner null, `reconciliation_required=false`, audit 33 → 36 with exactly one new `connector.reconciled` row (id 35) bound to the request/evidence and prior rows preserved, fence `last_fenced` `0280fd84-…`/9 intact, zero sessions and zero unresolved work, no connector, application healthy, gateway log unchanged (`be08a8a0…`), no provider contact. Attempt marker `reconciled`/0. No retry, replay or second request; a new bootstrap needs a fresh Owner authorization bound to `d6f8aec…` |
+| `G5A_BOOTSTRAP_FAIL_20261111T1443Z` | **FAIL (`qr-expired`)** | [G5A-BOOTSTRAP-ATTEMPT-2026-11-11T1443Z.md](docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-11T1443Z.md); sixth authorized attempt in `14:43–15:13Z`: preflight PASS, grant `g5a-enroll-2026-11-11T1443Z` admitted (`lifetimeMs=1751645`), connector started `14:44:49.788Z` on `g5-ci-d6f8aec`, ownership epoch 11, one `id.zalo.me:443` tunnel, `qr-shown` `14:44:50.757Z`, viewer `session=1 topmost=True visible=True`; no `scanned` stage and no scan tunnels; provider QR expired `14:46:30.759Z` (`gate=unavailable`, `reason=qr-expired`). No UID, confirm, session or account data; `session.enc`/`qr.png` absent, viewer and connector gone, manifest pointer restored. Fenced `uncertain` epoch 11 (`1c6bebbb-…`), provider gap 11 `reconciliation_required=true`, audit 36 → 38. No retry, second QR or alternate flow |
 | `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION` | **PASS** | [G5A-PILOT-ADMIN-PROVISIONING.md](docs/evidence/G5A-PILOT-ADMIN-PROVISIONING.md); exactly one active admin (`4fd6c034d5e7`), 22/22 pilot auth/CSRF/route checks, 19/19 disposable success-path checks, ownership/provider/delivery rows unchanged. No reconciliation executed |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
 | `R2_EGRESS_ENFORCEMENT_PASS` | **PASS (bootstrap)** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); kernel boundary plus SNI gateway verified; observe/send-test remain functionally blocked until their runtime-only hosts are admitted |
@@ -960,3 +1000,24 @@ bootstrap is not authorized by this result and requires a fresh explicit Owner w
 bound to the deployed source commit `d6f8aec…`. Evidence
 [G5A-RECONCILIATION-EXECUTION-2026-11-11-EPOCH9](docs/evidence/G5A-RECONCILIATION-EXECUTION-2026-11-11-EPOCH9.md).
 **G5A_RECONCILIATION_PASS_AWAITING_BOOTSTRAP_DECISION**
+
+**G5-A BOOTSTRAP ATTEMPT `14:43Z` FAILED, QR EXPIRED UNSCANNED — `G5A_BOOTSTRAP_FAIL` (2026-11-11).**
+The Owner's single bootstrap authorization for `14:43:00Z–15:13:00Z` was used
+exactly once. All preflight predicates passed against the deployed two-hop build
+(`g5-ci-d6f8aec`), the connector acquired ownership at epoch 11, opened only
+`id.zalo.me:443` and reached `qr-shown` at `14:44:50.757Z`; the automatic viewer
+reported an interactive, topmost, visible window at `14:44:51Z`. No `scanned`
+stage occurred, and the provider QR lifetime expired at `14:46:30.759Z`
+(`gate=unavailable`, `reason=qr-expired`). Disclosed: the viewer logged no
+close/timeout line and its guard removed the staged copy at `14:44:52Z`,
+consistent with the window ending about one second after appearing when the
+launching background shell exited; the attempt fails on QR expiry regardless,
+and no second QR was generated. No UID, display name, terminal `confirm`,
+encrypted session or account data exists; the view directory is empty and no
+viewer or connector process remains. The fence is `uncertain` epoch 11
+(`1c6bebbb-…`, `shutdown`), provider gap 11 with `reconciliation_required=true`,
+audit 36 → 38 with prior rows intact. A new Owner-authorized reconciliation
+(epoch 11 → 12) is required before another bootstrap; no retry, alternate flow,
+allowlist change, production deployment or PR merge occurred. Evidence
+[G5A-BOOTSTRAP-ATTEMPT-2026-11-11T1443Z](docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-11T1443Z.md).
+**G5A_BOOTSTRAP_FAIL**
