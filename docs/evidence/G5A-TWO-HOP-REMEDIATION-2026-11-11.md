@@ -135,6 +135,9 @@ final script bytes before this record was committed:
 | `npm run build` / `npm run build:connector` | PASS |
 | `ops/local/check-pilot-network.sh` | all assertions PASS (4 hosts, 2-hop chain, pins, topology) |
 
+Typecheck and the transport suite were re-run on the committed tree `d6f8aec`
+after the last edits: clean and **178/178**.
+
 The redirect suites cover the valid chain, invalid hop order, a direct destination
 request, a third redirect, loops, malformed/Lookalike/downgraded Locations, reused
 and stale authorizations, a non-3xx `Location`, and an environment that withholds
@@ -144,15 +147,70 @@ contacts the provider.
 
 ## 6. Independent review
 
-[REVIEW]
+The change was reviewed before commit by an independent reviewer with read access
+to the pinned SDK, the policy, the diagnostics and the wrapper. An earlier
+background review attempt stalled and was stopped without a verdict; no finding
+is attributed to it. The foreground review covered the 12 policy requirements and
+the wrapper/cleanup code and returned:
+
+**VERDICT: APPROVE WITH CONDITIONS.**
+
+What it confirmed: no request path exists outside the observed chain; the
+authorization is spent before dispatch; a third hop, loop, direct-host bypass,
+reused/stale permission and malformed or downgraded Location each fail before a
+socket; the diagnostics cannot carry a full URL, `Location`, cookie, token, QR
+content or UID; the viewer removes its copy on every close path it can reach.
+
+| Finding | Severity | Disposition |
+| --- | --- | --- |
+| `$gateway_last` read in the post-check but never assigned under `set -u`; the wrapper would have failed after the database mutation | Critical | **Closed** — the pre-fence assignment is restored and compared |
+| a gateway restart erases the pre-incident log, so "nothing after the fence" could pass on an empty log | High | **Closed** — the predicate fails on `startup` after the fence, on untimestamped events, and on a container created at/after the fence |
+| run-file mtime was the run start, so a display longer than a minute could be swept as stale | Medium | **Closed** — the live viewer heartbeats the run file each poll (`Touch-RunId`) |
+| two launches could race the same stage directory | Medium | **Closed** — the launcher serialises with `flock` |
+| check-then-delete between guard and a new run | Medium | **Disclosed residual** — mitigated by the re-read before every delete, the launcher lock and a single operator; not eliminated |
+| evidence overstated the exit-5 paths and the 12-sample rule | Low | **Closed** — §4 corrected |
+| evidence implied the 01:38 rehearsal reproduced the incident log | Low | **Closed** — §4 now states the old 00:54 code logged no removal line |
+
+Condition: commit the reviewed bytes and rebuild them through CI. Met by
+`d6f8aec2197bc8249b91bd9d4595e36f3129c0b4` (§7); typecheck and the transport
+suite were re-run on the final tree, and the three guard ownership cases were
+re-run against the final guard bytes.
+
+Two residuals are disclosed rather than fixed: the check-then-delete window
+above, and the fact that a double kill (viewer and guard together) is covered only
+by the launcher's next-start sweep. Neither can leave a copy that the Operator
+would have to hunt for in the rehearsed failure modes; the sweep is the last
+resort and has not been exercised end-to-end on the final bytes (§9).
 
 ## 7. CI artifact and deployment preparation (§8)
 
-[CI]
+The reviewed commit `d6f8aec2197bc8249b91bd9d4595e36f3129c0b4` was pushed to
+`feat/shared-inbox` and built by the `CI` workflow on PR #3 (draft, still open):
+
+| Field | Value |
+| --- | --- |
+| Run / attempt | `42943971343` / 1, `pull_request`, `refs/pull/3/merge` |
+| `pilot` job | success (connector image built from the reviewed commit) |
+| `test` job | success (build, full suite, browser/load, recovery, monitoring, container smoke) |
+| Source commit | `d6f8aec…` (asserted by the workflow's "Build inputs are the reviewed commit") |
+| `lockSha256` | `17dcd254…` — equals `sha256sum connector/package-lock.json` |
+| `sdkIntegrity` | `sha512-pBU0T0…` — equals `zca-js@2.2.0` in the connector lock |
+| Artifact | `pilot-connector-image`, id `13822176119`, 166,080,000 bytes |
+| Archive SHA-256 | `d2410cdb…` — re-hashed after download, equals the workflow record |
+| Image id (config) | `sha256:9923258e6c0195f8cdc4485b1abbb47dbc364e8e0e027d7a61544b18e57ca653` |
+| Loaded image | local containerd store reports `sha256:d2a85b19…` (the platform-manifest digest); the OCI manifest's config is `9923258e…` and all 29 rootfs layers equal the manifest's layer digests, so the content is the recorded image |
+| Runtime shape | uid `65532:65532`, entrypoint `/nodejs/bin/node --require=/app/egress-guard.cjs`, `NODE_ENV=production` |
+| Staged tag | `zalo-shared-connector:g5-ci-d6f8aec` (local only) |
+
+The image is staged by local tag for the private deployment, not deployed: the
+private image pointer still names `g5-ci-8d9e39d`, and no compose file, gateway or
+allowlist was changed. The four-host allowlist is byte-for-byte the reviewed set
+(`id.zalo.me`, `wpa.chat.zalo.me`, `jr.chat.zalo.me`, `jr.zaloapp.com`).
 
 ## 8. Reconciliation readiness (§9)
 
-Read-only verification at the base HEAD:
+Read-only verification at the committed HEAD `d6f8aec` (identical to the base-HEAD
+values recorded before the commit):
 
 | Field | Value |
 | --- | --- |
@@ -166,6 +224,13 @@ Read-only verification at the base HEAD:
 | Connector | no container, no host process |
 | Application / gateway | `running healthy` / `running healthy` |
 | Gateway log | two allowed tunnels (`id.zalo.me`, `jr.zaloapp.com`) from the attempt; four pre-incident synthetic denials from 2026-11-09; nothing after the fence |
+
+`ops/local/reconcile-20261111.sh preflight` at `d6f8aec`: **PASS** — head, driver
+and preflight blobs, image digest and uid all match; the prepared request is
+`notSent` and bound to owner/epoch/gap 9; the fence, provider state and audit are
+unchanged; the gateway is unchanged; the private state is session-key-only;
+`advisory_locks=0 db_sessions=0`. Nothing was stopped, sent or written outside the
+private lock file. Preflight-only: the application was not quiesced.
 
 Prepared, not executed: `ops/local/reconcile-20261111.sh` (one-shot wrapper,
 `uncertain → idle`, epoch 9→10, gap 9→10) bound to the fenced owner/epoch/gap, the
@@ -192,9 +257,10 @@ container cannot hide contact.
    not by a new window rehearsal (deliberately: no further viewer windows were
    opened). The staged copy is absent and no viewer process remains. UNPROVEN:
    the end-to-end window close path on the exact final bytes.
-3. The application holds an idle pool session, so the read-only preflight reports
-   `app_quiesce_required=1`; the execute path stops the application and proves
-   zero other sessions before sending.
+3. The read-only preflight observed zero database sessions on this run; if the
+   idle application holds a pool session it reports `app_quiesce_required=1`
+   instead. The execute path stops the application and proves zero other sessions
+   before sending, either way.
 4. The deployment remains a separate Owner-authorized step: the private image
    pointer still names the deployed `g5-ci-8d9e39d` artifact.
 5. `chat.zalo.me` stays excluded; no admission was widened beyond the observed
@@ -202,4 +268,25 @@ container cannot hide contact.
 
 ## 10. Terminal verdict
 
-[VERDICT]
+**G5A_TWO_HOP_FIX_REVIEWED_AND_RECONCILIATION_READY**
+
+The two-hop policy is reviewed, committed (`d6f8aec`) and built through CI
+(`42943971343`, both jobs succeeded) on that commit. The CI-origin connector
+artifact is verified by archive hash, source commit, lockfile, SDK integrity and
+image config/layer identity, and is staged locally as `g5-ci-d6f8aec`; it is not
+deployed and the live pointer still names `g5-ci-8d9e39d`. The QR staged-copy
+defect is fixed, the fix was rehearsed with synthetic fixtures, and the guard was
+re-tested against its final bytes; no copy remains and nothing is scheduled to
+reopen the viewer. Online state is unchanged: `uncertain` epoch 9, gap 9,
+`reconciliation_required=true`, zero sessions, no connector, gateway unchanged.
+The epoch 9→10, gap 9→10 reconciliation is prepared and bound but not executed;
+without the Owner window file the wrapper refuses.
+
+Remaining uncertainty: hop 2 is proven offline only (the pinned SDK and synthetic
+responses); a third hop is refused, not observed, so whether hop 2 is the
+provider's final step stays UNPROVEN. The cleanup edits were validated without a
+window, so the end-to-end window close on the exact final bytes is UNPROVEN. The
+check-then-delete race and the double-kill sweep are disclosed residual risks.
+
+No real QR, provider contact, reconciliation execution, live allowlist change,
+observe/send-test, production deployment, PR merge or automatic retry occurred.
