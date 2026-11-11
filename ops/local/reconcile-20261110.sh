@@ -353,7 +353,7 @@ read -r after_rows after_max after_reconciled <<<"${after_audit//|/ }"
 outcome=verification-failed
 [ "$driver_status" = 0 ] ||
   printf 'reconcile-20261110: driver_exit=%s\n' "$driver_status" >&2
-[ "$after" = "idle|8|$owner|$owner|$epoch|disconnected|8|false" ] || {
+[ "$after" = "idle|8||$owner|$epoch|disconnected|8|false" ] || {
   printf 'reconcile-20261110: FAIL unexpected post-state %s\n' "$after" >&2
   exit 1
 }
