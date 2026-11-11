@@ -34,16 +34,29 @@ param(
   [string]$FixturePath = '',
   # Rehearsal only: close the window after N seconds so an automated check can
   # verify display and cleanup without a person. Zero keeps the window open.
-  [int]$AutoCloseSeconds = 0
+  [int]$AutoCloseSeconds = 0,
+  # The attempt id from the launcher. Two launches of one attempt share it, so a
+  # duplicate start is recognised; a new attempt has a different id and the old
+  # viewer closes on the ownership change instead of showing the new QR.
+  [string]$RunId = '',
+  # Rehearsal only: place the window outside every desktop so a lifecycle test
+  # can run without flashing a QR at the Owner. A live attempt never sets this.
+  [switch]$Offscreen
 )
 
 $ErrorActionPreference = 'Stop'
 $stage = Join-Path $StageDirectory 'qr.png'
 $runFile = Join-Path $StageDirectory 'qr-viewer-run.txt'
+$ownerFile = Join-Path $StageDirectory 'qr-viewer-owner.txt'
+$stateLock = Join-Path $StageDirectory 'qr-viewer-state.lock'
 $log = Join-Path $StageDirectory 'qr-viewer.log'
 $guardScript = Join-Path $PSScriptRoot 'qr-viewer-guard.ps1'
 $maxQrBytes = 1MB
-$runId = [Guid]::NewGuid().ToString()
+if ([string]::IsNullOrWhiteSpace($RunId)) { $RunId = [Guid]::NewGuid().ToString() }
+if ($RunId -notmatch '^[A-Za-z0-9._-]{1,64}$') {
+  Write-Output 'qr-viewer: REFUSED invalid run id'
+  exit 4
+}
 
 # Base64 keeps this file ASCII so Windows PowerShell 5.1 cannot mis-decode the
 # Vietnamese instruction: "Quet ma bang ung dung Zalo A tren dien thoai."
@@ -94,13 +107,47 @@ function Get-StagePresent {
 
 # Never throw: report whether the staged copy is gone. Absence is only believed
 # after it holds for a confirmation window, so a transient miss cannot be
-# mistaken for a successful removal.
+# mistaken for a successful removal. The state lock is what closes the
+# check-then-delete race with the guard: the guard re-reads the run id and
+# deletes inside this exclusive handle, and this run writes its run id inside the
+# same handle before staging anything, so the guard's delete is ordered either
+# before this run's claim (nothing to delete) or after it (ownership changed).
+function Enter-StateLock {
+  for ($i = 0; $i -lt 40; $i++) {
+    try {
+      return [System.IO.File]::Open(
+        $stateLock,
+        [System.IO.FileMode]::OpenOrCreate,
+        [System.IO.FileAccess]::ReadWrite,
+        [System.IO.FileShare]::None
+      )
+    } catch {
+      Start-Sleep -Milliseconds 50
+    }
+  }
+  return $null
+}
+
+function Test-OwnerCurrent {
+  try {
+    if (-not [System.IO.File]::Exists($ownerFile)) { return $false }
+    return (([System.IO.File]::ReadAllText($ownerFile)).Trim() -eq $RunId)
+  } catch {
+    return $false
+  }
+}
+
 function Remove-Staged {
   for ($i = 0; $i -lt 10; $i++) {
-    $present = Get-StagePresent
-    if ($present -eq $false -and -not (Test-Path -LiteralPath $stage)) { return $true }
-    if ($present -eq $true) {
-      try { [System.IO.File]::Delete($stage) } catch {}
+    $lock = Enter-StateLock
+    try {
+      $present = Get-StagePresent
+      if ($present -eq $false -and -not (Test-Path -LiteralPath $stage)) { return $true }
+      if ($present -eq $true) {
+        try { [System.IO.File]::Delete($stage) } catch {}
+      }
+    } finally {
+      if ($lock) { try { $lock.Dispose() } catch {} }
     }
     [GC]::Collect()
     [GC]::WaitForPendingFinalizers()
@@ -113,18 +160,41 @@ function Remove-Staged {
   return $false
 }
 
-function Write-RunId {
+# Only the run that still owns the owner file clears it, inside the state lock,
+# so a newer attempt's ownership is never removed by an old viewer.
+function Clear-Owner {
+  $lock = Enter-StateLock
+  if (-not $lock) { return }
   try {
-    [System.IO.File]::WriteAllText($runFile, $runId, [Text.Encoding]::ASCII)
-  } catch {}
+    if ([System.IO.File]::Exists($ownerFile) -and
+        ([System.IO.File]::ReadAllText($ownerFile)).Trim() -eq $RunId) {
+      [System.IO.File]::Delete($ownerFile)
+    }
+  } catch {
+  } finally {
+    try { $lock.Dispose() } catch {}
+  }
+}
+
+function Write-RunId {
+  # Written inside the guard's state lock so the guard can never read the old
+  # id, then delete a copy this run staged after the read.
+  $lock = Enter-StateLock
+  try {
+    [System.IO.File]::WriteAllText($runFile, $RunId, [Text.Encoding]::ASCII)
+  } catch {} finally {
+    if ($lock) { try { $lock.Dispose() } catch {} }
+  }
 }
 
 function Clear-RunId {
   try {
-    if (-not [System.IO.File]::Exists($runFile)) { return }
-    if (([System.IO.File]::ReadAllText($runFile)).Trim() -ne $runId) { return }
-    [System.IO.File]::Delete($runFile)
+    if ([System.IO.File]::Exists($runFile) -and
+        ([System.IO.File]::ReadAllText($runFile)).Trim() -eq $RunId) {
+      [System.IO.File]::Delete($runFile)
+    }
   } catch {}
+  Clear-Owner
 }
 
 # The launcher treats an old run file as a stale copy left by a dead run. A live
@@ -195,6 +265,27 @@ if ($wslStage -notmatch '^/mnt/[a-z]/[A-Za-z0-9._/-]+$') {
   exit 4
 }
 
+# Ownership is claimed before anything is staged. The launcher writes the same
+# id, so a viewer that finds a different one was superseded before it started;
+# it exits without touching the newer run's files.
+$claimLock = Enter-StateLock
+try {
+  if (-not $claimLock) {
+    Write-Log 'viewer-refused state-lock-timeout'
+    exit 5
+  }
+  if ([System.IO.File]::Exists($ownerFile)) {
+    $owner = ([System.IO.File]::ReadAllText($ownerFile)).Trim()
+    if ($owner -and $owner -ne $RunId) {
+      Write-Log "viewer-refused superseded owner=$owner run=$RunId"
+      exit 0
+    }
+  }
+  [System.IO.File]::WriteAllText($ownerFile, $RunId, [Text.Encoding]::ASCII)
+} finally {
+  if ($claimLock) { try { $claimLock.Dispose() } catch {} }
+}
+
 # A previous run's QR must not survive, and a copy that cannot be removed must
 # stop this run before another one is staged.
 if (-not (Remove-Staged)) {
@@ -248,7 +339,7 @@ if (-not ($guardStarted -and $guardReady)) {
 # A window created in a non-interactive session (0) is invisible to the logged-on
 # Owner, so record the session and let the launcher refuse that outcome.
 $sessionId = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
-Write-Log "viewer-session id=$sessionId interactive=$([Environment]::UserInteractive)"
+Write-Log "viewer-session id=$sessionId interactive=$([Environment]::UserInteractive) run=$RunId"
 
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
 $found = $false
@@ -283,11 +374,11 @@ while (-not $found -and (Get-Date) -lt $deadline) {
 
 if (-not $found) {
   if (-not (Remove-Staged)) {
-    Write-Log 'viewer-timeout no-qr cleanup=FAILED'
+    Write-Log "viewer-timeout no-qr cleanup=FAILED run=$RunId"
     exit 5
   }
   Clear-RunId
-  Write-Log 'viewer-timeout no-qr'
+  Write-Log "viewer-timeout no-qr run=$RunId"
   exit 3
 }
 
@@ -301,7 +392,7 @@ if (-not (Test-Png $stage)) {
   exit 4
 }
 $sha = (Get-FileHash -LiteralPath $stage -Algorithm SHA256).Hash.ToLowerInvariant()
-Write-Log "viewer-staged sha256=$sha"
+Write-Log "viewer-staged sha256=$sha run=$runId"
 
 $image = $null
 $stream = $null
@@ -312,6 +403,62 @@ $form = $null
 $closeAt = if ($AutoCloseSeconds -gt 0) { (Get-Date).AddSeconds($AutoCloseSeconds) } else { $null }
 $script:displayDeadline = $null
 $script:cleanupDone = $false
+$script:currentSha = $sha
+$script:lastRefreshState = ''
+$refresh = Join-Path $StageDirectory 'qr-refresh.tmp'
+$refreshWsl = ConvertTo-WslPath $refresh
+if ($refreshWsl -notmatch '^/mnt/[a-z]/[A-Za-z0-9._/-]+$') {
+  Write-Log 'viewer-refused invalid-refresh-path'
+  exit 4
+}
+
+# A connector that rewrites its QR during one attempt must update this window in
+# place, never open another. The new bytes are written to a same-volume temp,
+# validated and decoded before the window swaps to them, so a half-written source
+# never reaches the Owner and the old image stays until the new one is ready.
+function Update-FromSource {
+  & wsl.exe -d $WslDistribution -u root -- test -f $SourcePath 2>$null
+  if ($LASTEXITCODE -ne 0) { return 'absent' }
+  Remove-Item -LiteralPath $refresh -Force -ErrorAction SilentlyContinue
+  & wsl.exe -d $WslDistribution -u root -- cp $SourcePath $refreshWsl 2>$null
+  if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $refresh)) {
+    Remove-Item -LiteralPath $refresh -Force -ErrorAction SilentlyContinue
+    return 'unreadable'
+  }
+  if (-not (Test-Png $refresh)) {
+    Remove-Item -LiteralPath $refresh -Force -ErrorAction SilentlyContinue
+    return 'invalid'
+  }
+  $newSha = (Get-FileHash -LiteralPath $refresh -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($newSha -eq $script:currentSha) {
+    Remove-Item -LiteralPath $refresh -Force -ErrorAction SilentlyContinue
+    return 'unchanged'
+  }
+  $bytes = [System.IO.File]::ReadAllBytes($refresh)
+  $newStream = New-Object System.IO.MemoryStream
+  $newStream.Write($bytes, 0, $bytes.Length)
+  $newStream.Position = 0
+  $newImage = $null
+  try {
+    $newImage = [System.Drawing.Image]::FromStream($newStream)
+  } catch {
+    $newStream.Dispose()
+    Remove-Item -LiteralPath $refresh -Force -ErrorAction SilentlyContinue
+    return 'undecodable'
+  }
+  [System.IO.File]::Copy($refresh, $stage, $true)
+  Remove-Item -LiteralPath $refresh -Force -ErrorAction SilentlyContinue
+  $oldImage = $script:currentImage
+  $script:currentImage = $newImage
+  if ($picture) { $picture.Image = $newImage }
+  if ($oldImage) { try { $oldImage.Dispose() } catch {} }
+  if ($script:stream) { try { $script:stream.Dispose() } catch {} }
+  $script:image = $newImage
+  $script:stream = $newStream
+  $script:currentSha = $newSha
+  Write-Log "viewer-refreshed sha256=$newSha run=$RunId"
+  return 'refreshed'
+}
 
 # The connector owns its private view file and clears it on success, failure
 # and expiry, so the viewer only ever removes its own staged copy. Every step
@@ -325,9 +472,9 @@ function Invoke-Cleanup([string]$where) {
   try { if ($picture) { $picture.Image = $null } } catch {}
   try { if ($image) { $image.Dispose() } } catch {}
   if (Remove-Staged) {
-    Write-Log "viewer-$where staged-copy-removed"
+    Write-Log "viewer-$where staged-copy-removed run=$RunId"
   } else {
-    Write-Log "viewer-$where staged-copy-remains"
+    Write-Log "viewer-$where staged-copy-remains run=$RunId"
   }
 }
 
@@ -354,6 +501,7 @@ try {
     Write-Log 'viewer-refused undecodable-png'
     exit 4
   }
+  $script:currentImage = $image
 
   $form = New-Object System.Windows.Forms.Form
   $form.Text = 'Zalo pilot - QR'
@@ -368,6 +516,14 @@ try {
   # and an explicit foreground activation when it is shown.
   $form.WindowState = 'Normal'
   $form.ShowInTaskbar = $true
+  if ($Offscreen) {
+    # Rehearsal only: far outside the virtual desktop, no taskbar entry and no
+    # topmost activation, so the lifecycle test never flashes a QR.
+    $form.StartPosition = 'Manual'
+    $form.Location = New-Object System.Drawing.Point(-32000, -32000)
+    $form.ShowInTaskbar = $false
+    $form.TopMost = $false
+  }
 
   $label = New-Object System.Windows.Forms.Label
   $label.Text = $instruction
@@ -399,17 +555,29 @@ try {
 
   $timer.Add_Tick({
     Touch-RunId
+    # A newer attempt owns the stage directory. Close before touching the source,
+    # so this viewer can never display a new session's QR.
+    if (-not (Test-OwnerCurrent)) {
+      Write-Log "viewer-close superseded run=$RunId"
+      try { $timer.Stop() } catch {}
+      try { $form.Close() } catch {}
+      return
+    }
     if (-not $FixturePath) {
-      & wsl.exe -d $WslDistribution -u root -- test -f $SourcePath 2>$null
-      if ($LASTEXITCODE -ne 0) {
-        Write-Log 'viewer-close source-cleared'
+      $state = Update-FromSource
+      if ($state -eq 'absent') {
+        Write-Log "viewer-close source-cleared run=$RunId"
         try { $timer.Stop() } catch {}
         try { $form.Close() } catch {}
         return
       }
+      if ($state -ne 'unchanged' -and $state -ne 'refreshed' -and $state -ne $script:lastRefreshState) {
+        Write-Log "viewer-refresh-refused $state"
+      }
+      $script:lastRefreshState = $state
     }
     if ($closeAt -and (Get-Date) -ge $closeAt) {
-      Write-Log 'viewer-autoclose rehearsal'
+      Write-Log "viewer-autoclose rehearsal run=$RunId"
       try { $timer.Stop() } catch {}
       try { $form.Close() } catch {}
       return
@@ -417,7 +585,7 @@ try {
     # Independent of the connector: a killed or hung connector never clears its
     # source, so the window bounds itself and the copy is removed regardless.
     if ($script:displayDeadline -and (Get-Date) -ge $script:displayDeadline) {
-      Write-Log 'viewer-close display-timeout'
+      Write-Log "viewer-close display-timeout run=$RunId"
       try { $timer.Stop() } catch {}
       try { $form.Close() } catch {}
     }
@@ -429,7 +597,7 @@ try {
     $timer.Start()
     $script:displayDeadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $shownSession = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
-    Write-Log "viewer-shown handle=$($form.Handle) session=$shownSession topmost=$($form.TopMost) visible=$($form.Visible) image=$($image.Width)x$($image.Height)"
+    Write-Log "viewer-shown handle=$($form.Handle) session=$shownSession topmost=$($form.TopMost) visible=$($form.Visible) offscreen=$([bool]$Offscreen) image=$($image.Width)x$($image.Height) run=$RunId"
   })
   $form.Add_FormClosing({
     try { Invoke-Cleanup 'form-closing' } catch { Write-Log 'viewer-form-closing cleanup-error' }
@@ -441,11 +609,11 @@ try {
   try { if ($stream) { $stream.Dispose() } } catch {}
   if (Remove-Staged) {
     Clear-RunId
-    Write-Log 'viewer-closed cleanup=final'
+    Write-Log "viewer-closed cleanup=final run=$RunId"
   } else {
     # A QR left on disk must never be reported as a clean exit. The guard is
     # still the last resort; it logs its own outcome.
-    Write-Log 'viewer-closed cleanup=FAILED staged-copy-remains'
+    Write-Log "viewer-closed cleanup=FAILED staged-copy-remains run=$RunId"
     exit 5
   }
 }

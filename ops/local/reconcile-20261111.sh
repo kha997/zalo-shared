@@ -147,46 +147,37 @@ stale=$(docker ps -a --format '{{.Names}}' | grep -E 'connector|bootstrap|'"$one
 hostproc=$(pgrep -af 'zalo-shared/(dist|connector)|pilot-bootstrap' || true)
 [ -z "$hostproc" ] || fail "a connector process is running: $hostproc" 3
 
-# The gateway log ends with the two tunnels of the 2026-11-11 attempt, so the
-# binding is "nothing after the incident", not "nothing ever": the attempt was
-# authorized, and a restart to clear the log is not. Any tunnel or denial with a
-# timestamp after the fence means contact this mission did not authorise.
-fence_ts=2026-11-11T00:54:44.993Z
+# The authorized 2026-11-11 two-hop deployment recreated the gateway once, which
+# reset its log. The pre-deployment log (the two tunnels of the authorized
+# attempt and four pre-incident synthetic denials) is preserved in the
+# deployment evidence; it cannot be re-read from the container. The binding is
+# therefore "nothing since the deployment baseline": the same container, image
+# and creation time, and a byte-identical log. A restart, a recreation or any
+# tunnel changes the log and fails here.
+baseline_file=$state/reconcile-gateway-baseline.json
+[ -f "$baseline_file" ] || fail "the gateway deployment baseline is missing" 3
+baseline=$(python3 - "$baseline_file" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+print("|".join(str(d.get(k, "")) for k in (
+    "containerId", "image", "createdAt", "logSha256")))
+PY
+)
+IFS='|' read -r base_id base_image base_created base_log <<<"$baseline"
+for v in "$base_id" "$base_image" "$base_created" "$base_log"; do
+  [ -n "$v" ] || fail "the gateway deployment baseline is incomplete" 3
+done
 [ "$(docker inspect zalo-shared-pilot-egress-gateway-1 --format '{{.State.Status}} {{.State.Health.Status}}')" = "running healthy" ] ||
   fail "the egress gateway is not running healthy" 3
+gateway_id=$(docker inspect zalo-shared-pilot-egress-gateway-1 --format '{{.Id}}')
+gateway_image=$(docker inspect zalo-shared-pilot-egress-gateway-1 --format '{{.Image}}')
 gateway_created=$(docker inspect zalo-shared-pilot-egress-gateway-1 --format '{{.Created}}')
-[[ "$gateway_created" < "$fence_ts" ]] ||
-  fail "the gateway container was created at $gateway_created, at or after the incident fence" 3
-gateway_counts=$(docker logs zalo-shared-pilot-egress-gateway-1 2>&1 | python3 -c '
-import json, sys
-fence = "2026-11-11T00:54:44.993Z"
-allow = deny = after = 0
-for line in sys.stdin:
-    try:
-        event = json.loads(line)
-    except ValueError:
-        continue
-    name = str(event.get("event", ""))
-    if name in ("sni_allow", "sni_deny") or name.startswith("startup"):
-        # A line with no timestamp cannot be placed before the fence, so it
-        # counts as after it. A gateway restart erases the pre-incident history,
-        # which is why a startup event after the fence is itself a failure.
-        ts = str(event.get("ts", ""))
-        if not ts or ts > fence:
-            after += 1
-    if name == "sni_allow":
-        allow += 1
-    elif name == "sni_deny":
-        deny += 1
-print(f"{allow}|{deny}|{after}")
-')
-IFS='|' read -r tunnels_allow tunnels_deny tunnels_after <<<"$gateway_counts"
-# The four pre-incident denials are the 2026-11-09 synthetic boundary probes for
-# `denied-target.test`/`pilot-target.test`; they are expected history, not
-# provider contact.
-[ "$tunnels_after" = 0 ] || fail "the gateway logged traffic or a restart after the incident fence" 3
-gateway_last=$(docker logs zalo-shared-pilot-egress-gateway-1 2>&1 | tail -1)
-say "gateway=running healthy created=$gateway_created tunnels=$tunnels_allow denials=$tunnels_deny after_fence=0"
+[ "$gateway_id" = "$base_id" ] || fail "the gateway container was recreated since the deployment baseline" 3
+[ "$gateway_image" = "$base_image" ] || fail "the gateway image changed since the deployment baseline" 3
+[ "$gateway_created" = "$base_created" ] || fail "the gateway creation time moved since the deployment baseline" 3
+gateway_log_sha=$(docker logs zalo-shared-pilot-egress-gateway-1 2>&1 | sha256sum | cut -d' ' -f1)
+[ "$gateway_log_sha" = "$base_log" ] || fail "the gateway log changed since the deployment baseline" 3
+say "gateway=running healthy created=$gateway_created log_sha=$gateway_log_sha"
 
 # --- private filesystem ------------------------------------------------------
 sudo -n test ! -e "$base/pilot/session.enc" || fail "a session file exists" 3
@@ -375,7 +366,7 @@ docker rm -f "$one_shot" >/dev/null 2>&1 || true
 say "driver_exit=$driver_status result=$result"
 
 # --- gateway unchanged, no connector ---------------------------------------
-[ "$(docker logs zalo-shared-pilot-egress-gateway-1 2>&1 | tail -1)" = "$gateway_last" ] ||
+[ "$(docker logs zalo-shared-pilot-egress-gateway-1 2>&1 | sha256sum | cut -d' ' -f1)" = "$gateway_log_sha" ] ||
   fail "the gateway log changed during the run" 3
 stale=$(docker ps -a --format '{{.Names}}' | grep -E 'connector|bootstrap|'"$one_shot" || true)
 [ -z "$stale" ] || fail "a connector or worker container appeared: $stale" 3
