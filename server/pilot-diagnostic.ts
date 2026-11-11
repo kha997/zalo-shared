@@ -23,18 +23,23 @@ export type DiagnosticRequest =
 /**
  * Why the policy refused. Each value names one reviewed failure shape:
  *
- *   unexpected-redirect   a 3xx where no redirect is permitted at all
- *   unexpected-location   checkSession answered with a Location for another host
- *   redirect-after-hop    the admitted hop itself answered with another 3xx
+ *   unexpected-redirect   a redirect where no redirect is permitted at all
+ *                         (a non-checkSession 3xx, or any non-3xx Location)
+ *   unexpected-location   checkSession answered with a Location for a host
+ *                         other than jr.zaloapp.com
+ *   second-hop-denied     the authorized hop-1 response named a well-formed
+ *                         Location for a host other than jr.chat.zalo.me
+ *   redirect-after-hop    a third redirect after the two admitted hops
  *   direct-redirect-host  the redirect host was requested with no hop at all
  *   stale-hop             a hop was issued but this request cannot use it
- *   malformed-redirect    the 3xx carries no usable Location
+ *   malformed-redirect    the response carries no usable Location
  *   invalid-target        the request URL itself failed validation
  *   not-admitted          a host outside the reviewed allowlist was requested
  */
 export const DIAGNOSTIC_REDIRECT_CLASSES = [
   "unexpected-redirect",
   "unexpected-location",
+  "second-hop-denied",
   "redirect-after-hop",
   "direct-redirect-host",
   "stale-hop",
@@ -48,8 +53,8 @@ export type DiagnosticRedirect =
 /**
  * The only redirect detail that may be written. `source` is the host that
  * answered; `destination` is a safe hostname or the closed token `invalid`
- * when the Location could not be reduced to one. `hops` counts redirect
- * requests already authorized for this bootstrap (0 or 1 in practice).
+ * when the Location could not be reduced to one. `hops` counts admitted
+ * redirect requests for this bootstrap (0, 1 or 2 in the reviewed chain).
  */
 export interface DiagnosticDetail {
   request: DiagnosticRequest;
@@ -63,7 +68,7 @@ export const DIAGNOSTIC_INVALID_HOST = "invalid";
 const DIAGNOSTIC_DETAIL_KEYS = "destination,hops,redirect,request,source";
 const MAX_HOST_LENGTH = 253;
 const MAX_LOCATION_LENGTH = 2048;
-const MAX_HOPS = 8;
+const MAX_HOPS = 2;
 const HOST_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const IPV4 = /^\d+(?:\.\d+){3}$/;
 const CORRELATION_ID =

@@ -9,12 +9,16 @@ fixture=''
 autoclose=0
 timeout=300
 stage='C:\Users\Admin\pilot-private-qr'
+source=''
 while [ $# -gt 0 ]; do
   case "$1" in
     --fixture) fixture=${2:?}; shift 2 ;;
     --autoclose) autoclose=${2:?}; shift 2 ;;
     --timeout) timeout=${2:?}; shift 2 ;;
     --stage) stage=${2:?}; shift 2 ;;
+    # Rehearsal only: watch a synthetic WSL file instead of the private view
+    # directory, so the source-cleared close path can be exercised.
+    --source) source=${2:?}; shift 2 ;;
     *) printf 'qr-launcher: REFUSED unknown argument %s\n' "$1" >&2; exit 2 ;;
   esac
 done
@@ -33,13 +37,41 @@ stage_wsl=$(wslpath -u "$stage" 2>/dev/null || true)
 case "$stage_wsl" in /mnt/[a-z]/*) ;; *) fail "the stage directory is not on a Windows drive" ;; esac
 log="$stage_wsl/qr-viewer.log"
 mkdir -p "$stage_wsl"
+
+# Serialise launches so two starts cannot sweep or stage at the same time. The
+# lock covers the launch window only; a live viewer is recognised afterwards by
+# its fresh run file (qr-viewer.ps1 heartbeats it every poll).
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$stage_wsl/qr-viewer.lock"
+  flock -w 30 9 || fail "another viewer launch is in progress"
+fi
+
+# A copy left by a viewer that was killed with its guard (logoff, power loss)
+# must not sit on disk until someone notices. Sweep it before starting a new
+# run, unless a fresh run file says a viewer may still own it.
+run_file="$stage_wsl/qr-viewer-run.txt"
+if [ -f "$stage_wsl/qr.png" ]; then
+  if [ -f "$run_file" ] && [ -n "$(find "$run_file" -mmin -1 -print -quit 2>/dev/null)" ]; then
+    say "a recent run file is present; leaving its staged copy to that run"
+  else
+    rm -f "$stage_wsl/qr.png"
+    printf 'qr-launcher: swept a stale staged copy\n' >&2
+  fi
+fi
+
 before=0
 [ -f "$log" ] && before=$(wc -l <"$log")
 
-args=(-NoProfile -ExecutionPolicy Bypass -File "$script" -TimeoutSeconds "$timeout")
+args=(-NoProfile -ExecutionPolicy Bypass -File "$script" -TimeoutSeconds "$timeout" -StageDirectory "$stage")
 if [ -n "$fixture" ]; then
   [ -f "$fixture" ] || fail "the fixture does not exist: $fixture"
   args+=(-FixturePath "$(wslpath -w "$fixture")")
+fi
+if [ -n "$source" ]; then
+  # The viewer hands this path to `wsl.exe` as a root shell argument.
+  case "$source" in /*) ;; *) fail "the source must be an absolute WSL path" ;; esac
+  case "$source" in *[!A-Za-z0-9._/-]*) fail "the source contains characters the viewer refuses" ;; esac
+  args+=(-SourcePath "$source")
 fi
 [ "$autoclose" -gt 0 ] && args+=(-AutoCloseSeconds "$autoclose")
 

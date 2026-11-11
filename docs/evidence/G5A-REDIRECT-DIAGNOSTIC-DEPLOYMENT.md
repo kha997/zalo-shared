@@ -1,5 +1,11 @@
 # G5-A redirect diagnostic remediation
 
+> **Superseded 2026-11-11.** The window cleanup was replaced by a tri-state
+> presence check plus a termination guard, and the diagnostic hop cap was
+> lowered from 8 to 2. The SHA-256 at §2.1 is the 2026-11-07 sync reference and
+> no longer matches the repository script. Current state:
+> [G5A-TWO-HOP-REMEDIATION-2026-11-11.md](G5A-TWO-HOP-REMEDIATION-2026-11-11.md).
+
 **Date:** 2026-11-07
 **Authorization:** `DIAGNOSTIC IMPLEMENTATION AND OFFLINE DEPLOYMENT ONLY`
 **Verdict:** `G5A_DIAGNOSTIC_DEPLOYMENT_BLOCKED`

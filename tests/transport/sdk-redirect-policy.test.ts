@@ -11,15 +11,16 @@ import {
 } from "../../adapters/zalo/redirect-policy.js";
 
 /**
- * Offline proof that the SDK fetch policy admits exactly one redirect hop and
- * nothing else. The real pinned `loginQR` drives the policy, so the assertions
- * cover the code path the connector actually runs; the base fetch is synthetic
- * and no socket, DNS query or provider contact happens.
+ * Offline proof that the SDK fetch policy admits exactly the observed two-hop
+ * chain and nothing else. The real pinned `loginQR` drives the policy, so the
+ * assertions cover the code path the connector actually runs; the base fetch is
+ * synthetic and no socket, DNS query or provider contact happens.
  *
- * The admitted destination is the one the provider named in the authorized
- * 2026-11-09 attempt (jr.zaloapp.com). The earlier chat.zalo.me hypothesis is
- * kept in the refusal set, so that host cannot become followable again by
- * accident.
+ * The admitted chain is the one the provider produced on 2026-11-11:
+ * `id.zalo.me -> jr.zaloapp.com -> jr.chat.zalo.me`. The earlier chat.zalo.me
+ * hypothesis stays in the refusal set, so that host cannot become followable
+ * again by accident, and `jr.chat.zalo.me` is admitted only as the reviewed
+ * static endpoint and as hop 2, never as a new hostname.
  */
 
 const sdkRoot = resolve(process.cwd(), "node_modules/zca-js");
@@ -27,6 +28,7 @@ const loginQRModule = pathToFileURL(
   resolve(sdkRoot, "dist/apis/loginQR.js"),
 ).href;
 const REDIRECT = "https://jr.zaloapp.com/index.html";
+const HOP2 = "https://jr.chat.zalo.me/jr/login?continue=synthetic";
 const PREVIOUS_HYPOTHESIS = "https://chat.zalo.me/index.html";
 const REVIEWED_HOSTS = [
   "id.zalo.me",
@@ -62,6 +64,7 @@ function redirect(location: string) {
 type Session = {
   checksession: () => Response;
   redirectTarget?: () => Response;
+  chainTarget?: () => Response;
 };
 
 function fixture(session: Session) {
@@ -101,11 +104,13 @@ function fixture(session: Session) {
       if (session.redirectTarget) return session.redirectTarget();
       return html("<html>synthetic redirect target</html>");
     }
-    if (parsed.origin === "https://jr.chat.zalo.me")
+    if (parsed.origin === "https://jr.chat.zalo.me") {
+      if (session.chainTarget) return session.chainTarget();
       return json({
         error_code: 0,
         data: { logged: true, info: { uid: "synthetic" } },
       });
+    }
     throw new Error(`unexpected destination ${parsed.origin}`);
   };
   return { base, calls };
@@ -292,6 +297,37 @@ test("a checkSession-shaped 3xx with a different continue grants no hop", async 
   }
 });
 
+test("only the exact reviewed checkSession request can issue the first hop", async () => {
+  for (const [url, init] of [
+    [`${CHECK_SESSION_URL}&extra=1`, undefined],
+    [CHECK_SESSION_URL, { method: "POST", headers: {} }],
+    [CHECK_SESSION_URL, { method: "PUT" }],
+    [CHECK_SESSION_URL, { method: 7 }],
+  ] as const) {
+    const calls: string[] = [];
+    const base = async (input: unknown) => {
+      calls.push(String(input));
+      return redirect(REDIRECT);
+    };
+    const policy = createBootstrapFetch({
+      fetch: base,
+      egressHosts: REVIEWED_HOSTS,
+    });
+    await assert.rejects(
+      policy(url, init),
+      (error: any) => error?.cause?.code === REDIRECT_DENIED,
+      `${url} ${JSON.stringify(init)}`,
+    );
+    // No hop was issued, so the redirect host stays unreachable.
+    await assert.rejects(
+      policy(REDIRECT),
+      (error: any) => error?.cause?.code === REDIRECT_DENIED,
+      `${url} ${JSON.stringify(init)}`,
+    );
+    assert.deepEqual(calls, [url]);
+  }
+});
+
 test("a stale hop is cleared by an unrelated provider request", async () => {
   const { base } = fixture({
     checksession: () => redirect(REDIRECT),
@@ -458,6 +494,27 @@ test("without the host in the runtime allowlist the same redirect fails closed",
   );
 });
 
+test("a withheld redirect host is reported as not-admitted, not as a stale hop", async () => {
+  const { base, calls } = fixture({ checksession: () => redirect(REDIRECT) });
+  const policy = createBootstrapFetch({
+    fetch: base,
+    egressHosts: HOSTS_WITHOUT_REDIRECT,
+  });
+  assert.equal((await policy(CHECK_SESSION_URL)).status, 302);
+  await assert.rejects(
+    policy(REDIRECT),
+    (error: any) => error?.cause?.code === REDIRECT_DENIED,
+  );
+  assert.deepEqual(policy.denial, {
+    request: "redirect-follow",
+    redirect: "not-admitted",
+    source: null,
+    destination: "jr.zaloapp.com",
+    hops: 0,
+  });
+  assert.deepEqual(calls, [CHECK_SESSION_URL]);
+});
+
 test("the previously assumed chat.zalo.me redirect is now refused", async () => {
   const outcome = await run(REVIEWED_HOSTS, {
     checksession: () => redirect(PREVIOUS_HYPOTHESIS),
@@ -485,6 +542,9 @@ test("a lookalike or downgraded Location fails before the socket", async () => {
       checksession: () => redirect(location),
     });
     loginFailed(outcome);
+    // The refusal is the last thing that happens: no request follows it,
+    // whatever host the refused Location named.
+    assert.equal(outcome.calls.at(-1), CHECK_SESSION_URL, location);
     assert.ok(
       outcome.calls.every((url) => !url.startsWith("https://jr.zaloapp.com.")),
       outcome.calls.join("\n"),
@@ -532,6 +592,75 @@ test("a checkout to another host after the hop is refused", async () => {
   });
   loginFailed(outcome);
   assert.ok(!outcome.calls.includes("https://other.example/next"));
+});
+
+test("the observed two-hop chain resolves the real SDK login", async () => {
+  const outcome = await run(REVIEWED_HOSTS, {
+    checksession: () => redirect(REDIRECT),
+    redirectTarget: () => redirect(HOP2),
+  });
+  assert.ok("value" in outcome, String(outcome.error));
+  assert.equal(outcome.value.userInfo.uid, "synthetic");
+  const start = outcome.calls.indexOf(CHECK_SESSION_URL);
+  assert.ok(start >= 0, outcome.calls.join("\n"));
+  assert.deepEqual(outcome.calls.slice(start, start + 3), [
+    CHECK_SESSION_URL,
+    REDIRECT,
+    HOP2,
+  ]);
+  assert.equal(outcome.calls.filter((url) => url === HOP2).length, 1);
+  assert.ok(outcome.calls.includes("https://jr.chat.zalo.me/jr/userinfo"));
+});
+
+test("without the hop-2 host in the runtime allowlist the chain fails closed", async () => {
+  const withoutChain = REVIEWED_HOSTS.filter((h) => h !== "jr.chat.zalo.me");
+  const outcome = await run(withoutChain, {
+    checksession: () => redirect(REDIRECT),
+    redirectTarget: () => redirect(HOP2),
+  });
+  loginFailed(outcome);
+  assert.ok(!outcome.calls.includes(HOP2), outcome.calls.join("\n"));
+});
+
+test("a third redirect after the admitted chain fails closed", async () => {
+  for (const location of [
+    HOP2,
+    REDIRECT,
+    PREVIOUS_HYPOTHESIS,
+    "https://other.example/next",
+  ]) {
+    const outcome = await run(REVIEWED_HOSTS, {
+      checksession: () => redirect(REDIRECT),
+      redirectTarget: () => redirect(HOP2),
+      chainTarget: () => redirect(location),
+    });
+    loginFailed(outcome);
+    assert.equal(outcome.calls.filter((url) => url === HOP2).length, 1, location);
+    // Nothing past the hop-2 URL is ever requested.
+    assert.deepEqual(
+      outcome.calls.slice(outcome.calls.indexOf(HOP2) + 1),
+      [],
+      location,
+    );
+  }
+});
+
+test("hop 2 cannot be reached without the first hop", async () => {
+  const outcome = await run(REVIEWED_HOSTS, {
+    checksession: () => redirect(HOP2),
+  });
+  loginFailed(outcome);
+  assert.ok(!outcome.calls.includes(HOP2), outcome.calls.join("\n"));
+  assert.ok(!outcome.calls.includes(REDIRECT), outcome.calls.join("\n"));
+});
+
+test("a loop back to the first hop after hop 1 is refused", async () => {
+  const outcome = await run(REVIEWED_HOSTS, {
+    checksession: () => redirect(REDIRECT),
+    redirectTarget: () => redirect(REDIRECT),
+  });
+  loginFailed(outcome);
+  assert.equal(outcome.calls.filter((url) => url === REDIRECT).length, 1);
 });
 
 test("a session that needs no redirect still resolves", async () => {

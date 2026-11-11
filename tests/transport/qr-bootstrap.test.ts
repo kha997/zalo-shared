@@ -370,7 +370,7 @@ test("successful bootstrap shows a bounded QR, confirms the UID and writes only 
   assert.equal(state.stops, 1);
 });
 
-test("the bootstrap installs the one-hop fetch policy on the SDK", async () => {
+test("the bootstrap installs the chain-bound fetch policy on the SDK", async () => {
   const state = counters();
   const calls: string[] = [];
   const base = async (url: string) => {

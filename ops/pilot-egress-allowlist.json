@@ -9,13 +9,17 @@
     "Hosts listed under `pending` are NOT admitted and must not appear in any",
     "runtime configuration. Adding a host means moving it into `admitted` with",
     "evidence, then re-running the checker. `jr.zaloapp.com` is admitted as a",
-    "`redirect-target`: it is reachable only as the single validated Location of",
+    "`redirect-target`: it is reachable only as the first validated Location of",
     "the exact checkSession request (adapters/zalo/redirect-policy.ts), never as",
-    "a direct request target, and only for the bootstrap stage.",
+    "a direct request target, and only for the bootstrap stage. The observed",
+    "2026-11-11 chain continues to `jr.chat.zalo.me`, which is already an",
+    "admitted confirmed-static endpoint; hop 2 is admitted only from the",
+    "authorized hop-1 response and adds no hostname.",
     "All confirmed-static hostnames are derived from the shipped zca-js@2.2.0",
     "artifacts. The one redirect-target is the destination observed from the",
     "authorized 2026-11-09 attempt, not a guess; see",
-    "docs/evidence/G5A-REDIRECT-REMEDIATION-2026-11-09.md."
+    "docs/evidence/G5A-REDIRECT-REMEDIATION-2026-11-09.md and",
+    "docs/evidence/G5A-TWO-HOP-REMEDIATION-2026-11-11.md."
   ],
   "version": 1,
   "sdk": {
@@ -48,7 +52,7 @@
       "host": "jr.chat.zalo.me",
       "classification": "confirmed-static",
       "stages": ["bootstrap"],
-      "evidence": "zca-js@2.2.0 dist/apis/loginQR.js:215 (/jr/userinfo), reached from qr-bootstrap.ts loginQR()"
+      "evidence": "zca-js@2.2.0 dist/apis/loginQR.js:215 (/jr/userinfo), reached from qr-bootstrap.ts loginQR(). It is also the hop-2 destination of the observed 2026-11-11 chain (id.zalo.me -> jr.zaloapp.com -> jr.chat.zalo.me); hop 2 adds no hostname and is authorized only from the exact hop-1 response (adapters/zalo/redirect-policy.ts)."
     },
     {
       "host": "jr.zaloapp.com",
@@ -57,10 +61,11 @@
       "port": 443,
       "redirect": {
         "from": "https://id.zalo.me/account/checksession?continue=https%3A%2F%2Fchat.zalo.me%2Findex.html",
-        "maxHops": 1,
-        "rule": "absolute https only; exact host; port empty or 443; no userinfo, IP literal, trailing dot or backslash; never a direct request target; enforced in adapters/zalo/redirect-policy.ts before the socket"
+        "maxHops": 2,
+        "chain": ["jr.zaloapp.com", "jr.chat.zalo.me"],
+        "rule": "absolute https only; exact host per hop; port empty or 443; no userinfo, IP literal, trailing dot or backslash; hop 1 only from the exact checkSession response; hop 2 only from the authorized hop-1 response; single use, chain-bound; any third redirect, loop or reused hop fails closed; jr.zaloapp.com is never a direct request target; enforced in adapters/zalo/redirect-policy.ts before the socket"
       },
-      "evidence": "Observed 2026-11-09: after the Owner scanned the authorized QR, the checkSession response carried a Location for jr.zaloapp.com; the fetch policy refused it as request=check-session, redirect=unexpected-location, source=id.zalo.me, destination=jr.zaloapp.com, hops=0 (docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-09.md). The path and query of that Location are not recorded, so the admission is host-level. zca-js@2.2.0 dist/utils.js:289-298 follows any Location it receives after dist/apis/loginQR.js:194-211 requests checkSession with continue=https://chat.zalo.me/index.html. Independent attribution (crt.sh, queried 2026-11-09): zaloapp.com is covered by a current DigiCert '*.zaloapp.com' wildcard (valid 2026-01-05 to 2027-01-07), and the same CT set carries hundreds of Zalo service names (accounts.chat.zaloapp.com, accounts.page.zaloapp.com, ...); no explicit jr.zaloapp.com leaf appears because the wildcard covers it. TLS verification stays end-to-end at the connector, so an untrusted chain for this host fails closed. Details and residual limits in docs/evidence/G5A-REDIRECT-REMEDIATION-2026-11-09.md"
+      "evidence": "Observed 2026-11-09: after the Owner scanned the authorized QR, the checkSession response carried a Location for jr.zaloapp.com; the fetch policy refused it as request=check-session, redirect=unexpected-location, source=id.zalo.me, destination=jr.zaloapp.com, hops=0 (docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-09.md). Observed again 2026-11-11: with that hop admitted, this host answered with a further Location and the one-hop policy refused it as redirect=redirect-after-hop, source=jr.zaloapp.com, hops=1 (docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-11.md); the next host is the already-admitted jr.chat.zalo.me. The paths and queries of both Locations are not recorded, so the admission is host-level. zca-js@2.2.0 dist/utils.js:289-298 follows any Location it receives after dist/apis/loginQR.js:194-211 requests checkSession with continue=https://chat.zalo.me/index.html. Independent attribution (crt.sh, queried 2026-11-09): zaloapp.com is covered by a current DigiCert '*.zaloapp.com' wildcard (valid 2026-01-05 to 2027-01-07), and the same CT set carries hundreds of Zalo service names (accounts.chat.zaloapp.com, accounts.page.zaloapp.com, ...); no explicit jr.zaloapp.com leaf appears because the wildcard covers it. TLS verification stays end-to-end at the connector, so an untrusted chain for this host fails closed. Details and residual limits in docs/evidence/G5A-REDIRECT-REMEDIATION-2026-11-09.md and docs/evidence/G5A-TWO-HOP-REMEDIATION-2026-11-11.md"
     }
   ],
   "pending": [
@@ -95,7 +100,7 @@
     },
     {
       "classification": "redirect-target",
-      "reason": "zca-js@2.2.0 dist/utils.js:289-298 follows any Location response header with request(ctx, redirectURL, ...). A provider redirect can therefore name a host that is not in this file. The gateway allowlist and the connector's internal-network topology both refuse it: an unpinned name has no route and no external resolver. Redirect targets must be admitted here before they can be followed. jr.zaloapp.com is the only target admitted so far (above); every other target stays in this class and is refused by adapters/zalo/redirect-policy.ts as well as by the network boundary.",
+      "reason": "zca-js@2.2.0 dist/utils.js:289-298 follows any Location response header with request(ctx, redirectURL, ...). A provider redirect can therefore name a host that is not in this file. The gateway allowlist and the connector's internal-network topology both refuse it: an unpinned name has no route and no external resolver. Redirect targets must be admitted here before they can be followed. The only admitted chain is jr.zaloapp.com -> jr.chat.zalo.me (above); every other target stays in this class and is refused by adapters/zalo/redirect-policy.ts as well as by the network boundary.",
       "stages": ["bootstrap", "observe", "send-test"]
     }
   ],

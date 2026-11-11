@@ -62,12 +62,16 @@ for entry in allow["admitted"]:
     assert entry["evidence"], entry
     assert entry["stages"], entry
     if entry["classification"] == "redirect-target":
-        # A redirect target is admitted for the bootstrap hop only, never for a
+        # A redirect target is admitted for the bootstrap chain only, never for a
         # direct request and never on another port.
         assert entry["stages"] == ["bootstrap"], entry
         assert entry["port"] == gw["port"], entry
-        assert entry["redirect"]["maxHops"] == 1, entry
+        assert entry["redirect"]["maxHops"] == 2, entry
+        assert entry["redirect"]["chain"] == ["jr.zaloapp.com", "jr.chat.zalo.me"], entry
         assert entry["redirect"]["from"].startswith("https://"), entry
+        # Every chain host must already be admitted; the chain adds no hostname.
+        for hop in entry["redirect"]["chain"]:
+            assert hop in admitted, hop
 for section in ("pending", "excluded"):
     for entry in allow[section]:
         host = entry.get("host")
@@ -76,14 +80,17 @@ for section in ("pending", "excluded"):
 ok(f"allowlist v{allow['version']}: {len(hosts)} admitted, "
    f"{len(allow['pending'])} pending classes, {len(allow['excluded'])} excluded")
 
-# The SDK fetch policy must name the same single hop, or the reviewed policy and
-# the code that enforces it have drifted apart.
+# The SDK fetch policy must name the same chain, or the reviewed policy and the
+# code that enforces it have drifted apart.
 policy = open("adapters/zalo/redirect-policy.ts", encoding="utf-8").read()
 if redirects:
     redirect = redirects[0]
     assert re.search(r'REDIRECT_HOST\s*=\s*"([^"]+)"', policy).group(1) == redirect["host"], redirect
+    assert re.search(r'CHAIN_HOST\s*=\s*"([^"]+)"', policy).group(1) == redirect["redirect"]["chain"][1], redirect
+    assert re.search(r'MAX_HOPS\s*=\s*(\d+)', policy).group(1) == str(redirect["redirect"]["maxHops"]), redirect
     assert re.search(r'CHECK_SESSION_URL\s*=\s*\n?\s*"([^"]+)"', policy).group(1) == redirect["redirect"]["from"], redirect
-    ok(f"redirect policy names the same single hop: {redirect['host']}:{redirect['port']}")
+    ok(f"redirect policy names the same {redirect['redirect']['maxHops']}-hop chain: "
+       f"{' -> '.join(redirect['redirect']['chain'])}")
 else:
     assert "REDIRECT_HOST" in policy
     ok("no redirect target admitted; the policy still names the refused hop")

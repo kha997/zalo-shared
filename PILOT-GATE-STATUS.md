@@ -229,6 +229,34 @@ removed; the private manifest pointer was restored to the synthetic file. No ret
 grant, second QR, allowlist/gateway change, reconciliation, deployment or merge occurred. See
 [G5A-BOOTSTRAP-ATTEMPT-2026-11-11.md](docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-11.md).
 
+## Two-hop redirect remediation — 2026-11-11 (offline)
+
+**`G5A_TWO_HOP_FIX_REVIEWED_AND_RECONCILIATION_READY`** — under an offline-only authorization,
+the observed chain `id.zalo.me → jr.zaloapp.com → jr.chat.zalo.me` is implemented as a
+chain-bound, single-use, at-most-two-hop redirect policy: hop 1 only from the exact reviewed
+`checkSession` request, hop 1 destination only `jr.zaloapp.com:443`, hop 2 only from the authorized
+hop-1 response, hop 2 destination only `jr.chat.zalo.me:443`, `redirect:"manual"` on every request,
+and a direct request to the redirect host refused. A third redirect, a loop, a malformed or
+downgraded `Location`, a direct destination request that skips the chain and a reused or stale
+authorization all fail closed. No hostname was added: the chain reuses the four-host allowlist
+(`id.zalo.me`, `wpa.chat.zalo.me`, `jr.chat.zalo.me`, `jr.zaloapp.com`; `chat.zalo.me` stays
+excluded), and the network checker now asserts `maxHops: 2` and the same chain. Diagnostics keep the
+closed vocabulary (adding `second-hop-denied`), label a direct redirect-host request `other` with
+`direct-redirect-host`, and cap `hops` at 2. The QR staged-copy defect disclosed in the attempt
+report is fixed: tri-state presence, confirmed-absence cleanup, exit 5 with `cleanup=FAILED`, a
+termination guard that re-checks run ownership before every delete, and a launcher sweep of a stale
+copy. Offline: typecheck clean, transport **178/178**, full suite **421/421**, SDK probe 2/2, both
+builds PASS, network checker all assertions PASS; the QR rehearsal covered seven synthetic scenarios
+and the guard's ownership semantics were re-tested directly. [REVIEW] [CI] The fenced control state
+is unchanged and re-read read-only: ownership `uncertain` epoch 9 (`0280fd84-…`, `shutdown`,
+`2026-11-11T00:54:44.993048Z`), last fenced `af5048a8-…`/7, provider `disconnected` gap 9
+`reconciliation_required=true`, audit 33 rows with 4 prior reconciliations, 1 user, 1 active admin,
+0 sessions, 0 advisory locks, 0 unresolved work and empty data tables. The epoch 9→10 reconciliation
+is prepared around the reviewed driver/preflight blobs and the private `notSent` request
+(`4203bde7-…`) and is **not executed**: no Owner window exists, and the wrapper refuses without one.
+No QR, provider contact, reconciliation, live allowlist change, deployment or merge occurred. See
+[G5A-TWO-HOP-REMEDIATION-2026-11-11.md](docs/evidence/G5A-TWO-HOP-REMEDIATION-2026-11-11.md).
+
 ## Gates
 
 | Gate | Status | Evidence |
@@ -259,6 +287,8 @@ grant, second QR, allowlist/gateway change, reconciliation, deployment or merge 
 | `G5A_RECONCILIATION_REQUIRED_AWAITING_OWNER` | **CLEARED (reconciled 2026-11-11)** | The 2026-11-09 fence was confirmed read-only: ownership `uncertain` epoch 7 (`af5048a8-…`, `shutdown`), provider `disconnected` gap 7 `reconciliation_required=true`, zero unresolved work, audit 28 rows with the incident prefix intact, preflight `ok:true` with zero advisory locks and zero other sessions. The prepared single transition (`uncertain→idle`, epoch 7→8, gap 7→8) was executed once in the Owner's 2026-11-11 window; see the execution row below |
 | `G5A_RECONCILED_20261111` | **PASS (reconciliation)** | [G5A-RECONCILIATION-EXECUTION-2026-11-11.md](docs/evidence/G5A-RECONCILIATION-EXECUTION-2026-11-11.md); executed once in the Owner window `2026-11-11T00:05–00:20Z` at reviewed HEAD `eda6c18` with the pinned driver/preflight blobs and image `sha256:989c6154…`: application quiesced, zero other sessions and zero advisory locks, read-only preflight `ok:true` (13/13), one authenticated request at `00:05:29.085Z` HTTP 200 (`alreadyApplied=false`), epoch 7→8, gap 7→8, `uncertain → idle`, driver 20/20, audit 28 → 31 with exactly one `connector.reconciled` row (id 30) carrying `521bbecd-…`, fence baseline `af5048a8-…`/7 with history preserved, gateway log unchanged (`startup`, zero tunnels), no connector, zero unresolved work, application healthy since `00:05:31Z`. Disclosed: the wrapper's post-check failed after the successful request on an unbound counter and a `+1` audit-row assumption (marker `verification-failed`, fixed in `9eedf5c`, marker not rewritten) and one earlier invocation was refused `outside-window` without stopping or sending. No retry, replay or second request |
 | `G5A_BOOTSTRAP_FAIL_20261111` | **FAIL (`redirect-after-hop`)** | [G5A-BOOTSTRAP-ATTEMPT-2026-11-11.md](docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-11.md); one authorized attempt in `00:52–01:22Z`: preflight fully PASS at `idle`/8, grant admitted against `g5-ci-8d9e39d` (`sha256:220982a7…`), QR shown automatically at `00:54:36.927Z` and scanned by the Owner at `00:54:43.171Z`; the gateway admitted `id.zalo.me` then `jr.zaloapp.com`, and the provider's second redirect `jr.zaloapp.com → jr.chat.zalo.me` was refused (`redirect-denied`, `redirect-after-hop`, `hops=1`) at `00:54:44.986Z`. No UID, no confirmation, no `session.enc`, no account data touched; ownership fenced `uncertain` epoch 9 (`0280fd84-…`, `shutdown`), provider gap 9 `reconciliation_required=true`, audit 31 → 33. Viewer closed, staged copy removed, synthetic manifest pointer restored. No retry or second QR |
+| `G5A_TWO_HOP_FIX_REVIEWED_AWAITING_OWNER_DEPLOYMENT` | **PASS (offline, not deployed)** | [G5A-TWO-HOP-REMEDIATION-2026-11-11.md](docs/evidence/G5A-TWO-HOP-REMEDIATION-2026-11-11.md); chain-bound two-hop policy (`id.zalo.me → jr.zaloapp.com → jr.chat.zalo.me`), `redirect:"manual"`, single-use authorization, direct-host refusal, no new hostname, diagnostics capped at 2 hops with `second-hop-denied`, QR cleanup fixed and rehearsed; typecheck clean, 178/178 transport, 421/421 full, SDK 2/2, both builds and the network checker PASS; independent review [REVIEW]; CI artifact [CI]. Not deployed; the live pointer still names `g5-ci-8d9e39d` |
+| `G5A_RECONCILIATION_REQUIRED_EPOCH9_AWAITING_OWNER` | **PREPARED, NOT EXECUTED** | [G5A-TWO-HOP-REMEDIATION-2026-11-11.md](docs/evidence/G5A-TWO-HOP-REMEDIATION-2026-11-11.md) §8; the fence was re-read read-only (`uncertain` epoch 9, `0280fd84-…`, `shutdown`, `2026-11-11T00:54:44.993048Z`, last fenced `af5048a8-…`/7; provider `disconnected` gap 9 `reconciliation_required=true`; audit 33 with 4 prior reconciliations; 0 sessions, 0 advisory locks, 0 unresolved work). `ops/local/reconcile-20261111.sh` is prepared around the reviewed driver/preflight blobs and the private `notSent` request `4203bde7-…`, with a corrected gateway predicate ("no traffic after the fence"); no Owner window file exists, so it cannot execute. No manual state reset |
 | `G5A_PILOT_ADMIN_READY_AWAITING_OWNER_RECONCILIATION` | **PASS** | [G5A-PILOT-ADMIN-PROVISIONING.md](docs/evidence/G5A-PILOT-ADMIN-PROVISIONING.md); exactly one active admin (`4fd6c034d5e7`), 22/22 pilot auth/CSRF/route checks, 19/19 disposable success-path checks, ownership/provider/delivery rows unchanged. No reconciliation executed |
 | `R1_CREDENTIAL_CONTAINMENT_PASS` | **PASS** | [G5A-CREDENTIAL-INCIDENT.md](docs/evidence/G5A-CREDENTIAL-INCIDENT.md) |
 | `R2_EGRESS_ENFORCEMENT_PASS` | **PASS (bootstrap)** | [G5A-R2-EGRESS-BOUNDARY.md](docs/evidence/G5A-R2-EGRESS-BOUNDARY.md); kernel boundary plus SNI gateway verified; observe/send-test remain functionally blocked until their runtime-only hosts are admitted |
