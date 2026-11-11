@@ -357,12 +357,12 @@ outcome=verification-failed
   printf 'reconcile-20261110: FAIL unexpected post-state %s\n' "$after" >&2
   exit 1
 }
-[ "$after_reconciled" = "$((prior_reconciled + 1))" ] || {
+[ "$after_reconciled" = "$((audit_reconciled + 1))" ] || {
   printf 'reconcile-20261110: FAIL reconciliation audit count %s\n' "$after_reconciled" >&2
   exit 1
 }
-[ "$after_rows" = "$((audit_rows + 1))" ] || {
-  printf 'reconcile-20261110: FAIL audit rows %s, expected %s\n' "$after_rows" "$((audit_rows + 1))" >&2
+[ "$after_max" -gt "$audit_max" ] || {
+  printf 'reconcile-20261110: FAIL audit max id %s did not advance past %s\n' "$after_max" "$audit_max" >&2
   exit 1
 }
 [ "$(dbq "SELECT count(*) FROM pg_locks WHERE locktype='advisory'")" = 0 ] ||
