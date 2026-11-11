@@ -6,7 +6,8 @@
 # that window in place, and the connector clearing its source closes it and
 # removes the staged copy. Every other lifecycle path runs off-screen or without
 # a window at all, so the Owner never sees a stream of synthetic QR dialogs:
-#   - off-screen: bounded display, forced termination, attempt handover;
+#   - off-screen: bounded display, forced termination, attempt handover, and a
+#     viewer that must survive the exit of the shell that launched it;
 #   - window-less: corrupt/truncated PNG, timeout, stale-owner start refusal,
 #     direct guard ownership tests.
 # Prints sanitized JSON (no image bytes) for the report.
@@ -39,6 +40,7 @@ powershell='/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
 [ -n "$powershell" ] && [ -x "$powershell" ] ||
   fail "Windows PowerShell is not reachable from WSL"
 taskkill='/mnt/c/Windows/System32/taskkill.exe'
+tasklist='/mnt/c/Windows/System32/tasklist.exe'
 stage_wsl=$(wslpath -u "$stage")
 [ -d "$stage_wsl" ] || fail "the stage directory does not exist: $stage"
 log="$stage_wsl/qr-viewer.log"
@@ -350,7 +352,35 @@ slice "$mark" | grep -q "viewer-guard removed-staged run=$base-owned-run" ||
 [ ! -e "$staged" ] || fail "the owning guard left a staged copy"
 [ ! -e "$run_file" ] || fail "the owning guard left its run id"
 
-# ---- 11. only one visible window and no image bytes in the log ----
+# ---- 11. the viewer must outlive the shell that started it ----
+# On 2026-11-11 the live QR window closed about a second after it appeared,
+# because the WSL shell that started it exited and took its process tree with
+# it; the Owner never had time to scan. Start a viewer from a short-lived shell,
+# kill that shell's whole process group, and require the window to stay up.
+cp "$fixture" "$work/detach-source.png"
+detach="$base-detach"
+mark=$(before)
+setsid bash -c "bash '$launcher' --source '$work/detach-source.png' --offscreen --attempt '$detach' --timeout 30 >/dev/null 2>&1" &
+group=$!
+wait_for "viewer-shown " "$mark" 150 || fail "the detached viewer never showed its QR"
+slice "$mark" | grep -q "viewer-shown .*run=$detach" ||
+  fail "the shown window did not belong to the detached attempt"
+kill -KILL -- "-$group" 2>/dev/null || true
+sleep 2
+detach_pid=$(slice "$mark" | sed -n 's/.*viewer-start pid=\([0-9][0-9]*\) .*run='"$detach"'.*/\1/p' | tail -n 1)
+[ -n "$detach_pid" ] || fail "the detached viewer did not log its pid"
+"$tasklist" /FI "PID eq $detach_pid" /NH 2>/dev/null | tr -d '\r' | grep -q "$detach_pid" ||
+  fail "the viewer died when the launching shell's process group was killed"
+[ -n "$(find "$run_file" -newermt "@$(( $(date +%s) - 10 ))" -print -quit 2>/dev/null)" ] ||
+  fail "the detached viewer stopped heartbeating after the shell exit"
+rm -f "$work/detach-source.png"
+wait_for "viewer-close source-cleared run=$detach" "$mark" 150 ||
+  fail "the detached viewer did not close when its source cleared"
+wait_for "viewer-closed cleanup=final run=$detach" "$mark" 150 ||
+  fail "the detached viewer did not report a clean close"
+[ ! -e "$staged" ] || fail "a staged QR survived the detached-viewer test"
+
+# ---- 12. only one visible window and no image bytes in the log ----
 visible_total=$(slice_of | grep -c 'viewer-shown .*offscreen=False' || true)
 [ "$visible_total" -eq 1 ] ||
   fail "the rehearsal opened $visible_total visible windows; exactly one was planned"
@@ -399,6 +429,8 @@ report = {
   "staleViewerStart": {"refused": "superseded", "windows": 0},
   "guardSuperseded": {"leftNewerCopy": True},
   "guardOwned": {"removedStaged": True},
+  "detachedLifetime": {"offscreen": True, "survivedProcessGroupKill": True,
+                       "close": "source-cleared", "cleanup": "final"},
   "logLongestLine": int(env["R_LOG_LONGEST"]),
   "verdict": "PASS",
 }

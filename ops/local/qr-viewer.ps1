@@ -87,6 +87,26 @@ function Write-Log([string]$line) {
   }
 }
 
+# The launcher starts this process detached, so Windows gives it a console of
+# its own. Hide that console handle (never the form) so the Owner sees only the
+# QR window, and never fail the run if the call is unavailable.
+try {
+  Add-Type -Namespace PilotQr -Name ConsoleWindow -MemberDefinition @'
+[DllImport("kernel32.dll")] public static extern System.IntPtr GetConsoleWindow();
+[DllImport("user32.dll")] public static extern bool ShowWindow(System.IntPtr hWnd, int nCmdShow);
+[DllImport("user32.dll")] public static extern bool IsWindowVisible(System.IntPtr hWnd);
+'@
+  $consoleHandle = [PilotQr.ConsoleWindow]::GetConsoleWindow()
+  if ($consoleHandle -ne [System.IntPtr]::Zero) {
+    [PilotQr.ConsoleWindow]::ShowWindow($consoleHandle, 0) | Out-Null
+    Write-Log "viewer-console handle=present visible=$([PilotQr.ConsoleWindow]::IsWindowVisible($consoleHandle))"
+  } else {
+    Write-Log 'viewer-console handle=absent'
+  }
+} catch {
+  Write-Log 'viewer-console hide=unavailable'
+}
+
 # Enumerating the directory reports a real I/O failure, while File.Exists
 # reports every failure as "absent" — a single false answer here would let the
 # viewer report a clean close over a QR that is still on disk. Returns $true,
