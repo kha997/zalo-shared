@@ -1021,3 +1021,49 @@ audit 36 → 38 with prior rows intact. A new Owner-authorized reconciliation
 allowlist change, production deployment or PR merge occurred. Evidence
 [G5A-BOOTSTRAP-ATTEMPT-2026-11-11T1443Z](docs/evidence/G5A-BOOTSTRAP-ATTEMPT-2026-11-11T1443Z.md).
 **G5A_BOOTSTRAP_FAIL**
+
+**QR VIEWER LIFETIME DEFECT FIXED AND REHEARSED (2026-11-11/12, `85cfea4`).**
+The one-second window loss was reproduced: a viewer started directly from WSL dies
+with the launching process tree, while a `Start-Process` (ShellExecute) child
+survives it (2 vs 40 heartbeats). `ops/local/launch-qr-viewer.sh` now starts the
+viewer detached through a short-lived PowerShell launch session, tracks liveness
+through Windows `tasklist` because the viewer is no longer a child, and keeps the
+launch lock out of the viewer's handle table. `ops/local/qr-viewer.ps1` hides its
+own console on start; both are parser-checked and offline-tested. The rehearsal
+gained a regression that kills the launching process group with `SIGKILL` and
+then asserts the viewer is still alive and logging, followed by a clean
+`source-cleared` close with no staged copy; the full rehearsal passes with exactly
+one visible window and no residue. The procedure document records the new launch
+semantics. This closes the fix required before any further G5-A attempt; it is
+not a gate and authorizes no bootstrap, QR, provider contact or reconciliation.
+Fix commits `d9bb8c7`, `85cfea4`; see step 4 of
+[G5-LIVE-PILOT-PROCEDURE](docs/operations/G5-LIVE-PILOT-PROCEDURE.md) and
+`ops/local/rehearse-qr-viewer.sh` §11.
+
+**G5-A EPOCH-11 RECONCILIATION `12:10Z` WINDOW NOT EXECUTED — `G5A_RECONCILIATION_BLOCKED` (2026-11-12).**
+The two independent blockers the authorization names both held. First, no reviewed
+epoch-11 executor or incident-bound request exists: the only reconciliation
+wrapper is `ops/local/reconcile-20261111.sh`, bound to the epoch-9 incident (owner
+`0280fd84-…`, epoch 9, gap 9, post-state epoch 10) with a request already consumed
+at `09:12Z` and a one-shot marker already present; `reconcile-pilot.sh` is the
+epoch-5 binding; the private state has requests and windows only through
+`2026-11-11`, and no `reconcile-request-2026-11-12.json` or
+`reconcile-attempt-20261112.json`. Authoring a new owner/epoch/request binding
+inside the window would itself be an unreviewed security binding. Second, the host
+container runtime is down: `docker` is absent in WSL, `/var/run/docker.sock` does
+not exist, `/mnt/wsl` holds only `resolv.conf`, the `docker-desktop` distro is
+Stopped, Windows `com.docker.service` is Stopped and no Docker Desktop process is
+running. Inside the window (`12:10:22Z`–`12:11:11Z`) the tree was clean at
+`85cfea4`, the reviewed driver and preflight blobs still matched their pins
+(`bb7a18cc…`, `b3f34274…`), the private tree held only `session.key` (no
+`session.enc`, no QR, no quarantine), and no epoch-11 request or marker existed.
+Every database, gateway, quiescence, lock, session and image predicate is
+UNVERIFIED; the last verified control state remains `uncertain` epoch 11 (owner
+`1c6bebbb-…`, `shutdown`), provider gap 11 `reconciliation_required=true`, audit
+38, and this attempt neither confirms nor contradicts it. No request, container
+action, marker, SQL write, host action, QR, provider contact, deployment or merge
+occurred. Proceeding needs host-runtime recovery under its own authorization,
+authoritative re-read of the epoch-11 rows, a reviewed epoch-11 wrapper and a new
+Owner UTC window. Evidence
+[G5A-RECONCILIATION-2026-11-12T1210Z-BLOCKED](docs/evidence/G5A-RECONCILIATION-2026-11-12T1210Z-BLOCKED.md).
+**G5A_RECONCILIATION_BLOCKED**

@@ -123,3 +123,13 @@ is fixed in the reviewed scripts: the launcher now starts the window detached fr
 the launching shell and the rehearsal proves it survives that shell's process-group
 kill, which was the exact 2026-11-11 failure. Do not reset control state by hand,
 do not retry inside the consumed window and do not generate a second QR.
+
+**Update 2026-11-12:** the Owner-authorized `12:10Z–12:25Z` reconciliation window
+was not executed — **`G5A_RECONCILIATION_BLOCKED`**. No reviewed epoch-11 executor
+or incident-bound request exists (the only wrappers are bound to the epoch-9 and
+epoch-5 incidents), and the host container runtime is down, so no database,
+gateway, application or quiescence predicate could be verified. Nothing was
+stopped, sent or marked. The control state is unchanged and still needs host
+recovery, an authoritative re-read of the epoch-11 rows, a reviewed epoch-11
+wrapper and a new Owner UTC window. See
+[G5A-RECONCILIATION-2026-11-12T1210Z-BLOCKED](../evidence/G5A-RECONCILIATION-2026-11-12T1210Z-BLOCKED.md).
