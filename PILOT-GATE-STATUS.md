@@ -1067,3 +1067,29 @@ authoritative re-read of the epoch-11 rows, a reviewed epoch-11 wrapper and a ne
 Owner UTC window. Evidence
 [G5A-RECONCILIATION-2026-11-12T1210Z-BLOCKED](docs/evidence/G5A-RECONCILIATION-2026-11-12T1210Z-BLOCKED.md).
 **G5A_RECONCILIATION_BLOCKED**
+
+**G5-A EPOCH-11 RECONCILIATION PREPARED — `G5A_EPOCH11_RECONCILIATION_READY_AWAITING_OWNER_START` (2026-11-13).**
+After the host-runtime recovery the pilot stack was rebuilt from the reviewed
+recipes (`pilot-postgres`, `zalo-shared-pilot-app-1` and the unchanged egress
+gateway all healthy; TLS, internal network, four-host allowlist and LAN exposure
+checks PASS) and the authoritative fence was re-read read-only: `uncertain`, epoch
+11, owner `1c6bebbb-…`, fault `shutdown`, uncertain at `2026-11-11T14:46:30.766Z`,
+last fenced `0280fd84-…`/9; provider `disconnected`, gap 11,
+`reconciliation_required=true`; audit 38 rows, max 38, five reconciled, zero
+fenced; no advisory lock. `ops/local/reconcile-20261113.sh` re-binds the reviewed
+driver and preflight blobs (still `bb7a18cc…`/`b3f34274…`) to that incident with
+post-state `idle|12|…|disconnected|12|false`, adds request-permission,
+Owner-approval, `connector.fenced`-absence and deployed-image checks, and still
+requires an Owner window file and a one-shot marker that do not exist. The
+request (`notSent`, reference `G5A-OWNER-AUTH-2026-11-13-RECONCILIATION`) and the
+renewed gateway baseline are private and in place. Offline evidence: 106/106
+wrapper refusal assertions, the driver harness (window, expiry, DB lock, replay),
+the disposable CSRF/auth suite 19/19, the application suite 421 tests, and the QR
+rehearsal with a detached viewer that survived its launching process-group kill.
+An independent review returned READY WITH OBSERVATIONS; its one text defect was
+corrected. One rehearsal run failed a timing-sensitive handover assertion and the
+next passed — recorded, not changed. Nothing was stopped, sent or reconciled; the
+fence is unchanged and no bootstrap, QR, provider contact, observation, send,
+deployment or merge is authorised. Evidence
+[G5A-EPOCH11-READINESS-2026-11-13](docs/evidence/G5A-EPOCH11-READINESS-2026-11-13.md).
+**G5A_EPOCH11_RECONCILIATION_READY_AWAITING_OWNER_START**

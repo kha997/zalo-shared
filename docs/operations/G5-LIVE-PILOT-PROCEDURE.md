@@ -133,3 +133,18 @@ stopped, sent or marked. The control state is unchanged and still needs host
 recovery, an authoritative re-read of the epoch-11 rows, a reviewed epoch-11
 wrapper and a new Owner UTC window. See
 [G5A-RECONCILIATION-2026-11-12T1210Z-BLOCKED](../evidence/G5A-RECONCILIATION-2026-11-12T1210Z-BLOCKED.md).
+
+**Update 2026-11-13:** the runtime is back and the epoch-11 preparation is ready
+— **`G5A_EPOCH11_RECONCILIATION_READY_AWAITING_OWNER_START`**. The pilot stack
+was rebuilt from the reviewed recipes, the authoritative fence
+(`uncertain`, epoch 11, owner `1c6bebbb-…`, gap 11, five prior reconciliations) was
+read, and `ops/local/reconcile-20261113.sh` was written, tested offline (106
+refusal assertions, the driver harness, the disposable CSRF/auth suite and the
+421-test application suite) and reviewed. Its request (`notSent`), its gateway
+baseline and its read-only preflight are in place; **no Owner window file exists**,
+so nothing was stopped, sent or reconciled. Starting the live reconciliation
+needs only an Owner authorization using the reference
+`G5A-OWNER-AUTH-2026-11-13-RECONCILIATION` and a UTC window written to
+`reconcile-window-20261113.json`; then run once:
+`PILOT_RECONCILE_CONFIRM=ONE_SHOT bash ops/local/reconcile-20261113.sh execute`.
+See [G5A-EPOCH11-READINESS-2026-11-13](../evidence/G5A-EPOCH11-READINESS-2026-11-13.md).
