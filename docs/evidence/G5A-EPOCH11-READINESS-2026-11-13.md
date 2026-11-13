@@ -170,8 +170,10 @@ restart or tunnel. Observations and dispositions:
 ## 8. CI
 
 CI on `5562617` (the commit before this preparation) succeeded. The preparation
-commits `2bf8484`, `91e7d05`, `9b08f11` and `867953c` were pushed; the run for
-`867953c` is reported in [the gate status](PILOT-GATE-STATUS.md) entry.
+commits `2bf8484`, `91e7d05`, `9b08f11` and `867953c` were pushed; the run on
+`867953c` was cancelled by the branch's cancel-in-progress rule when this evidence
+commit was pushed, after its `pilot` job had already succeeded. The run on this
+commit (`54dc729`, run `43337778478`) passed both the `test` and `pilot` jobs.
 
 ## 9. Posture and non-actions
 
