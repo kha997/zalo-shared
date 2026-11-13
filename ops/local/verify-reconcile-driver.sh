@@ -143,7 +143,7 @@ check "no reconciliation happened while the lock was held" 0 "$(psql "$disposabl
 
 say "negative: host lock and duplicate attempt marker"
 mkdir -p "$tmp/host-lock" "$tmp/attempted"
-( flock -n 9; sleep 8 ) 9>"$tmp/host-lock/reconcile.lock" &
+( flock -n 9; sleep 8 ) 9>"$tmp/host-lock/reconcile-20261107.lock" &
 host_lock=$!
 sleep 0.5
 status=0
@@ -153,8 +153,8 @@ check "a concurrent orchestration is refused by the host lock" 3 "$status"
 check "the host lock refusal is explicit" '"outcome":"concurrent-invocation"' "$(grep -o '"outcome":"concurrent-invocation"' "$tmp/host-lock.json")"
 wait "$host_lock" 2>/dev/null || true
 
-printf '{"outcome":"started"}\n' >"$tmp/attempted/reconcile-attempt.json"
-chmod 0600 "$tmp/attempted/reconcile-attempt.json"
+printf '{"outcome":"started"}\n' >"$tmp/attempted/reconcile-attempt-20261107.json"
+chmod 0600 "$tmp/attempted/reconcile-attempt-20261107.json"
 status=0
 PILOT_RECONCILE_STATE_DIR="$tmp/attempted" PILOT_RECONCILE_CONFIRM=ONE_SHOT \
   bash "$repo/ops/local/reconcile-pilot.sh" execute >"$tmp/duplicate.json" 2>&1 || status=$?
