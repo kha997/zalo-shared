@@ -26,7 +26,7 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 base=${PILOT_PRIVATE_DIR:-"$HOME/pilot-private/zalo-shared"}
 state=$base/pilot-admin
 window_file=${PILOT_RECONCILE_WINDOW_FILE:-$state/reconcile-window-20261113.json}
-request_file=$state/reconcile-request-2026-11-13.json
+request_file=${PILOT_RECONCILE_REQUEST_FILE:-$state/reconcile-request-2026-11-13.json}
 credential_file=$state/admin.env
 network=${PILOT_DB_NETWORK:-zalo-shared-pilot-db}
 pg=${PILOT_DB_CONTAINER:-pilot-postgres}
@@ -51,7 +51,7 @@ prior_reconciliations=5
 driver_blob=bb7a18cc7baf9307845d378f50bc8a7b6ac79400
 preflight_blob=b3f342748c64b4d9feaf6a41fcb8f3d9b020f218
 
-attempt_file=$state/reconcile-attempt-20261113.json
+attempt_file=${PILOT_RECONCILE_ATTEMPT_FILE:-$state/reconcile-attempt-20261113.json}
 lock_file=$state/reconcile-20261113.lock
 app_stopped=0
 envfile=
