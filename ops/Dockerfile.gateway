@@ -1,0 +1,37 @@
+# syntax=docker/dockerfile:1
+# Pilot egress gateway image: an SDK-free, credential-free TLS SNI passthrough
+# router. It is the only container attached to the pilot uplink network and
+# therefore the only sanctioned path from the connector's internal networks to
+# the internet. See ops/egress-gateway.cjs and ops/pilot-compose.example.yml.
+#
+# Deliberately separate from ops/Dockerfile.connector: the gateway must not
+# carry the SDK, the database driver, the application or any pilot credential,
+# because it is the component that is allowed to reach the internet.
+ARG BUILDER_IMAGE=node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df
+ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs24-debian13@sha256:b770c59f44ed459329508a73794e6d284f6c10143f83c8012a8f775cd514eca2
+
+# The address policy is the one module the gateway shares with the connector
+# guard, and it needs ipaddr.js. Taking it from the reviewed connector lock
+# keeps the version and the sha512 integrity identical in both images.
+FROM ${BUILDER_IMAGE} AS deps
+WORKDIR /app/connector
+COPY connector/package.json connector/package-lock.json ./
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
+    npm ci --omit=dev --ignore-scripts --strict-ssl=true
+
+FROM ${RUNTIME_IMAGE}
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=deps --chown=65532:65532 /app/connector/node_modules/ipaddr.js ./node_modules/ipaddr.js
+COPY --chown=65532:65532 ops/egress-address-policy.cjs ./egress-address-policy.cjs
+COPY --chown=65532:65532 ops/egress-gateway.cjs ./egress-gateway.cjs
+USER 65532:65532
+# The connector dials the provider's real port, so the gateway listens on 443.
+# Under UID 65532 that requires NET_BIND_SERVICE, granted in compose.
+EXPOSE 443
+ENTRYPOINT ["/nodejs/bin/node"]
+# Fails closed: an allowlist containing anything other than exact DNS names
+# exits 1 before the socket is opened, and an empty allowlist starts but denies
+# every SNI and logs startup_warning.
+CMD ["egress-gateway.cjs"]

@@ -1,0 +1,15 @@
+# Compiled runtime and image audit review
+
+Reviewed 2026-10-28: the 13-file runtime/readiness delta supplied in `/tmp/zalo-runtime-review.patch`, relative to validated simulator source `a74268c95e8eda5536d5f6429cf21cb62fa2b698`. Scope: Dockerfile, server compiler configuration, package scripts/dependency declarations, Compose/runbook commands, image scanner and CI integration. This review makes no live-provider or production acceptance claim.
+
+**Verdict: no P0/P1/P2 finding in this scoped delta; acceptance remains conditional on the new revision's hosted container build, image scan and nonroot/read-only readiness smoke.** The prior hosted run does not validate this packaging change.
+
+Evidence and reasoning:
+
+- `npm run build` passed locally on Node v24.19.0, including the client build and NodeNext server emit. Output includes `dist/server/{main,worker,migrate,seed}.js`, with resolvable relative `.js` imports. The compiler's `rootDir: server` and `outDir: dist/server` match Docker and Compose entrypoints; client assets remain under `dist/client`.
+- An offline smoke imported the emitted app and worker modules, constructed the application, and received HTTP 200 through Fastify injection for `/health/live` and `/`. No database/provider connection was used. All emitted external runtime imports are declared production dependencies; type-only `pg` references disappear as expected. The Docker build prunes dev dependencies after compilation and copies only the resulting dependency tree, compiled outputs and package manifests. Actual pruned-image startup still requires hosted CI.
+- Compose migration/worker commands and the runbook's seed override invoke the emitted JavaScript directly, so they do not depend on removed `tsx`. Host development scripts continue to use dev dependencies installed by `npm ci`.
+- `bash -n ops/scan-image.sh` passed. The script checks the pinned SHA-256 before extracting/executing Trivy, scans a `docker save` archive through `--input`, and supplies no Docker socket to the scanner. Scan/download/parse failures propagate under `set -euo pipefail`. The complete HIGH/CRITICAL JSON is written before the custom fixability gate; a nonempty `FixedVersion` fails the step. The summary retains unfixed findings, and CI uploads evidence with `if: always()` for 14 days. The release checksum's upstream authenticity was supplied by the coordinating review and was not independently fetched in this offline review.
+- CI uses an explicit Bash shell, retaining pipeline failure through `pipefail`, disables persisted checkout credentials, and runs the image scan before the container smoke. The readiness documentation distinguishes the prior 38/38 simulator test evidence from this pending packaging/image gate and from unproven live-account/phone/soak behavior.
+
+Required acceptance evidence: successful new-revision Docker build and runtime smoke, retained raw scan report plus summary, and explicit assessment of any unfixed HIGH/CRITICAL findings. A passing fixability gate does not establish zero vulnerabilities. No new PostgreSQL/browser/load, real SDK/login or production run was performed by this review.

@@ -1,0 +1,78 @@
+# syntax=docker/dockerfile:1
+# Separate, intentionally SDK-bearing pilot connector image.
+# The application image (ops/Dockerfile) stays SDK-free; this image is never
+# the default deployment and publishes no ports.
+ARG BUILDER_IMAGE=node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df
+ARG RUNTIME_IMAGE=gcr.io/distroless/nodejs24-debian13@sha256:b770c59f44ed459329508a73794e6d284f6c10143f83c8012a8f775cd514eca2
+# Required: the reviewed source commit this image is built from. The runtime
+# compares it with the private manifest before touching the vault.
+ARG SOURCE_COMMIT
+
+FROM ${BUILDER_IMAGE} AS build
+ARG SOURCE_COMMIT
+WORKDIR /app
+COPY package.json package-lock.json tsconfig.json tsconfig.connector.json ./
+COPY connector/package.json connector/package-lock.json ./connector/
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
+    npm ci --ignore-scripts --strict-ssl=true
+COPY server ./server
+COPY adapters ./adapters
+COPY tools ./tools
+RUN ./node_modules/.bin/tsc -p tsconfig.connector.json
+# Build identity is emitted from the actual build inputs, never from the
+# manifest: a swapped manifest cannot rebind the grant to another artifact.
+# The commit is referenced in the command itself, not only in the heredoc, so
+# the build cache cannot reuse an identity layer from another commit.
+RUN test -n "${SOURCE_COMMIT}" && node > build-identity.json <<'EOF'
+const fs = require("node:fs");
+const crypto = require("node:crypto");
+const lock = fs.readFileSync("connector/package-lock.json");
+const integrity = JSON.parse(lock.toString("utf8")).packages?.["node_modules/zca-js"]?.integrity;
+if (typeof integrity !== "string" || !/^sha512-/.test(integrity)) throw new Error("Connector lock is missing the reviewed zca-js integrity");
+const commit = process.env.SOURCE_COMMIT ?? "";
+if (!/^[a-f0-9]{40}$/.test(commit)) throw new Error("SOURCE_COMMIT build argument is required");
+process.stdout.write(JSON.stringify({ version: 1, sourceCommit: commit, lockSha256: crypto.createHash("sha256").update(lock).digest("hex"), sdkIntegrity: integrity }) + "\n");
+EOF
+
+# Runtime dependencies come only from the dedicated connector lock. The root
+# development tree is never copied or pruned into this image.
+FROM ${BUILDER_IMAGE} AS runtime-deps
+WORKDIR /app/connector
+COPY connector/package.json connector/package-lock.json ./
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
+    npm ci --omit=dev --ignore-scripts --strict-ssl=true
+
+FROM ${RUNTIME_IMAGE}
+ENV NODE_ENV=production
+# Load the connector-local default-deny egress guard before any application
+# module. It admits only exact reviewed provider hosts/ports and the private
+# DATABASE_URL host/port; all other TCP, DNS resolve, UDP and child-process
+# egress fails closed. See ops/pilot-egress-guard.cjs.
+# The entrypoint repeats the preload so an env_file or compose override of
+# NODE_OPTIONS cannot silently remove the guard. Node caches the module, so the
+# duplicate path is a no-op.
+# This guard is defense in depth, not the enforcement boundary. The boundary is
+# the compose topology: the connector is attached only to networks declared
+# internal=true, so the kernel gives it no default route and no external DNS,
+# and the only sanctioned path out is the separate egress-gateway container.
+ENV NODE_OPTIONS=--require=/app/egress-guard.cjs
+# The external database network is operator-supplied, so compose cannot assert
+# that it is internal. The guard refuses to start when the namespace has a
+# usable default route, which is what a non-internal attachment provides. This
+# is a misconfiguration stop, not the isolation control.
+ENV PILOT_REQUIRE_INTERNAL_NETWORK=1
+ENTRYPOINT ["/nodejs/bin/node", "--require=/app/egress-guard.cjs"]
+WORKDIR /app
+COPY --from=build --chown=65532:65532 /app/dist/connector ./dist/connector
+COPY --from=build --chown=65532:65532 /app/build-identity.json ./build-identity.json
+COPY --from=runtime-deps --chown=65532:65532 /app/connector/node_modules ./node_modules
+COPY --from=runtime-deps --chown=65532:65532 /app/connector/package.json ./package.json
+COPY --chown=65532:65532 ops/pilot-egress-guard.cjs ./egress-guard.cjs
+COPY --chown=65532:65532 ops/egress-address-policy.cjs ./egress-address-policy.cjs
+USER 65532:65532
+# No EXPOSE: the pilot connector serves no HTTP endpoint. Dry-run fails closed
+# without a private manifest and never reads the vault, imports the SDK, or
+# touches the database or network.
+CMD ["dist/connector/tools/pilot-connector.js", "dry-run"]

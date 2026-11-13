@@ -1,0 +1,5 @@
+compose: app publishes 127.0.0.1:3100 only; postgres/migrate/worker publish nothing
+compose: private network internal=true; edge non-internal (required to publish)
+compose: app joins private+edge; postgres stays private-only
+running: zalo-shared-g2-app-1 3100/tcp -> 127.0.0.1:3100
+note: outbound egress from the app/edge network remains host-policy controlled

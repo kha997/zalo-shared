@@ -1,0 +1,14 @@
+Encrypted backup created. Perform a fresh-database restore drill before relying on it.
+/tmp/zalo-drill.age: OK
+database.dump: OK
+counts.tsv: OK
+integrity.tsv: OK
+REVOKE
+BEGIN
+DELETE 8
+UPDATE 5
+UPDATE 5
+UPDATE 5
+UPDATE 1
+COMMIT
+Restored and quarantined. Keep dispatch disabled; verify media hashes, roles and audit before reconnect.

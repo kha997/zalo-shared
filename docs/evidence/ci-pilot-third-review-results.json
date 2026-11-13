@@ -1,0 +1,50 @@
+{
+  "sourceCommit": "44b677f5e78c291a3b99de8303774358b08e5251",
+  "prMergeCommit": "e5fb9878c247c323ebf93cdfdc4fc25854d36dcb",
+  "run": "41381303200",
+  "runUrl": "https://github.com/kha997/zalo-shared/actions/runs/41381303200",
+  "result": "success",
+  "unit": { "tests": 266, "pass": 266, "fail": 0, "skipped": 0 },
+  "guardedOfflineSdk": { "tests": 2, "pass": 2, "fail": 0 },
+  "browser": { "passed": 9, "skipped": 1, "failed": 0 },
+  "pilotDryRun": {
+    "command": "dry-run",
+    "ok": true,
+    "gate": "admitted",
+    "purpose": "observe"
+  },
+  "pilotImage": {
+    "uid": 65532,
+    "zcaJs": "2.2.0",
+    "zcaResolved": "/app/node_modules/zca-js/dist/cjs/index.cjs",
+    "cryptoJs": "4.2.0",
+    "buildIdentity": {
+      "version": 1,
+      "sourceCommit": "e5fb9878c247c323ebf93cdfdc4fc25854d36dcb",
+      "lockSha256": "17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b",
+      "sdkIntegrity": "sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA=="
+    },
+    "privateFiles": [],
+    "exposedPorts": [],
+    "trivy": "0.76.1",
+    "highCriticalCount": 0,
+    "fixableHighCriticalCount": 0
+  },
+  "load": {
+    "4": { "requests": 52, "p95Ms": 60.93, "targetMet": true },
+    "10": { "requests": 130, "p95Ms": 74.86, "targetMet": true },
+    "25": { "requests": 325, "p95Ms": 228.68, "targetMet": true },
+    "50": { "requests": 650, "p95Ms": 417.99, "targetMet": true },
+    "50x50": { "requests": 10050, "p95Ms": 108.76, "targetMet": true },
+    "100": { "requests": 1300, "p95Ms": 880.31, "targetMet": true },
+    "200": { "requests": 2600, "p95Ms": 1791.39, "targetMet": true },
+    "500": { "requests": 6500, "p95Ms": 4210.76, "targetMet": false }
+  },
+  "limitations": [
+    "Synthetic offline connector dry-run only; no real login, QR scan, provider call or phone interaction.",
+    "The 500-client short API workload exceeded the 2 s p95 target in this run.",
+    "The embedded build identity is build-derived, not a content attestation; the external anchor is the CI image digest.",
+    "crypto-js 4.2.0 remains a deprecated transitive dependency of zca-js 2.2.0.",
+    "The 1-4 pilot peer allowlist is a pilot safety scope, not a product seat limit."
+  ]
+}

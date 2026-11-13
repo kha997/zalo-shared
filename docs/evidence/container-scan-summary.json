@@ -1,0 +1,7 @@
+{
+  "scanner": "Trivy0.76.1",
+  "image": "zalo-shared:g2-adf8ceca9bd6",
+  "highCriticalCount": 0,
+  "fixableHighCriticalCount": 0,
+  "findings": []
+}

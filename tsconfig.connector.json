@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": false,
+    "noEmit": false,
+    "rootDir": ".",
+    "outDir": "dist/connector",
+    "lib": ["ES2023"],
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": ["tools/pilot-connector.ts"],
+  "exclude": ["client", "tests"]
+}

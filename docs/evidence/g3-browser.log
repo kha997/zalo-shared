@@ -1,0 +1,20 @@
+
+> zalo-shared@0.1.0 test:e2e
+> playwright test
+
+
+Running 10 tests using 1 worker
+
+  ✓   1 tests/e2e/connector-operations-flow.spec.ts:51:1 › four staff browsers and administrator reconcile exact IDs through private HTTP without another send (6.1s)
+  ✓   2 tests/e2e/connector-operations-ui.spec.ts:26:1 › operator UI requires exact evidence and refreshes a stale confirmation without resending (725ms)
+  ✓   3 tests/e2e/connector-operations-ui.spec.ts:142:1 › operator UI closes privileged content after the shell observes role revocation (2.7s)
+  ✓   4 tests/e2e/history.spec.ts:4:1 › 100-message history survives newest polling and an arrival during older-page loading (6.1s)
+  ✓   5 tests/e2e/history.spec.ts:83:1 › delayed old mutation 401 does not log out a reauthenticated browser (1.1s)
+  ✓   6 tests/e2e/history.spec.ts:162:1 › inbound arrival precedes a locally appended later outgoing send after polling (2.9s)
+  ✓   7 tests/e2e/inbox.spec.ts:4:1 › four independent browser sessions claim and send; agents excluded from administration; text is safe (1.6s)
+  ✓   8 tests/e2e/inbox.spec.ts:110:1 › unauthenticated API requests are rejected (11ms)
+  ✓   9 tests/e2e/security.spec.ts:4:1 › HTTP adversarial acceptance: CSRF, disabled sessions, claim race, send deduplication, attachments (565ms)
+  -  10 tests/e2e/security.spec.ts:186:6 › last active admin protection and mock-disabled behavior require an isolated server configuration
+
+  1 skipped
+  9 passed (23.7s)

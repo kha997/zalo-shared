@@ -1,0 +1,31 @@
+Synthetic linked/held/conflict journal fixtures persisted
+CREATE ROLE
+GRANT
+GRANT
+GRANT
+REVOKE
+DO
+DO
+Encrypted backup created. Perform a fresh-database restore drill before relying on it.
+/tmp/tmp.WzrWxEmHam/backup.age: OK
+database.dump: OK
+counts.tsv: OK
+integrity.tsv: OK
+REVOKE
+BEGIN
+DELETE 0
+UPDATE 1
+UPDATE 1
+UPDATE 1
+UPDATE 2
+UPDATE 2
+UPDATE 2
+INSERT 0 1
+COMMIT
+Restored and quarantined. Keep dispatch disabled; verify media hashes, roles and audit before reconnect.
+Restore elapsed seconds: 1
+DO
+sessions|0
+dispatchable|1
+public_connect|f
+Restore quarantine and runtime audit privilege assertions PASS

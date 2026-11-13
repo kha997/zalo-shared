@@ -1,0 +1,67 @@
+{
+  "sourceCommit": "a8100875721e8dd6c0effe27a32c89db1acebae8",
+  "prMergeCommit": "2bd5e7f8aa546734bb8d017f210365a2e730c221",
+  "run": "41386800622",
+  "runUrl": "https://github.com/kha997/zalo-shared/actions/runs/41386800622",
+  "result": "success",
+  "jobs": { "test": "success", "pilot": "success" },
+  "unit": { "tests": 273, "pass": 273, "fail": 0, "skipped": 0 },
+  "guardedOfflineSdk": { "tests": 2, "pass": 2, "fail": 0, "skipped": 0 },
+  "browser": { "expected": 9, "passed": 9, "skipped": 1, "unexpected": 0 },
+  "pilotDryRun": {
+    "command": "dry-run",
+    "ok": true,
+    "gate": "admitted",
+    "purpose": "observe",
+    "network": "none"
+  },
+  "pilotImage": {
+    "uid": 65532,
+    "zcaJs": "2.2.0",
+    "zcaResolved": "/app/node_modules/zca-js/dist/cjs/index.cjs",
+    "cryptoJs": "4.2.0",
+    "buildIdentity": {
+      "version": 1,
+      "sourceCommit": "2bd5e7f8aa546734bb8d017f210365a2e730c221",
+      "lockSha256": "17dcd25426639f7112b80764bc8aa27f9be2af3acf0aaf0f2cd490c434030c9b",
+      "sdkIntegrity": "sha512-pBU0T0/uadH3Neq7yMssUmE769VVuqKhL8YD1HqQQG8e6lkwueAopNu0vhJdqiJRHZdPIEomT2FxRzauOx4pgA=="
+    },
+    "privateFiles": [],
+    "exposedPorts": [],
+    "trivy": "0.76.1",
+    "highCriticalCount": 0,
+    "fixableHighCriticalCount": 0
+  },
+  "applicationImage": {
+    "trivy": "0.76.1",
+    "highCriticalCount": 0,
+    "fixableHighCriticalCount": 0
+  },
+  "restoreDrill": {
+    "result": "PASS",
+    "sessions": 0,
+    "dispatchable": 1,
+    "publicConnect": false,
+    "interruptedProcessingFixture": "seeded processing outbox/message/part asserted before backup and all three quarantined to unknown after restore",
+    "note": "The single dispatchable row is the intentional never-attempted pending fixture preserved across restore; the seeded interrupted processing fixture is no longer dispatchable."
+  },
+  "load": {
+    "4": { "requests": 52, "p95Ms": 62.86, "targetMet": true },
+    "10": { "requests": 130, "p95Ms": 82.93, "targetMet": true },
+    "25": { "requests": 325, "p95Ms": 222.45, "targetMet": true },
+    "50": { "requests": 650, "p95Ms": 435.57, "targetMet": true },
+    "50x50": { "requests": 10050, "p95Ms": 119.75, "targetMet": true },
+    "100": { "requests": 1300, "p95Ms": 928.74, "targetMet": true },
+    "200": { "requests": 2600, "p95Ms": 1661.76, "targetMet": true },
+    "500": { "requests": 6500, "p95Ms": 3135.55, "targetMet": false }
+  },
+  "limitations": [
+    "Synthetic offline connector dry-run only; no real login, QR scan, provider call or phone interaction.",
+    "The 500-client short API workload exceeded the 2 s p95 target in this run.",
+    "The 200-client result varies across runs (it failed in two earlier runs); no stable 200-seat or provider capacity is claimed.",
+    "The embedded build identity is build-derived, not a content attestation; the external anchor is the CI image digest.",
+    "crypto-js 4.2.0 remains a deprecated transitive dependency of zca-js 2.2.0.",
+    "The 1-4 pilot peer allowlist is a pilot safety scope, not a product seat limit.",
+    "The hosted restore drill proves the quarantine assertions execute on Linux PostgreSQL; it does not prove operator recovery time or a production restore objective."
+  ]
+}

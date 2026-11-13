@@ -1,0 +1,14 @@
+
+> zalo-shared@0.1.0 test:sdk
+> node --permission --allow-fs-read=./node_modules --allow-fs-read=./package.json --allow-fs-read=./tests/fixtures/sdk-offline-probe.mjs --allow-fs-read=./adapters/zalo/transport.ts --allow-fs-read=./adapters/zalo/media.ts --allow-fs-read=./server/media.ts --allow-fs-read=./adapters/zalo/inbound-media.ts tests/fixtures/sdk-offline-probe.mjs
+
+✔ offline guard self-check denies network, subprocesses and filesystem writes (4.786063ms)
+✔ actual ESM and CJS import, constructor and inbound model contracts stay offline (492.913863ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 513.915409

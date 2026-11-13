@@ -1,0 +1,37 @@
+
+> zalo-shared@0.1.0 test
+> node --import tsx --test --test-isolation=none tests/backend/*.test.ts tests/transport/*.test.ts
+
+✔ transactional authenticated inbox and durable dispatch (1800.342409ms)
+✔ configuration rejects live provider and public HTTP (0.585275ms)
+✔ ambiguous delivery is quarantined without automatic retry (165.355788ms)
+✔ audit prohibits update, delete and truncate even for ordinary owner SQL (131.628282ms)
+✔ conversation keyset pages expose older contacts without a silent result cap (404.89203ms)
+✔ pending uploads have a concurrency-safe per-user quota (764.656911ms)
+✔ protected metrics include request duration and pending age without personal labels (115.612007ms)
+✔ serves only enumerated public build files, never arbitrary paths (12.591781ms)
+✔ explicit injection creates one listener with safe options and stops reconnect timer (22.740424ms)
+✔ reconnect is bounded and stale message callback is ignored (102.010678ms)
+✔ duplicate/kick and explicit invalidation expire without retry or sending (41.300538ms)
+✔ a listener cannot be owned by two wrappers (0.475969ms)
+✔ send timeout is unknown and never resent; successful result retains provider ID (6.013863ms)
+✔ normalization keeps text and self origin, rejects malformed and treats media as unsupported metadata (0.270198ms)
+✔ stop during SDK creation fences late completion; errors never crash and sends are uncertain (0.49927ms)
+✔ SDK connected event gates delivery and disconnected+closed only schedules one retry (20.105278ms)
+✔ default waits for connected and stop fences a queued send before execution (0.44574ms)
+✔ late SDK errors after close or stop are consumed (0.319044ms)
+✔ vault roundtrip encrypted, 0600, overwrite, wrong key and tamper rejected (7.385952ms)
+✔ vault fresh nonce and concurrent replacement leave complete private envelope (3.840965ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4750.33879
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

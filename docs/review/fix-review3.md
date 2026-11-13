@@ -1,0 +1,15 @@
+# Scoped fix review — round 3
+
+Date: 2026-10-28. Scope: the initially empty timeline residual from round 2 and preservation of the preceding history fixes. Snapshot: `/tmp/zalo-fix-review3.patch`, SHA-256 `180649ee3178b07a1970a1e73e5a91f3970c2b4123c3f3d39b4eae7f88297929`. No source changes, network calls, hosted CI execution, real account or production activity were performed by this reviewer.
+
+**Source closure verdict: accepted for the reviewed fixes, conditional on final-revision integration validation. No residual P0/P1/P2 defect was identified within this narrow round's scope.** The prior review reports remain the evidence and scope record; this is not a claim of a new exhaustive audit.
+
+`updateHistoryBoundary()` now leaves `initialized` false after empty pages. The component uses this helper on every successful history response. Consequently, the first nonempty page adopts its `nextCursor`, making rows 1–50 accessible after an empty timeline receives 100 rows. Subsequent newest polls retain the older-history boundary, and explicit older-page requests advance it. The regression exercises the exact helper/state path that previously discarded the cursor, then loads the older half and verifies 100 merged rows.
+
+The preceding fixes remain intact: exact UTC microseconds plus UUID sorting repair concurrent send/receive ordering; newest catch-up follows server-confirmed boundaries with a bounded page budget; unfinished gaps retain their continuation cursor; local send responses do not prematurely establish continuity; selection/session cancellation guards remain present. The new boundary helper does not interfere with these paths.
+
+Independent verification: base64, four client-history, client-session, and transport/vault tests completed **19/19 passed**, including the empty-to-100-row regression, the original populated-history gap counterexample, bounded multi-invocation catch-up, concurrent ordering and timestamp tie-breaking. No fresh PostgreSQL/browser/build/restore success is claimed by this review.
+
+**Specification/quality acceptance remains conditional:** inspect actual final-revision hosted CI assertions and artifacts for PostgreSQL precision/max-upload/revocation/worker-batch/SIGKILL tests, browser histories and stale-session behavior, measured load plus queue drain, unclean database restart, enforced restore quarantine and container checks. The earlier CI job that reported overall success with 26 passing and 2 failing tests remains a rejected full-suite result; explicit Bash/pipefail must be active in the accepting run. Product unread filtering requires implemented behavior or an explicit recorded deferral. Short simulator measurements establish only their stated workload boundary.
+
+The offline adapter remains unwired. Personal-Zalo authentication, phone coexistence, real media/receipts, provider gap recovery/reconnect/fencing and Owner production acceptance remain separate open gates. Source closure for these simulator fixes is not production readiness.

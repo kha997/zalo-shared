@@ -1,0 +1,1 @@
+{"redirectClasses":["direct-redirect-host","invalid-target","malformed-redirect","not-admitted","redirect-after-hop","stale-hop","unexpected-location","unexpected-redirect"],"requestCategories":["check-session","provider-direct","redirect-follow","other"]}

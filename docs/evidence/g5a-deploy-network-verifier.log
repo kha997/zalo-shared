@@ -1,0 +1,26 @@
+pilot-net: PASS  the kernel-only probe runs without the guard                                      
+pilot-net: PASS  the connector namespace has no IPv4 default route                                 
+pilot-net: PASS  the connector namespace has no usable IPv6 default route                          
+pilot-net: PASS  a direct connection to a public address fails at the network layer                
+pilot-net: PASS  the host bridge port 2026 is not reachable from the internal network              
+pilot-net: PASS  the host bridge port 5432 is not reachable from the internal network              
+pilot-net: PASS  the host bridge port 8080 is not reachable from the internal network              
+pilot-net: PASS  UDP to a public address is not accepted                                           
+pilot-net: PASS  an unpinned name does not resolve                                                 
+pilot-net: PASS  the gateway's private address is reachable from the connector network             
+pilot-net: PASS  the gateway refuses a non-allowlisted SNI                                         
+pilot-net: PASS  the guarded probe loads the connector guard                                       
+pilot-net: PASS  the guard resolves the allowlisted name to the pinned gateway                     
+pilot-net: PASS  the guard denies a direct public address before any connect                       
+pilot-net: PASS  the guard denies an unpinned name before DNS                                      
+pilot-net: PASS  the guard denies UDP                                                              
+pilot-net: PASS  the pinned name reaches the gateway and is not forwarded blindly                  
+pilot-net: PASS  a namespace with a default route is refused before the connector starts           
+pilot-net: PASS  the gateway admitted no tunnel in this verification                               
+pilot-net: PASS  the gateway refused the non-allowlisted SNI and recorded its name                 
+pilot-net: PASS  the gateway refused an allowlisted name it could not resolve instead of forwarding
+pilot-net: PASS  the verification egress fixture is internal=true                                  
+pilot-net: PASS  the verification uplink fixture has exactly one member, the gateway               
+pilot-net: PASS  the verification gateway was started with no published port                       
+pilot-net: PASS  the gateway does not forward packets between its networks                         
+pilot-net: all 25 container-level assertions PASS

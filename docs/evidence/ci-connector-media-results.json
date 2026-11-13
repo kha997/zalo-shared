@@ -1,0 +1,218 @@
+{
+  "sourceCommit": "95783b0d2915ef3bdef1852ae7b9be47cf28e9a2",
+  "sourceTree": "cac1424bdd55a914a3ac25762ec71e7181bef9e2",
+  "runId": 40913017350,
+  "url": "https://github.com/kha997/zalo-shared/actions/runs/40913017350",
+  "units": {
+    "passed": 96,
+    "failed": 0,
+    "skipped": 0
+  },
+  "sdkOfflineGuards": {
+    "passed": 2,
+    "failed": 0
+  },
+  "browser": {
+    "passed": 6,
+    "skipped": 1
+  },
+  "fourStaffMediaHttpFlow": "PASS synthetic injected SDK; original attachment order, private downloads, idempotent retries and exact-ID actor preservation",
+  "recovery": {
+    "uncleanDatabaseRestart": "PASS full content fingerprints",
+    "encryptedFreshRestore": "PASS nonempty bound attachment content/linkage plus journal/quarantine/runtime audit"
+  },
+  "monitoring": "PASS config and rule tests only",
+  "image": {
+    "nonrootReadOnlySdkAbsent": "PASS",
+    "highCriticalFindings": 0
+  },
+  "registrySignatures": {
+    "invalid": [],
+    "missing": []
+  },
+  "measurements": [
+    {
+      "namedConcurrentUsers": 4,
+      "rounds": 3,
+      "requests": 52,
+      "durationMs": 128.66850399999998,
+      "requestsPerSecond": 404.13930669466714,
+      "p50Ms": 6.261847999999986,
+      "p95Ms": 44.61746499999998,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 12,
+      "idempotentRetriesVerified": 12
+    },
+    {
+      "namedConcurrentUsers": 10,
+      "rounds": 3,
+      "requests": 130,
+      "durationMs": 254.86942,
+      "requestsPerSecond": 510.0651149125697,
+      "p50Ms": 12.899536000000012,
+      "p95Ms": 54.11211400000002,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 30,
+      "idempotentRetriesVerified": 30
+    },
+    {
+      "namedConcurrentUsers": 25,
+      "rounds": 3,
+      "requests": 325,
+      "durationMs": 575.0503100000001,
+      "requestsPerSecond": 565.1679415667126,
+      "p50Ms": 26.16122200000018,
+      "p95Ms": 118.75362900000027,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 75,
+      "idempotentRetriesVerified": 75
+    },
+    {
+      "namedConcurrentUsers": 50,
+      "rounds": 3,
+      "requests": 650,
+      "durationMs": 1031.4642789999998,
+      "requestsPerSecond": 630.1720895561912,
+      "p50Ms": 46.51287200000024,
+      "p95Ms": 231.8678800000007,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 150,
+      "idempotentRetriesVerified": 150
+    },
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 1017.4985210000004,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    },
+    {
+      "namedConcurrentUsers": 50,
+      "rounds": 50,
+      "requests": 10050,
+      "durationMs": 11543.631377,
+      "requestsPerSecond": 870.6099208975113,
+      "p50Ms": 47.09117500000002,
+      "p95Ms": 81.08093800000006,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 2500,
+      "idempotentRetriesVerified": 2500
+    },
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 15223.305241,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    },
+    {
+      "namedConcurrentUsers": 100,
+      "rounds": 3,
+      "requests": 1300,
+      "durationMs": 2223.25848,
+      "requestsPerSecond": 584.7273322893161,
+      "p50Ms": 103.6423790000008,
+      "p95Ms": 774.3051839999998,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 300,
+      "idempotentRetriesVerified": 300
+    },
+    {
+      "namedConcurrentUsers": 200,
+      "rounds": 3,
+      "requests": 2600,
+      "durationMs": 4060.509507999999,
+      "requestsPerSecond": 640.3137327661691,
+      "p50Ms": 139.49289700000008,
+      "p95Ms": 956.6294309999994,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 600,
+      "idempotentRetriesVerified": 600
+    },
+    {
+      "namedConcurrentUsers": 500,
+      "rounds": 3,
+      "requests": 6500,
+      "durationMs": 9939.086077,
+      "requestsPerSecond": 653.9836710984548,
+      "p50Ms": 437.4115659999952,
+      "p95Ms": 3111.7986109999983,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": false,
+      "errors": [],
+      "uniqueMessages": 1500,
+      "idempotentRetriesVerified": 1500
+    },
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 7874.028513999998,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    },
+    {
+      "scanner": "Trivy0.76.1",
+      "highCriticalCount": 0,
+      "fixableHighCriticalCount": 0,
+      "findings": []
+    }
+  ],
+  "limits": [
+    "500 API users exceeded 2s p95 target (~3112ms); no stable 200-seat guarantee",
+    "Synthetic SDK-shaped media sends do not prove real upload/delivery or phone coexistence",
+    "Inbound download, owned runtime and operator controls not validated by this source",
+    "No real account used or production approval"
+  ]
+}

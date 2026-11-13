@@ -1,0 +1,85 @@
+{
+  "runUrl": "https://github.com/kha997/zalo-shared/actions/runs/40681629226",
+  "commit": "29c9c7422ce5719e9c39986934edd08ef3c24857",
+  "tests": {
+    "total": 28,
+    "passed": 26,
+    "failed": 2,
+    "fullSuiteAccepted": false
+  },
+  "measurements": [
+    {
+      "namedConcurrentUsers": 4,
+      "rounds": 3,
+      "requests": 52,
+      "durationMs": 189.805697,
+      "requestsPerSecond": 273.9643794780301,
+      "p50Ms": 9.509856000000013,
+      "p95Ms": 66.71439299999997,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 12,
+      "idempotentRetriesVerified": 12
+    },
+    {
+      "namedConcurrentUsers": 10,
+      "rounds": 3,
+      "requests": 130,
+      "durationMs": 409.933182,
+      "requestsPerSecond": 317.1248528010109,
+      "p50Ms": 20.396756000000096,
+      "p95Ms": 80.36835299999984,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 30,
+      "idempotentRetriesVerified": 30
+    },
+    {
+      "namedConcurrentUsers": 25,
+      "rounds": 3,
+      "requests": 325,
+      "durationMs": 909.8166799999999,
+      "requestsPerSecond": 357.2148182642684,
+      "p50Ms": 43.951942999999574,
+      "p95Ms": 207.06277799999998,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 75,
+      "idempotentRetriesVerified": 75
+    },
+    {
+      "namedConcurrentUsers": 50,
+      "rounds": 3,
+      "requests": 650,
+      "durationMs": 1649.7019990000008,
+      "requestsPerSecond": 394.0105548723407,
+      "p50Ms": 71.36734099999921,
+      "p95Ms": 415.2507290000003,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 150,
+      "idempotentRetriesVerified": 150
+    }
+  ],
+  "limits": "Short HTTP enqueue workload only; excludes setup, live Zalo, phone, long soak and worker backlog. This is a pre-fix baseline."
+}

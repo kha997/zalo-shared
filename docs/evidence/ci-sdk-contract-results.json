@@ -1,0 +1,201 @@
+{
+  "commit": "2dda735c0c2d56ff7613c43f37a822b565f2617a",
+  "run": "https://github.com/kha997/zalo-shared/actions/runs/40730035434",
+  "scope": "simulator only; hosted runner; no real Zalo or physical workstations",
+  "unit": {
+    "passed": 39,
+    "failed": 0
+  },
+  "browser": {
+    "passed": 6,
+    "placeholderSkipped": 1
+  },
+  "runtimeBase": "gcr.io/distroless/nodejs24-debian13@sha256:cb606325b7ec4af55462cb0b424a53b452a5b4a894ffe841fcf1048d216fb9f8",
+  "imageScan": {
+    "scanner": "Trivy0.76.1",
+    "highCriticalCount": 0,
+    "fixableHighCriticalCount": 0,
+    "findings": []
+  },
+  "loads": [
+    {
+      "namedConcurrentUsers": 4,
+      "rounds": 3,
+      "requests": 52,
+      "durationMs": 149.661746,
+      "requestsPerSecond": 347.450176079063,
+      "p50Ms": 7.323485000000005,
+      "p95Ms": 52.805425000000014,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 12,
+      "idempotentRetriesVerified": 12
+    },
+    {
+      "namedConcurrentUsers": 10,
+      "rounds": 3,
+      "requests": 130,
+      "durationMs": 315.8669659999998,
+      "requestsPerSecond": 411.5656716061916,
+      "p50Ms": 14.367246999999907,
+      "p95Ms": 68.72738600000002,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 30,
+      "idempotentRetriesVerified": 30
+    },
+    {
+      "namedConcurrentUsers": 25,
+      "rounds": 3,
+      "requests": 325,
+      "durationMs": 722.667676,
+      "requestsPerSecond": 449.7226191143493,
+      "p50Ms": 30.924740999999813,
+      "p95Ms": 158.05758300000025,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 75,
+      "idempotentRetriesVerified": 75
+    },
+    {
+      "namedConcurrentUsers": 50,
+      "rounds": 3,
+      "requests": 650,
+      "durationMs": 1302.11409,
+      "requestsPerSecond": 499.1882086154217,
+      "p50Ms": 50.87541599999986,
+      "p95Ms": 324.2428310000005,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 150,
+      "idempotentRetriesVerified": 150
+    },
+    {
+      "namedConcurrentUsers": 50,
+      "rounds": 50,
+      "requests": 10050,
+      "durationMs": 12183.443556000002,
+      "requestsPerSecond": 824.8899380381386,
+      "p50Ms": 56.25631099999919,
+      "p95Ms": 80.30607099999906,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 2500,
+      "idempotentRetriesVerified": 2500
+    },
+    {
+      "namedConcurrentUsers": 100,
+      "rounds": 3,
+      "requests": 1300,
+      "durationMs": 3081.3517459999994,
+      "requestsPerSecond": 421.89276238507057,
+      "p50Ms": 167.66979400000037,
+      "p95Ms": 903.3968839999998,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 300,
+      "idempotentRetriesVerified": 300
+    },
+    {
+      "namedConcurrentUsers": 200,
+      "rounds": 3,
+      "requests": 2600,
+      "durationMs": 4580.712616000001,
+      "requestsPerSecond": 567.5972753493514,
+      "p50Ms": 120.69405800000095,
+      "p95Ms": 1324.0863170000011,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": true,
+      "errors": [],
+      "uniqueMessages": 600,
+      "idempotentRetriesVerified": 600
+    },
+    {
+      "namedConcurrentUsers": 500,
+      "rounds": 3,
+      "requests": 6500,
+      "durationMs": 12316.897885999999,
+      "requestsPerSecond": 527.7302824267322,
+      "p50Ms": 570.434199000003,
+      "p95Ms": 2454.187227000002,
+      "engineeringTarget": {
+        "p95Ms": 2000,
+        "errorCount": 0,
+        "scope": "short local API workload; not a production SLA"
+      },
+      "engineeringTargetMet": false,
+      "errors": [],
+      "uniqueMessages": 1500,
+      "idempotentRetriesVerified": 1500
+    }
+  ],
+  "dispatchDrains": [
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 763.4060880000006,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    },
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 7631.330079000003,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    },
+    {
+      "mockDispatchDrain": {
+        "status": "PASS",
+        "waitMs": 3807.9388150000013,
+        "pending": 0,
+        "unknown": 0,
+        "failed": 0
+      }
+    }
+  ],
+  "monitoringRuleTests": "PASS",
+  "limitations": [
+    "500-user p95 exceeds2000ms in this run;200-user latency varies across retained runs",
+    "short API workload, not production soak",
+    "live Zalo/phone/media/session behavior unproven"
+  ]
+}
